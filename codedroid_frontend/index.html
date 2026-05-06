@@ -9,8 +9,26 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link data-trunk rel="copy-file" href="manifest.json">
+    <link rel="manifest" href="manifest.json">
+    <link data-trunk rel="copy-file" href="sw.js">
     <link data-trunk rel="rust" data-wasm-opt="z"/>
 </head>
 <body>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js', { scope: './' })
+                    .then(reg => {
+                        console.log('✅ CodeDroid SW Registered! Scope:', reg.scope);
+                    })
+                    .catch(err => {
+                        console.error('❌ CodeDroid SW Registration failed:', err);
+                    });
+            });
+        } else {
+            console.warn('⚠️ Service Workers are not supported in this browser.');
+        }
+    </script>
 </body>
 </html>

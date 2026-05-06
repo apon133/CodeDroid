@@ -253,3 +253,41 @@ select.input { width: auto; min-width: 140px; }
   .file-tree-panel { display: none; }
   .lang-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Floating Suggestions */
+.suggestions-floating {
+    position: absolute;
+    background: #252526;
+    border: 1px solid #454545;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    z-index: 1000;
+    max-height: 200px;
+    overflow-y: auto;
+    min-width: 180px;
+    display: flex;
+    flex-direction: column;
+}
+
+.suggestion-item {
+    padding: 6px 12px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: #cccccc;
+    border: none;
+    background: transparent;
+    text-align: left;
+    width: 100%;
+    transition: background 0.1s;
+}
+
+.suggestion-item:hover, .suggestion-item.selected {
+    background: #094771;
+    color: white;
+}
+
+.code-container {
+    position: relative;
+}
+

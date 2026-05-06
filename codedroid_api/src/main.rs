@@ -952,6 +952,14 @@ edition = "2021"
 "#;
                     let _ = fs::write(cargo_path, default_cargo);
                 }
+            } else if lang == "go" {
+                let _ = fs::create_dir_all(&project_dir);
+                let mod_path = format!("{}/go.mod", project_dir);
+                if !std::path::Path::new(&mod_path).exists() {
+                    println!("📝 Creating default go.mod for LSP");
+                    let default_mod = "module codedroid_project\n\ngo 1.25\n";
+                    let _ = fs::write(mod_path, default_mod);
+                }
             } else if lang == "dart" {
                 let _ = fs::create_dir_all(format!("{}/lib", project_dir));
                 let pubspec_path = format!("{}/pubspec.yaml", project_dir);
@@ -968,8 +976,18 @@ environment:
             }
 
             let root_uri = format!("file://{}", project_dir);
-            println!("🚀 Starting LSP server for {}: {} (root: {})", lang, cmd, root_uri);
-            match lsp::LspClient::new(cmd, &args, Some(&root_uri)) {
+            
+            let mut final_cmd = cmd.to_string();
+            if lang == "go" {
+                let home = std::env::var("HOME").unwrap_or_default();
+                let gopls_path = format!("{}/go/bin/gopls", home);
+                if std::path::Path::new(&gopls_path).exists() {
+                    final_cmd = gopls_path;
+                }
+            }
+
+            println!("🚀 Starting LSP server for {}: {} (root: {})", lang, final_cmd, root_uri);
+            match lsp::LspClient::new(&final_cmd, &args, Some(&root_uri)) {
                 Ok(client) => {
                     servers.insert(lang.clone(), client);
                 }

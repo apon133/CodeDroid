@@ -1,0 +1,39 @@
+[package]
+name = "codedroid_frontend"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "codedroid_frontend"
+path = "src/main.rs"
+
+[dependencies]
+leptos = { version = "0.7", features = ["csr"] }
+leptos_router = { version = "0.7" }
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = [
+    "Window", "Document", "Element", "HtmlElement",
+    "HtmlTextAreaElement", "HtmlInputElement", "HtmlSelectElement",
+    "Navigator", "Clipboard", "Storage", "Location",
+    "Event", "KeyboardEvent", "MouseEvent", "EventTarget",
+    "console",
+] }
+js-sys = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+gloo-net = { version = "0.6", features = ["http"] }
+gloo-storage = "0.3"
+gloo-timers = { version = "0.3", features = ["futures"] }
+uuid = { version = "1", features = ["v4", "js"] }
+wasm-bindgen-futures = "0.4"
+console_error_panic_hook = "0.1"
+syntect = { version = "5.3.0", default-features = false, features = ["default-fancy"] }
+
+[profile.release]
+opt-level = 'z'
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+opt-level = 0

@@ -1,0 +1,206 @@
+use leptos::prelude::*;
+use leptos_router::hooks::use_navigate;
+use web_sys::MouseEvent;
+use uuid::Uuid;
+
+use crate::models::{Project, lang_icon, lang_color};
+use crate::store;
+use crate::components::app_bar::AppBar;
+use crate::components::snackbar::Snackbar;
+use crate::components::new_project_modal::{NewProjectModal, NewProjectResult};
+
+fn default_files(lang: &str, framework: &str, name: &str) -> Vec<(String, String)> {
+    match lang {
+        "rust" => vec![
+            ("src/main.rs".into(), format!("fn main() {{\n    println!(\"Hello, Rust!\");\n}}")),
+            ("Cargo.toml".into(), format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]")),
+        ],
+        "go" => vec![
+            ("main.go".into(), format!("package main\n\nimport \"fmt\"\n\nfunc main() {{\n    fmt.Println(\"Hello, Go!\")\n}}")),
+            ("go.mod".into(), format!("module {name}\n\ngo 1.21")),
+        ],
+        "python" => vec![
+            ("main.py".into(), "print(\"Hello, Python!\")".into()),
+            ("requirements.txt".into(), String::new()),
+        ],
+        "dart" => vec![
+            ("main.dart".into(), "void main() {\n  print(\"Hello, Dart!\");\n}".into()),
+        ],
+        "java" => vec![
+            ("Main.java".into(), "public class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Hello, Java!\");\n    }\n}".into()),
+        ],
+        "c" => vec![
+            ("main.c".into(), "#include <stdio.h>\n\nint main() {\n    printf(\"Hello, C!\\n\");\n    return 0;\n}".into()),
+        ],
+        "cpp" => vec![
+            ("main.cpp".into(), "#include <iostream>\n\nint main() {\n    std::cout << \"Hello, C++!\" << std::endl;\n    return 0;\n}".into()),
+        ],
+        "csharp" => vec![
+            ("Program.cs".into(), "Console.WriteLine(\"Hello, C#!\");".into()),
+            (format!("{name}.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net8.0</TargetFramework>\n  </PropertyGroup>\n</Project>".into()),
+        ],
+        "kotlin" => vec![
+            ("main.kt".into(), "fun main() {\n    println(\"Hello, Kotlin!\")\n}".into()),
+        ],
+        "swift" => vec![
+            ("main.swift".into(), "print(\"Hello, Swift!\")".into()),
+        ],
+        "ruby" => vec![
+            ("main.rb".into(), "puts \"Hello, Ruby!\"".into()),
+            ("Gemfile".into(), "source \"https://rubygems.org\"".into()),
+        ],
+        "javascript" | "typescript" => {
+            let ext = if lang == "typescript" { "ts" } else { "js" };
+            match framework {
+                "none" | "" => vec![
+                    (format!("main.{ext}"), format!("console.log(\"Hello, {}!\");", lang.to_uppercase())),
+                ],
+                "vanilla" => vec![
+                    ("index.html".into(), format!("<!DOCTYPE html>\n<html>\n<head><title>{name}</title><link rel=\"stylesheet\" href=\"style.css\"></head>\n<body>\n  <div id=\"app\"></div>\n  <script type=\"module\" src=\"/main.{ext}\"></script>\n</body>\n</html>")),
+                    (format!("main.{ext}"), format!("document.getElementById('app').innerHTML = '<h1>Hello {name}!</h1>';")),
+                    ("style.css".into(), "body { font-family: sans-serif; display:flex; justify-content:center; align-items:center; height:100vh; margin:0; background:#f0f0f0; }".into()),
+                    ("package.json".into(), format!("{{\n  \"name\": \"{name}\",\n  \"type\": \"module\",\n  \"scripts\": {{ \"dev\": \"vite --host 0.0.0.0 --port 0\" }},\n  \"devDependencies\": {{ \"vite\": \"latest\" }}\n}}")),
+                ],
+                "react" => vec![
+                    ("index.html".into(), "<!DOCTYPE html><html><body><div id=\"root\"></div><script type=\"module\" src=\"/src/main.jsx\"></script></body></html>".into()),
+                    ("src/main.jsx".into(), "import React from 'react';\nimport ReactDOM from 'react-dom/client';\nReactDOM.createRoot(document.getElementById('root')).render(<h1>Hello React!</h1>);".into()),
+                    ("package.json".into(), format!("{{\n  \"name\": \"{name}\",\n  \"type\": \"module\",\n  \"scripts\": {{ \"dev\": \"vite --host 0.0.0.0\" }},\n  \"dependencies\": {{ \"react\": \"^18.0.0\", \"react-dom\": \"^18.0.0\" }},\n  \"devDependencies\": {{ \"vite\": \"^5.0.0\", \"@vitejs/plugin-react\": \"^4.0.0\" }}\n}}")),
+                ],
+                "vue" => vec![
+                    ("src/App.vue".into(), "<template><h1>Hello Vue!</h1></template>".into()),
+                    ("src/main.js".into(), "import { createApp } from 'vue';\nimport App from './App.vue';\ncreateApp(App).mount('#app');".into()),
+                    ("package.json".into(), format!("{{\n  \"name\": \"{name}\",\n  \"type\": \"module\",\n  \"scripts\": {{ \"dev\": \"vite --host 0.0.0.0\" }},\n  \"dependencies\": {{ \"vue\": \"^3.0.0\" }},\n  \"devDependencies\": {{ \"vite\": \"^5.0.0\", \"@vitejs/plugin-vue\": \"^5.0.0\" }}\n}}")),
+                ],
+                "nextjs" => vec![
+                    ("pages/index.js".into(), "export default function Home() { return <h1>Hello Next.js!</h1>; }".into()),
+                    ("package.json".into(), format!("{{\n  \"name\": \"{name}\",\n  \"scripts\": {{ \"dev\": \"next dev -H 0.0.0.0\" }},\n  \"dependencies\": {{ \"next\": \"latest\", \"react\": \"latest\", \"react-dom\": \"latest\" }}\n}}")),
+                ],
+                _ => vec![(format!("main.{ext}"), format!("console.log('Hello {framework}!');"))],
+            }
+        }
+        _ => vec![("main.txt".into(), "Hello, World!".into())],
+    }
+}
+
+#[component]
+pub fn HomePage() -> impl IntoView {
+    let navigate = use_navigate();
+
+    let projects: RwSignal<Vec<Project>> = RwSignal::new(store::load_projects());
+    let show_modal = RwSignal::new(false);
+    let snack_msg: RwSignal<Option<String>> = RwSignal::new(None);
+
+    // Show snackbar for 3s then hide
+    let show_snack = move |msg: &str| {
+        let msg = msg.to_string();
+        snack_msg.set(Some(msg));
+        let snack = snack_msg;
+        gloo_timers::callback::Timeout::new(3000, move || { snack.set(None); }).forget();
+    };
+
+    let on_create = {
+        let navigate = navigate.clone();
+        Callback::new(move |result: NewProjectResult| {
+            let path = format!("/Codedroid_Projects/{}", result.name);
+            let project = Project {
+                id: Uuid::new_v4().to_string(),
+                name: result.name.clone(),
+                language: result.lang.clone(),
+                path: path.clone(),
+                created_at: js_sys::Date::now() as u64,
+            };
+
+            // Store default files in localStorage
+            let files = default_files(&result.lang, &result.framework, &result.name);
+            for (filename, content) in &files {
+                let key = store::file_key(&project.id, filename);
+                store::save_file(&key, content);
+            }
+
+            let pid = project.id.clone();
+            store::add_project(&projects, project);
+            show_modal.set(false);
+
+            let nav = navigate.clone();
+            nav(&format!("/editor/{}", pid), Default::default());
+        })
+    };
+
+    let on_cancel = Callback::new(move |()| show_modal.set(false));
+
+    view! {
+        <div>
+            <AppBar title="CodeDroid".to_string()>
+                <button class="btn btn-icon" title="Copy API Code"
+                    on:click=move |_| {
+                        let window = web_sys::window().unwrap();
+                        let _ = window.navigator().clipboard().write_text(
+                            "curl https://github.com/your/codedroid_api"
+                        );
+                        show_snack("API code copied!");
+                    }
+                >"📋"</button>
+                <a href="/settings" style="text-decoration:none">
+                    <button class="btn btn-icon" title="Settings">"⚙️"</button>
+                </a>
+            </AppBar>
+
+            <div class="home">
+                {move || {
+                    let projs = projects.get();
+                    if projs.is_empty() {
+                        view! {
+                            <div class="home-empty">
+                                <div class="icon">"📂"</div>
+                                <p>"No projects yet — create one!"</p>
+                            </div>
+                        }.into_any()
+                    } else {
+                        view! {
+                            <div class="projects-list">
+                                {projs.into_iter().map(|p| {
+                                    let pid = p.id.clone();
+                                    let pid2 = p.id.clone();
+                                    let nav = navigate.clone();
+                                    let (color, bg) = lang_color(&p.language);
+                                    view! {
+                                        <div class="project-card"
+                                            on:click=move |_| nav(&format!("/editor/{}", pid), Default::default())
+                                        >
+                                            <div class="project-icon">
+                                                {lang_icon(&p.language)}
+                                            </div>
+                                            <div class="project-info">
+                                                <div class="project-name">{p.name.clone()}</div>
+                                                <div class="project-path">{p.path.clone()}</div>
+                                            </div>
+                                            <span class="lang-badge" style=format!("color:{color};border-color:{color};background:{bg}")>
+                                                {p.language.to_uppercase()}
+                                            </span>
+                                            <button class="btn btn-icon"
+                                                style="color:#ff453a;font-size:16px"
+                                                title="Delete"
+                                                on:click=move |e: MouseEvent| {
+                                                    e.stop_propagation();
+                                                    store::delete_project(&projects, &pid2);
+                                                }
+                                            >"🗑"</button>
+                                        </div>
+                                    }
+                                }).collect_view()}
+                            </div>
+                        }.into_any()
+                    }
+                }}
+            </div>
+
+            <button class="fab" title="New Project" on:click=move |_| show_modal.set(true)>"+"</button>
+
+            {move || show_modal.get().then(|| view! {
+                <NewProjectModal on_create=on_create on_cancel=on_cancel />
+            })}
+
+            <Snackbar message=snack_msg.read_only() />
+        </div>
+    }
+}

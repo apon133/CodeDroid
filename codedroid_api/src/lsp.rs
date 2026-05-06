@@ -23,13 +23,25 @@ impl LspClient {
             .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()?;
 
         let stdin = Arc::new(Mutex::new(child.stdin.take().unwrap()));
         let stdout = child.stdout.take().unwrap();
         
         let responses = Arc::new(Mutex::new(HashMap::new()));
+        let mut stderr = child.stderr.take().unwrap();
+        let lang_name = cmd.to_string();
+        thread::spawn(move || {
+            let mut reader = std::io::BufReader::new(stderr);
+            let mut line = String::new();
+            while reader.read_line(&mut line).is_ok() {
+                if line.is_empty() { break; }
+                println!(" [{} LSP stderr] {}", lang_name, line.trim());
+                line.clear();
+            }
+        });
+
         let responses_clone = responses.clone();
 
         thread::spawn(move || {
@@ -267,11 +279,16 @@ fn extract_prefix(code: &str, line: u32, character: u32) -> String {
     }
 }
 
-pub fn fallback_completions(code: &str) -> Vec<CompletionItem> {
+pub fn fallback_completions(code: &str, prefix: &str) -> Vec<CompletionItem> {
     let mut words = std::collections::HashSet::new();
-    let re = regex::Regex::new(r"\b[a-zA-Z_][a-zA-Z0-9_]{2,}\b").unwrap();
+    // Match words that are at least 2 characters long
+    let re = regex::Regex::new(r"\b[a-zA-Z_][a-zA-Z0-9_]+\b").unwrap();
     for cap in re.captures_iter(code) {
-        words.insert(cap[0].to_string());
+        let w = cap[0].to_string();
+        // If we have a prefix, only include words that start with it
+        if prefix.is_empty() || (w.starts_with(prefix) && w != prefix) {
+            words.insert(w);
+        }
     }
     let mut res: Vec<CompletionItem> = words.into_iter().map(|w| CompletionItem {
         label: w,
@@ -279,6 +296,6 @@ pub fn fallback_completions(code: &str) -> Vec<CompletionItem> {
         detail: None,
         documentation: None,
     }).collect();
-    res.sort_by(|a, b| a.label.cmp(&b.label));
+    res.sort();
     res
 }

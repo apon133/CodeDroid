@@ -915,6 +915,7 @@ async fn get_completions(Json(payload): Json<CompletionRequest>) -> Json<Complet
         "c" => format!("file://{}/main.c", project_dir),
         "cpp" => format!("file://{}/main.cpp", project_dir),
         "java" => format!("file://{}/main.java", project_dir),
+        "dart" => format!("file://{}/lib/main.dart", project_dir),
         _ => format!("file://{}/main.txt", project_dir),
     };
 
@@ -924,6 +925,7 @@ async fn get_completions(Json(payload): Json<CompletionRequest>) -> Json<Complet
         "javascript" | "typescript" => Some(("typescript-language-server", vec!["--stdio"])),
         "go" => Some(("gopls", vec![])),
         "c" | "cpp" => Some(("clangd", vec![])),
+        "dart" => Some(("dart", vec!["language-server"])),
         _ => None,
     };
 
@@ -950,6 +952,19 @@ edition = "2021"
 "#;
                     let _ = fs::write(cargo_path, default_cargo);
                 }
+            } else if lang == "dart" {
+                let _ = fs::create_dir_all(format!("{}/lib", project_dir));
+                let pubspec_path = format!("{}/pubspec.yaml", project_dir);
+                if !std::path::Path::new(&pubspec_path).exists() {
+                    println!("📝 Creating default pubspec.yaml for LSP");
+                    let default_pubspec = r#"name: codedroid_project
+description: A new Dart project.
+version: 1.0.0
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+"#;
+                    let _ = fs::write(pubspec_path, default_pubspec);
+                }
             }
 
             let root_uri = format!("file://{}", project_dir);
@@ -969,16 +984,44 @@ edition = "2021"
             if lang == "rust" {
                 let project_dir = resolve_project_dir(&payload.project_path);
                 let _ = fs::write(format!("{}/src/main.rs", project_dir), &payload.code);
+            } else if lang == "dart" {
+                let project_dir = resolve_project_dir(&payload.project_path);
+                let _ = fs::write(format!("{}/lib/main.dart", project_dir), &payload.code);
             }
             
-            if let Ok(mut sugg) = client.get_completions(&file_uri, &payload.code, payload.line, payload.character, &lang) {
-                suggestions.append(&mut sugg);
+            match client.get_completions(&file_uri, &payload.code, payload.line, payload.character, &lang) {
+                Ok(mut sugg) => {
+                    suggestions.append(&mut sugg);
+                }
+                Err(e) => {
+                    println!("❌ LSP get_completions failed for {}: {}", lang, e);
+                    if e.to_string().contains("Broken pipe") {
+                        println!("🔌 Connection lost for {}, removing from cache...", lang);
+                        servers.remove(&lang);
+                    }
+                }
             }
         }
     }
 
+    let prefix = {
+        let lines: Vec<&str> = payload.code.lines().collect();
+        if let Some(line_text) = lines.get(payload.line as usize) {
+            let chars: Vec<char> = line_text.chars().collect();
+            let mut end = payload.character as usize;
+            if end > chars.len() { end = chars.len(); }
+            let mut start = end;
+            while start > 0 && (chars[start-1].is_alphanumeric() || chars[start-1] == '_') {
+                start -= 1;
+            }
+            line_text[start..end].to_string()
+        } else {
+            String::new()
+        }
+    };
+
     if suggestions.is_empty() {
-        suggestions = lsp::fallback_completions(&payload.code);
+        suggestions = lsp::fallback_completions(&payload.code, &prefix);
     }
 
     // Sort and deduplicate

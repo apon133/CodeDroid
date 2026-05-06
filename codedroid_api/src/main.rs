@@ -4,6 +4,8 @@ use std::process::Command;
 use std::fs;
 use tower_http::cors::CorsLayer;
 
+mod lsp;
+
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
@@ -885,6 +887,114 @@ async fn sync_file(Json(payload): Json<SyncRequest>) -> Json<CodeResponse> {
     }
 }
 
+#[derive(Deserialize)]
+struct CompletionRequest {
+    code: String,
+    language: String,
+    project_path: String,
+    line: u32,
+    character: u32,
+}
+
+#[derive(Serialize)]
+struct CompletionResponse {
+    suggestions: Vec<lsp::CompletionItem>,
+}
+
+async fn get_completions(Json(payload): Json<CompletionRequest>) -> Json<CompletionResponse> {
+    let lang = payload.language.to_lowercase();
+    println!("🔍 Completion requested for {}: line {}, char {}", lang, payload.line, payload.character);
+
+    let project_dir = resolve_project_dir(&payload.project_path);
+    let file_uri = match lang.as_str() {
+        "rust" => format!("file://{}/src/main.rs", project_dir),
+        "python" => format!("file://{}/main.py", project_dir),
+        "javascript" => format!("file://{}/main.js", project_dir),
+        "typescript" => format!("file://{}/main.ts", project_dir),
+        "go" => format!("file://{}/main.go", project_dir),
+        "c" => format!("file://{}/main.c", project_dir),
+        "cpp" => format!("file://{}/main.cpp", project_dir),
+        "java" => format!("file://{}/main.java", project_dir),
+        _ => format!("file://{}/main.txt", project_dir),
+    };
+
+    let lsp_cmd = match lang.as_str() {
+        "rust" => Some(("rust-analyzer", vec![])),
+        "python" => Some(("pylsp", vec![])),
+        "javascript" | "typescript" => Some(("typescript-language-server", vec!["--stdio"])),
+        "go" => Some(("gopls", vec![])),
+        "c" | "cpp" => Some(("clangd", vec![])),
+        _ => None,
+    };
+
+    let mut suggestions = vec![];
+
+    if let Some((cmd, args)) = lsp_cmd {
+        let servers_arc = lsp::get_servers();
+        let mut servers = servers_arc.lock().unwrap();
+        if !servers.contains_key(&lang) {
+            let project_dir = resolve_project_dir(&payload.project_path);
+            
+            // For Rust, rust-analyzer MUST see a Cargo.toml and src/main.rs to work properly
+            if lang == "rust" {
+                let _ = fs::create_dir_all(format!("{}/src", project_dir));
+                let cargo_path = format!("{}/Cargo.toml", project_dir);
+                if !std::path::Path::new(&cargo_path).exists() {
+                    println!("📝 Creating default Cargo.toml for LSP");
+                    let default_cargo = r#"[package]
+name = "codedroid_project"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+"#;
+                    let _ = fs::write(cargo_path, default_cargo);
+                }
+            }
+
+            let root_uri = format!("file://{}", project_dir);
+            println!("🚀 Starting LSP server for {}: {} (root: {})", lang, cmd, root_uri);
+            match lsp::LspClient::new(cmd, &args, Some(&root_uri)) {
+                Ok(client) => {
+                    servers.insert(lang.clone(), client);
+                }
+                Err(e) => {
+                    println!("❌ Failed to start LSP server for {}: {}", lang, e);
+                }
+            }
+        }
+        
+        if let Some(client) = servers.get_mut(&lang) {
+            // For Rust, write the code to disk as well to ensure LSP sees it in the project context
+            if lang == "rust" {
+                let project_dir = resolve_project_dir(&payload.project_path);
+                let _ = fs::write(format!("{}/src/main.rs", project_dir), &payload.code);
+            }
+            
+            if let Ok(mut sugg) = client.get_completions(&file_uri, &payload.code, payload.line, payload.character, &lang) {
+                suggestions.append(&mut sugg);
+            }
+        }
+    }
+
+    if suggestions.is_empty() {
+        suggestions = lsp::fallback_completions(&payload.code);
+    }
+
+    // Sort and deduplicate
+    suggestions.sort();
+    suggestions.dedup_by(|a, b| a.label == b.label);
+    // Limit to 50 suggestions to avoid huge payloads
+    suggestions.truncate(50);
+
+    println!("✅ Returning {} suggestions", suggestions.len());
+    if !suggestions.is_empty() {
+        println!("   Preview: {:?}", &suggestions[..suggestions.len().min(5)]);
+    }
+
+    Json(CompletionResponse { suggestions })
+}
+
 #[tokio::main]
 async fn main() {
     let app = Router::new()
@@ -892,6 +1002,7 @@ async fn main() {
         .route("/stop", post(stop_process))
         .route("/add_package", post(add_package))
         .route("/sync_file", post(sync_file))
+        .route("/complete", post(get_completions))
         .layer(CorsLayer::permissive());
 
     let addr = "0.0.0.0:3000";

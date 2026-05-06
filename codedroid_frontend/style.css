@@ -260,17 +260,17 @@ select.input { width: auto; min-width: 140px; }
     background: #252526;
     border: 1px solid #454545;
     border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     z-index: 1000;
-    max-height: 200px;
+    max-height: 300px;
     overflow-y: auto;
-    min-width: 180px;
+    min-width: 280px;
     display: flex;
     flex-direction: column;
 }
 
 .suggestion-item {
-    padding: 6px 12px;
+    padding: 4px 10px;
     cursor: pointer;
     font-family: var(--font-mono);
     font-size: 13px;
@@ -280,11 +280,70 @@ select.input { width: auto; min-width: 140px; }
     text-align: left;
     width: 100%;
     transition: background 0.1s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    overflow: hidden;
 }
 
 .suggestion-item:hover, .suggestion-item.selected {
     background: #094771;
     color: white;
+}
+
+.suggestion-kind {
+    opacity: 0.6;
+    font-size: 11px;
+    width: 16px;
+    text-align: center;
+}
+
+.suggestion-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.suggestion-detail {
+    opacity: 0.4;
+    font-size: 11px;
+    margin-left: 10px;
+    font-style: italic;
+}
+
+.suggestion-docs {
+    position: absolute;
+    left: 100%;
+    top: 0;
+    width: 300px;
+    max-height: 300px;
+    background: #2d2d30;
+    border: 1px solid #454545;
+    border-left: none;
+    border-radius: 0 4px 4px 0;
+    padding: 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #d4d4d4;
+    overflow-y: auto;
+    box-shadow: 10px 10px 30px rgba(0,0,0,0.3);
+    z-index: 1001;
+    white-space: pre-wrap;
+}
+
+#cursor-mirror {
+    position: absolute;
+    visibility: hidden;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.6;
+    padding: 12px;
+    top: 0;
+    left: 0;
+    pointer-events: none;
 }
 
 .code-container {

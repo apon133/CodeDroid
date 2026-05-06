@@ -68,3 +68,35 @@ pub async fn add_package(package: &str, language: &str, project_path: &str) -> R
         .await
         .map_err(|e| e.to_string())
 }
+
+#[derive(serde::Deserialize, Clone, PartialEq)]
+pub struct CompletionItem {
+    pub label: String,
+    pub kind: Option<u32>,
+    pub detail: Option<String>,
+    pub documentation: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct CompletionResponse {
+    pub suggestions: Vec<CompletionItem>,
+}
+
+pub async fn get_completions_api(code: &str, language: &str, project_path: &str, line: u32, character: u32) -> Result<CompletionResponse, String> {
+    let body = json!({
+        "code": code,
+        "language": language,
+        "project_path": project_path,
+        "line": line,
+        "character": character
+    });
+    Request::post(&format!("{}/complete", API_URL))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<CompletionResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}

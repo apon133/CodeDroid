@@ -10,6 +10,7 @@ pub struct Project {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[allow(dead_code)]
 pub struct Snippet {
     pub id: String,
     pub title: String,

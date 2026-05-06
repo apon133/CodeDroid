@@ -32,10 +32,12 @@ pub fn save_settings(s: &Settings) {
 }
 
 // ── Snippets ──────────────────────────────────────────────────────────────
+#[allow(dead_code)]
 pub fn load_snippets() -> Vec<Snippet> {
     LocalStorage::get("codedroid_snippets").unwrap_or_default()
 }
 
+#[allow(dead_code)]
 pub fn save_snippets(snippets: &[Snippet]) {
     let _ = LocalStorage::set("codedroid_snippets", snippets);
 }

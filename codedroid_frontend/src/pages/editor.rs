@@ -80,6 +80,36 @@ fn file_icon(name: &str) -> &'static str {
     }
 }
 
+fn kind_icon(kind: Option<u32>) -> &'static str {
+    match kind {
+        Some(1) => "📝", // Text
+        Some(2) | Some(3) => "𝑓", // Method/Function
+        Some(4) => "🏗", // Constructor
+        Some(5) => "🏷", // Field
+        Some(6) => "𝑥", // Variable
+        Some(7) => "📦", // Class
+        Some(8) => "📜", // Interface
+        Some(9) => "📦", // Module
+        Some(10) => "🔧", // Property
+        Some(11) => "📏", // Unit
+        Some(12) => "🔢", // Value
+        Some(13) => "🎨", // Enum
+        Some(14) => "🔑", // Keyword
+        Some(15) => "⌨", // Snippet
+        Some(16) => "🎨", // Color
+        Some(17) => "📄", // File
+        Some(18) => "🔗", // Reference
+        Some(19) => "📁", // Folder
+        Some(20) => "🎨", // EnumMember
+        Some(21) => "🧱", // Constant
+        Some(22) => "🏗", // Struct
+        Some(23) => "📅", // Event
+        Some(24) => "⚙", // Operator
+        Some(25) => "🧩", // TypeParameter
+        _ => "📄",
+    }
+}
+
 // ─── Editor Page ─────────────────────────────────────────────────────────
 #[component]
 pub fn EditorPage() -> impl IntoView {
@@ -100,6 +130,8 @@ pub fn EditorPage() -> impl IntoView {
         return view! { <div>"Redirecting..."</div> }.into_any();
     }
     let project = project.unwrap();
+    let project_lang_str = StoredValue::new(project.language.clone());
+    let project_path_str = StoredValue::new(project.path.clone());
 
     // State
     let settings: RwSignal<Settings> = RwSignal::new(store::load_settings());
@@ -120,6 +152,53 @@ pub fn EditorPage() -> impl IntoView {
     let show_deps: RwSignal<bool> = RwSignal::new(false);
     let dep_input: RwSignal<String> = RwSignal::new(String::new());
     let dep_output: RwSignal<String> = RwSignal::new(String::new());
+    let suggestions = RwSignal::new(Vec::<api::CompletionItem>::new());
+    let selected_idx = RwSignal::new(0);
+    let cursor_pos = RwSignal::new(0);
+    let cursor_coords = RwSignal::new((0.0, 0.0));
+    let last_request_id = RwSignal::new(0u64);
+
+    let on_select = move |ins: String| {
+        let cpos = cursor_pos.get_untracked();
+        use wasm_bindgen::JsCast;
+        if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
+            if let Ok(Some(target)) = doc.query_selector(".code-editor") {
+                if let Ok(target) = target.dyn_into::<web_sys::HtmlTextAreaElement>() {
+                    let start = target.selection_start().unwrap().unwrap_or(cpos);
+                    let end = target.selection_end().unwrap().unwrap_or(cpos);
+                    let val = js_sys::JsString::from(target.value());
+                    let rust_val = String::from(val.clone());
+                    let mut word_start = start as usize;
+                    let chars_vec: Vec<char> = rust_val.chars().take(start as usize).collect();
+                    for (i, c) in chars_vec.into_iter().enumerate().rev() {
+                        if !c.is_alphanumeric() && c != '_' {
+                            word_start = i + 1;
+                            break;
+                        }
+                        if i == 0 { word_start = 0; }
+                    }
+                    let before = val.substring(0, word_start as u32);
+                    let after = val.substring(end, val.length());
+                    let new_val = format!("{}{}{}", String::from(before), ins, String::from(after));
+                    code.set(new_val);
+                    dirty.set(true);
+                    suggestions.set(Vec::new());
+                    let new_pos = word_start as u32 + ins.encode_utf16().count() as u32;
+                    wasm_bindgen_futures::spawn_local(async move {
+                        if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
+                            if let Ok(Some(target)) = doc.query_selector(".code-editor") {
+                                if let Ok(target) = target.dyn_into::<web_sys::HtmlTextAreaElement>() {
+                                    let _ = target.focus();
+                                    target.set_selection_start(Some(new_pos)).unwrap();
+                                    target.set_selection_end(Some(new_pos)).unwrap();
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    };
 
     let pid = project.id.clone();
     let ppath = project.path.clone();
@@ -434,13 +513,73 @@ pub fn EditorPage() -> impl IntoView {
                                         spellcheck="false"
                                         prop:value=move || code.get()
                                         on:input=move |e: Event| {
-                                        code.set(event_target_value(&e));
-                                        dirty.set(true);
-                                        // Auto-save
-                                        if settings.get_untracked().auto_save {
-                                            save_current.run(());
+                                            use wasm_bindgen::JsCast;
+                                            let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
+                                            let val = target.value();
+                                            code.set(val.clone());
+                                            dirty.set(true);
+                                            if settings.get_untracked().auto_save {
+                                                save_current.run(());
+                                            }
+
+                                            let start = target.selection_start().unwrap().unwrap_or(0);
+                                            cursor_pos.set(start);
+                                            
+                                            // Estimation of cursor coords using mirror
+                                            if let Some(mirror) = web_sys::window().unwrap().document().unwrap().get_element_by_id("cursor-mirror") {
+                                                let text_before = &val[..start as usize];
+                                                mirror.set_text_content(Some(text_before));
+                                                let span = web_sys::window().unwrap().document().unwrap().create_element("span").unwrap();
+                                                span.set_text_content(Some("|"));
+                                                let _ = mirror.append_child(&span);
+                                                
+                                                use wasm_bindgen::JsCast;
+                                                let span_el = span.dyn_into::<web_sys::HtmlElement>().unwrap();
+                                                let left = span_el.offset_left() as f64;
+                                                let top = span_el.offset_top() as f64 + 20.0;
+                                                cursor_coords.set((left, top));
+                                            }
+
+                                            let (line, character) = {
+                                                let text_before = &val[..start as usize];
+                                                let lines: Vec<&str> = text_before.split('\n').collect();
+                                                let line = lines.len().saturating_sub(1) as u32;
+                                                let character = lines.last().map(|l| l.chars().count()).unwrap_or(0) as u32;
+                                                (line, character)
+                                            };
+                                            selected_idx.set(0);
+
+                                            let chars: Vec<char> = val.chars().collect();
+                                            if start > 0 && start as usize <= chars.len() {
+                                                let last_char = chars[(start - 1) as usize];
+                                                if last_char.is_alphanumeric() || last_char == '.' {
+                                                    let lang = project_lang_str.get_value();
+                                                    let path = project_path_str.get_value();
+                                                    
+                                                    let req_id = last_request_id.get_untracked() + 1;
+                                                    last_request_id.set(req_id);
+
+                                                    spawn_local(async move {
+                                                        // Debounce delay
+                                                        gloo_timers::future::TimeoutFuture::new(150).await;
+                                                        
+                                                        // Only proceed if no newer request has been started
+                                                        if last_request_id.get_untracked() == req_id {
+                                                            if let Ok(resp) = api::get_completions_api(&val, &lang, &path, line, character).await {
+                                                                if last_request_id.get_untracked() == req_id {
+                                                                    leptos::logging::log!("Frontend received {} suggestions", resp.suggestions.len());
+                                                                    suggestions.set(resp.suggestions);
+                                                                }
+                                                            }
+                                                        }
+                                                    });
+                                                } else {
+                                                    suggestions.set(Vec::new());
+                                                }
+                                            } else {
+                                                suggestions.set(Vec::new());
+                                            }
                                         }
-                                    }
                                     on:keydown=move |e: KeyboardEvent| {
                                         // Ctrl+S / Cmd+S to save
                                         if (e.ctrl_key() || e.meta_key()) && e.key() == "s" {
@@ -451,6 +590,52 @@ pub fn EditorPage() -> impl IntoView {
                                         if (e.ctrl_key() || e.meta_key()) && e.key() == "f" {
                                             e.prevent_default();
                                             show_search.update(|v| *v = !*v);
+                                        }
+                                        // Suggestions navigation
+                                        if !suggestions.get().is_empty() {
+                                            let current = selected_idx.get();
+                                            let total = suggestions.get().len();
+                                            if e.key() == "ArrowDown" {
+                                                e.prevent_default();
+                                                selected_idx.set((current + 1) % total);
+                                                return;
+                                            } else if e.key() == "ArrowUp" {
+                                                e.prevent_default();
+                                                selected_idx.set((current + total - 1) % total);
+                                                return;
+                                            } else if e.key() == "Enter" || e.key() == "Tab" {
+                                                e.prevent_default();
+                                                let suggs = suggestions.get();
+                                                if let Some(s) = suggs.get(current) {
+                                                    on_select(s.label.clone());
+                                                }
+                                                return;
+                                            } else if e.key() == "Escape" {
+                                                suggestions.set(Vec::new());
+                                                return;
+                                            }
+                                        }
+
+                                        // Ctrl+Space to manually trigger completion
+                                        if e.ctrl_key() && e.key() == " " {
+                                            e.prevent_default();
+                                            use wasm_bindgen::JsCast;
+                                            let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
+                                            let val = target.value();
+                                            let start = target.selection_start().unwrap().unwrap_or(0);
+                                            cursor_pos.set(start);
+                                            
+                                            let lang = project_lang_str.get_value();
+                                            let path = project_path_str.get_value();
+                                            let before_cursor = val.chars().take(start as usize).collect::<String>();
+                                            let line = before_cursor.lines().count().saturating_sub(1) as u32;
+                                            let character = before_cursor.lines().last().unwrap_or("").chars().count() as u32;
+                                            
+                                            spawn_local(async move {
+                                                if let Ok(resp) = api::get_completions_api(&val, &lang, &path, line, character).await {
+                                                    suggestions.set(resp.suggestions);
+                                                }
+                                            });
                                         }
                                         // Tab key → insert spaces
                                         if e.key() == "Tab" {
@@ -478,6 +663,46 @@ pub fn EditorPage() -> impl IntoView {
                                         }
                                     }
                                     />
+                                    {move || (!suggestions.get().is_empty()).then(|| {
+                                        let coords = cursor_coords.get();
+                                        let items = suggestions.get();
+                                        let selected = selected_idx.get();
+                                        let current_item = items.get(selected).cloned();
+                                        
+                                        view! {
+                                            <div class="suggestions-floating" style=format!("left:{}px; top:{}px", coords.0, coords.1)>
+                                                {move || suggestions.get().into_iter().enumerate().map(|(i, s)| {
+                                                    let s2 = s.clone();
+                                                    view! {
+                                                        <button 
+                                                            class=move || if selected_idx.get() == i { "suggestion-item selected" } else { "suggestion-item" }
+                                                            on:click=move |_| on_select(s2.label.clone())
+                                                            on:mouseenter=move |_| selected_idx.set(i)
+                                                        >
+                                                            <span class="suggestion-kind">{kind_icon(s.kind)}</span>
+                                                            <span class="suggestion-label">{s.label.clone()}</span>
+                                                            {s.detail.map(|d| view! { <span class="suggestion-detail">{d}</span> })}
+                                                        </button>
+                                                    }
+                                                }).collect_view()}
+
+                                                {move || current_item.as_ref().and_then(|item| item.documentation.as_ref()).map(|docs| {
+                                                    view! {
+                                                        <div class="suggestion-docs">
+                                                            {docs.clone()}
+                                                        </div>
+                                                    }
+                                                })}
+                                            </div>
+                                        }
+                                    })}
+                                    <div id="cursor-mirror" style=move || format!(
+                                        "width:{}px;font-size:{}px;line-height:1.6;tab-size:{}",
+                                        // We need to match the textarea width
+                                        "100%", // Simplified
+                                        settings.get().font_size,
+                                        settings.get().tab_size
+                                    ) />
                                 </div>
                                 </>
                             }
@@ -529,6 +754,7 @@ pub fn EditorPage() -> impl IntoView {
                             }.into_any()
                         }}
                     </div>
+
 
                     <div style="display:flex;gap:6px;padding:6px;background:var(--bg2);border-top:1px solid var(--border);overflow-x:auto">
                         {["TAB","{}","[]","()","\"\"","''","->","=>","::","/ /","/* */"].iter().map(|s| {

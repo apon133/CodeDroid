@@ -331,10 +331,14 @@ environment:
         }
         
         if let Some(client) = servers.get_mut(&lang) {
-            if lang == "rust" {
-                let _ = fs::write(format!("{}/src/main.rs", project_dir), &payload.code);
-            } else if lang == "dart" {
-                let _ = fs::write(format!("{}/lib/main.dart", project_dir), &payload.code);
+            match lang.as_str() {
+                "rust" => { let _ = fs::write(format!("{}/src/main.rs", project_dir), &payload.code); },
+                "dart" => { let _ = fs::write(format!("{}/lib/main.dart", project_dir), &payload.code); },
+                "cpp" => { let _ = fs::write(format!("{}/main.cpp", project_dir), &payload.code); },
+                "c" => { let _ = fs::write(format!("{}/main.c", project_dir), &payload.code); },
+                "python" => { let _ = fs::write(format!("{}/main.py", project_dir), &payload.code); },
+                "go" => { let _ = fs::write(format!("{}/main.go", project_dir), &payload.code); },
+                _ => {}
             }
             
             match client.get_completions(&file_uri, &payload.code, payload.line, payload.character, &lang) {
@@ -352,21 +356,7 @@ environment:
         }
     }
 
-    let prefix = {
-        let lines: Vec<&str> = payload.code.lines().collect();
-        if let Some(line_text) = lines.get(payload.line as usize) {
-            let chars: Vec<char> = line_text.chars().collect();
-            let mut end = payload.character as usize;
-            if end > chars.len() { end = chars.len(); }
-            let mut start = end;
-            while start > 0 && (chars[start-1].is_alphanumeric() || chars[start-1] == '_') {
-                start -= 1;
-            }
-            line_text[start..end].to_string()
-        } else {
-            String::new()
-        }
-    };
+    let prefix = crate::utils::extract_prefix(&payload.code, payload.line, payload.character);
 
     if suggestions.is_empty() {
         suggestions = lsp::fallback_completions(&payload.code, &prefix);

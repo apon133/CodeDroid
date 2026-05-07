@@ -194,7 +194,7 @@ impl LspClient {
         self.send_request(&comp_req)?;
         self.req_id += 1;
 
-        let prefix = extract_prefix(code, line, character);
+        let prefix = crate::utils::extract_prefix(code, line, character);
         println!("   Filtering suggestions with prefix: '{}'", prefix);
 
         let mut suggestions = Vec::new();
@@ -204,9 +204,21 @@ impl LspClient {
 
             if let Some(items) = items {
                 println!("   LSP result contains {} items", items.len());
+                let prefix_low = prefix.to_lowercase();
                 for item in items {
                     if let Some(label) = item["label"].as_str() {
-                        if prefix.is_empty() || label.to_lowercase().starts_with(&prefix.to_lowercase()) {
+                        let label_low = label.to_lowercase();
+                        
+                        let matches = if prefix.is_empty() {
+                            true
+                        } else {
+                            // Match if label starts with prefix OR if any part (split by ::, ., ->, etc) starts with prefix
+                            label_low.starts_with(&prefix_low) || 
+                            label_low.split(|c: char| !c.is_alphanumeric() && c != '_' && c != '!')
+                                     .any(|part| part.starts_with(&prefix_low))
+                        };
+
+                        if matches {
                             suggestions.push(CompletionItem {
                                 label: label.to_string(),
                                 kind: item["kind"].as_u64().map(|k| k as u32),
@@ -262,22 +274,6 @@ impl Ord for CompletionItem {
     }
 }
 
-fn extract_prefix(code: &str, line: u32, character: u32) -> String {
-    let lines: Vec<&str> = code.split('\n').collect();
-    if let Some(line_str) = lines.get(line as usize) {
-        let char_idx = (character as usize).min(line_str.len());
-        let before_cursor = &line_str[..char_idx];
-        before_cursor.chars()
-            .rev()
-            .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '!')
-            .collect::<String>()
-            .chars()
-            .rev()
-            .collect()
-    } else {
-        String::new()
-    }
-}
 
 pub fn fallback_completions(code: &str, prefix: &str) -> Vec<CompletionItem> {
     let mut words = std::collections::HashSet::new();

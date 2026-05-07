@@ -27,3 +27,19 @@ pub fn find_url_in_output(output: &str) -> Option<String> {
     }
     None
 }
+pub fn extract_prefix(code: &str, line: u32, character: u32) -> String {
+    let lines: Vec<&str> = code.split('\n').collect();
+    if let Some(line_str) = lines.get(line as usize) {
+        let char_idx = (character as usize).min(line_str.len());
+        let before_cursor = &line_str[..char_idx];
+        before_cursor.chars()
+            .rev()
+            .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '!')
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect()
+    } else {
+        String::new()
+    }
+}

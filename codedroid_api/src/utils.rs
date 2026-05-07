@@ -94,6 +94,10 @@ pub fn resolve_lsp_executable(lang: &str, cmd: &str) -> String {
             search_paths.push(format!("{}/.npm-global/bin/{}", home, cmd));
             search_paths.push(format!("{}/node_modules/.bin/{}", home, cmd));
         }
+        "kotlin" => {
+            search_paths.push(format!("/opt/homebrew/bin/{}", cmd));
+            search_paths.push(format!("/usr/local/bin/{}", cmd));
+        }
         _ => {}
     }
 

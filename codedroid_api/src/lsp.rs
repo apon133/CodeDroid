@@ -1,7 +1,7 @@
 use std::process::{Command, Stdio};
 use std::io::{Read, Write, BufRead, BufReader};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use serde_json::{json, Value};
 use std::thread;
 
@@ -15,6 +15,8 @@ pub struct LspClient {
     req_id: usize,
     stdin: Arc<Mutex<std::process::ChildStdin>>,
     responses: Arc<Mutex<HashMap<usize, Value>>>,
+    opened_files: HashSet<String>,
+    file_versions: HashMap<String, i32>,
 }
 
 impl LspClient {
@@ -78,6 +80,8 @@ impl LspClient {
             req_id: 1,
             stdin,
             responses,
+            opened_files: HashSet::new(),
+            file_versions: HashMap::new(),
         };
         
         let init_req = json!({
@@ -89,11 +93,30 @@ impl LspClient {
                 "rootUri": root_uri,
                 "capabilities": {
                     "textDocument": {
+                        "synchronization": {
+                            "dynamicRegistration": true,
+                            "willSave": true,
+                            "willSaveWaitUntil": true,
+                            "didSave": true
+                        },
                         "completion": {
+                            "dynamicRegistration": true,
                             "completionItem": {
-                                "snippetSupport": true
-                            }
-                        }
+                                "snippetSupport": true,
+                                "commitCharactersSupport": true,
+                                "documentationFormat": ["markdown", "plaintext"],
+                                "deprecatedSupport": true,
+                                "preselectSupport": true
+                            },
+                            "contextSupport": true
+                        },
+                        "hover": { "dynamicRegistration": true },
+                        "signatureHelp": { "dynamicRegistration": true },
+                        "definition": { "dynamicRegistration": true }
+                    },
+                    "workspace": {
+                        "workspaceEdit": { "documentChanges": true },
+                        "didChangeConfiguration": { "dynamicRegistration": true }
                     }
                 }
             }
@@ -156,19 +179,42 @@ impl LspClient {
     }
 
     pub fn get_completions(&mut self, file_uri: &str, code: &str, line: u32, character: u32, lang: &str) -> std::io::Result<Vec<CompletionItem>> {
-        let did_open = json!({
-            "jsonrpc": "2.0",
-            "method": "textDocument/didOpen",
-            "params": {
-                "textDocument": {
-                    "uri": file_uri,
-                    "languageId": lang,
-                    "version": 1,
-                    "text": code
+        if !self.opened_files.contains(file_uri) {
+            let did_open = json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": file_uri,
+                        "languageId": lang,
+                        "version": 1,
+                        "text": code
+                    }
                 }
-            }
-        });
-        let _ = self.send_notification(&did_open);
+            });
+            let _ = self.send_notification(&did_open);
+            self.opened_files.insert(file_uri.to_string());
+            self.file_versions.insert(file_uri.to_string(), 1);
+        } else {
+            let version = self.file_versions.get(file_uri).unwrap_or(&1) + 1;
+            let did_change = json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didChange",
+                "params": {
+                    "textDocument": {
+                        "uri": file_uri,
+                        "version": version
+                    },
+                    "contentChanges": [
+                        {
+                            "text": code
+                        }
+                    ]
+                }
+            });
+            let _ = self.send_notification(&did_change);
+            self.file_versions.insert(file_uri.to_string(), version);
+        }
         
         // Removed artificial 500ms sleep for performance. 
         // LSP servers handle sequential requests correctly.

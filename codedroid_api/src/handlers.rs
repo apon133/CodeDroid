@@ -254,6 +254,7 @@ pub async fn get_completions(Json(payload): Json<CompletionRequest>) -> Json<Com
         "java" => format!("file://{}/main.java", project_dir),
         "dart" => format!("file://{}/lib/main.dart", project_dir),
         "ruby" => format!("file://{}/main.rb", project_dir),
+        "kotlin" => format!("file://{}/main.kt", project_dir),
         _ => format!("file://{}/main.txt", project_dir),
     };
 
@@ -265,6 +266,7 @@ pub async fn get_completions(Json(payload): Json<CompletionRequest>) -> Json<Com
         "c" | "cpp" => Some(("clangd", vec![])),
         "dart" => Some(("dart", vec!["language-server"])),
         "ruby" => Some(("solargraph", vec!["stdio"])),
+        "kotlin" => Some(("kotlin-language-server", vec![])),
         _ => None,
     };
 
@@ -334,6 +336,9 @@ environment:
                 "python" => { let _ = fs::write(format!("{}/main.py", project_dir), &payload.code); },
                 "go" => { let _ = fs::write(format!("{}/main.go", project_dir), &payload.code); },
                 "ruby" => { let _ = fs::write(format!("{}/main.rb", project_dir), &payload.code); },
+                "javascript" => { let _ = fs::write(format!("{}/main.js", project_dir), &payload.code); },
+                "typescript" => { let _ = fs::write(format!("{}/main.ts", project_dir), &payload.code); },
+                "kotlin" => { let _ = fs::write(format!("{}/main.kt", project_dir), &payload.code); },
                 _ => {}
             }
             

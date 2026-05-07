@@ -258,6 +258,7 @@ pub async fn get_completions(Json(payload): Json<CompletionRequest>) -> Json<Com
         _ => format!("file://{}/main.txt", project_dir),
     };
 
+    let jdtls_data = format!("{}/.jdtls_data", project_dir);
     let lsp_cmd = match lang.as_str() {
         "rust" => Some(("rust-analyzer", vec![])),
         "python" => Some(("pylsp", vec![])),
@@ -267,6 +268,7 @@ pub async fn get_completions(Json(payload): Json<CompletionRequest>) -> Json<Com
         "dart" => Some(("dart", vec!["language-server"])),
         "ruby" => Some(("solargraph", vec!["stdio"])),
         "kotlin" => Some(("kotlin-language-server", vec![])),
+        "java" => Some(("jdtls", vec!["-data", &jdtls_data])),
         _ => None,
     };
 
@@ -339,6 +341,7 @@ environment:
                 "javascript" => { let _ = fs::write(format!("{}/main.js", project_dir), &payload.code); },
                 "typescript" => { let _ = fs::write(format!("{}/main.ts", project_dir), &payload.code); },
                 "kotlin" => { let _ = fs::write(format!("{}/main.kt", project_dir), &payload.code); },
+                "java" => { let _ = fs::write(format!("{}/main.java", project_dir), &payload.code); },
                 _ => {}
             }
             

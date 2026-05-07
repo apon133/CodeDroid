@@ -98,6 +98,10 @@ pub fn resolve_lsp_executable(lang: &str, cmd: &str) -> String {
             search_paths.push(format!("/opt/homebrew/bin/{}", cmd));
             search_paths.push(format!("/usr/local/bin/{}", cmd));
         }
+        "java" => {
+            search_paths.push(format!("/opt/homebrew/bin/{}", cmd));
+            search_paths.push(format!("/usr/local/bin/{}", cmd));
+        }
         _ => {}
     }
 

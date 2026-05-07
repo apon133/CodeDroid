@@ -1,7 +1,0 @@
-[package]
-name = "ts_test"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-syntect = { version = "5.3.0", default-features = false, features = ["default-fancy"] }

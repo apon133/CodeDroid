@@ -1,1 +1,0 @@
-fn main() { let s = "hi"; s.l }

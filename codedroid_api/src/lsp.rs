@@ -30,7 +30,7 @@ impl LspClient {
         let stdout = child.stdout.take().unwrap();
         
         let responses = Arc::new(Mutex::new(HashMap::new()));
-        let mut stderr = child.stderr.take().unwrap();
+        let stderr = child.stderr.take().unwrap();
         let lang_name = cmd.to_string();
         thread::spawn(move || {
             let mut reader = std::io::BufReader::new(stderr);

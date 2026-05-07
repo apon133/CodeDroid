@@ -255,6 +255,7 @@ pub async fn get_completions(Json(payload): Json<CompletionRequest>) -> Json<Com
         "dart" => format!("file://{}/lib/main.dart", project_dir),
         "ruby" => format!("file://{}/main.rb", project_dir),
         "kotlin" => format!("file://{}/main.kt", project_dir),
+        "swift" => format!("file://{}/main.swift", project_dir),
         _ => format!("file://{}/main.txt", project_dir),
     };
 
@@ -269,6 +270,7 @@ pub async fn get_completions(Json(payload): Json<CompletionRequest>) -> Json<Com
         "ruby" => Some(("solargraph", vec!["stdio"])),
         "kotlin" => Some(("kotlin-language-server", vec![])),
         "java" => Some(("jdtls", vec!["-data", &jdtls_data])),
+        "swift" => Some(("sourcekit-lsp", vec![])),
         _ => None,
     };
 
@@ -342,6 +344,7 @@ environment:
                 "typescript" => { let _ = fs::write(format!("{}/main.ts", project_dir), &payload.code); },
                 "kotlin" => { let _ = fs::write(format!("{}/main.kt", project_dir), &payload.code); },
                 "java" => { let _ = fs::write(format!("{}/main.java", project_dir), &payload.code); },
+                "swift" => { let _ = fs::write(format!("{}/main.swift", project_dir), &payload.code); },
                 _ => {}
             }
             

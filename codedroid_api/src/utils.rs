@@ -102,6 +102,11 @@ pub fn resolve_lsp_executable(lang: &str, cmd: &str) -> String {
             search_paths.push(format!("/opt/homebrew/bin/{}", cmd));
             search_paths.push(format!("/usr/local/bin/{}", cmd));
         }
+        "swift" => {
+            search_paths.push("/usr/bin/sourcekit-lsp".to_string());
+            // Common path on macOS with Xcode
+            search_paths.push("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/sourcekit-lsp".to_string());
+        }
         _ => {}
     }
 

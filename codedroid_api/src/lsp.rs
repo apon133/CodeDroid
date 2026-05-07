@@ -1,14 +1,16 @@
-use std::process::{Command, Stdio};
-use std::io::{Read, Write, BufRead, BufReader};
-use std::sync::{Arc, Mutex, OnceLock};
-use std::collections::{HashMap, HashSet};
 use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
+use std::io::{BufRead, BufReader, Read, Write};
+use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
 static LSP_SERVERS: OnceLock<Arc<Mutex<HashMap<String, LspClient>>>> = OnceLock::new();
 
 pub fn get_servers() -> Arc<Mutex<HashMap<String, LspClient>>> {
-    LSP_SERVERS.get_or_init(|| Arc::new(Mutex::new(HashMap::new()))).clone()
+    LSP_SERVERS
+        .get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
+        .clone()
 }
 
 pub struct LspClient {
@@ -30,7 +32,7 @@ impl LspClient {
 
         let stdin = Arc::new(Mutex::new(child.stdin.take().unwrap()));
         let stdout = child.stdout.take().unwrap();
-        
+
         let responses = Arc::new(Mutex::new(HashMap::new()));
         let stderr = child.stderr.take().unwrap();
         let lang_name = cmd.to_string();
@@ -38,7 +40,9 @@ impl LspClient {
             let mut reader = std::io::BufReader::new(stderr);
             let mut line = String::new();
             while reader.read_line(&mut line).is_ok() {
-                if line.is_empty() { break; }
+                if line.is_empty() {
+                    break;
+                }
                 println!(" [{} LSP stderr] {}", lang_name, line.trim());
                 line.clear();
             }
@@ -52,8 +56,12 @@ impl LspClient {
                 let mut line = String::new();
                 let mut content_length = 0;
                 while let Ok(len) = reader.read_line(&mut line) {
-                    if len == 0 { return; } // EOF
-                    if line == "\r\n" { break; }
+                    if len == 0 {
+                        return;
+                    } // EOF
+                    if line == "\r\n" {
+                        break;
+                    }
                     if line.starts_with("Content-Length:") {
                         let parts: Vec<&str> = line.split(':').collect();
                         if parts.len() == 2 {
@@ -83,7 +91,7 @@ impl LspClient {
             opened_files: HashSet::new(),
             file_versions: HashMap::new(),
         };
-        
+
         let init_req = json!({
             "jsonrpc": "2.0",
             "id": client.req_id,
@@ -124,11 +132,14 @@ impl LspClient {
         client.send_request(&init_req)?;
         let init_id = client.req_id;
         client.req_id += 1;
-        
+
         // Wait longer for initialization (up to 10s)
         if let Some(resp) = client.wait_for_response_with_timeout(init_id, 100) {
-            println!("✅ LSP server initialized: {:?}", resp.get("result").and_then(|r| r.get("serverInfo")));
-            
+            println!(
+                "✅ LSP server initialized: {:?}",
+                resp.get("result").and_then(|r| r.get("serverInfo"))
+            );
+
             // Send initialized notification
             let initialized_notif = json!({
                 "jsonrpc": "2.0",
@@ -139,7 +150,7 @@ impl LspClient {
         } else {
             println!("⚠️ LSP server failed to initialize within 10s");
         }
-        
+
         Ok(client)
     }
 
@@ -178,7 +189,14 @@ impl LspClient {
         None
     }
 
-    pub fn get_completions(&mut self, file_uri: &str, code: &str, line: u32, character: u32, lang: &str) -> std::io::Result<Vec<CompletionItem>> {
+    pub fn get_completions(
+        &mut self,
+        file_uri: &str,
+        code: &str,
+        line: u32,
+        character: u32,
+        lang: &str,
+    ) -> std::io::Result<Vec<CompletionItem>> {
         if !self.opened_files.contains(file_uri) {
             let did_open = json!({
                 "jsonrpc": "2.0",
@@ -215,8 +233,8 @@ impl LspClient {
             let _ = self.send_notification(&did_change);
             self.file_versions.insert(file_uri.to_string(), version);
         }
-        
-        // Removed artificial 500ms sleep for performance. 
+
+        // Removed artificial 500ms sleep for performance.
         // LSP servers handle sequential requests correctly.
 
         let req_id = self.req_id;
@@ -245,7 +263,8 @@ impl LspClient {
 
         let mut suggestions = Vec::new();
         if let Some(resp) = self.wait_for_response(req_id) {
-            let items = resp["result"]["items"].as_array()
+            let items = resp["result"]["items"]
+                .as_array()
                 .or_else(|| resp["result"].as_array());
 
             if let Some(items) = items {
@@ -254,14 +273,15 @@ impl LspClient {
                 for item in items {
                     if let Some(label) = item["label"].as_str() {
                         let label_low = label.to_lowercase();
-                        
+
                         let matches = if prefix.is_empty() {
                             true
                         } else {
                             // Match if label starts with prefix OR if any part (split by ::, ., ->, etc) starts with prefix
-                            label_low.starts_with(&prefix_low) || 
-                            label_low.split(|c: char| !c.is_alphanumeric() && c != '_' && c != '!')
-                                     .any(|part| part.starts_with(&prefix_low))
+                            label_low.starts_with(&prefix_low)
+                                || label_low
+                                    .split(|c: char| !c.is_alphanumeric() && c != '_' && c != '!')
+                                    .any(|part| part.starts_with(&prefix_low))
                         };
 
                         if matches {
@@ -269,7 +289,8 @@ impl LspClient {
                                 label: label.to_string(),
                                 kind: item["kind"].as_u64().map(|k| k as u32),
                                 detail: item["detail"].as_str().map(|s| s.to_string()),
-                                documentation: item["documentation"].as_str()
+                                documentation: item["documentation"]
+                                    .as_str()
                                     .or_else(|| item["documentation"]["value"].as_str())
                                     .map(|s| s.to_string()),
                             });
@@ -277,7 +298,10 @@ impl LspClient {
                     }
                 }
             } else {
-                println!("   LSP result is empty or not an array: {:?}", resp["result"]);
+                println!(
+                    "   LSP result is empty or not an array: {:?}",
+                    resp["result"]
+                );
             }
         } else {
             println!("   ⚠️ LSP timed out for request {}", req_id);
@@ -320,7 +344,6 @@ impl Ord for CompletionItem {
     }
 }
 
-
 pub fn fallback_completions(code: &str, prefix: &str) -> Vec<CompletionItem> {
     let mut words = std::collections::HashSet::new();
     // Match words that are at least 2 characters long
@@ -332,12 +355,15 @@ pub fn fallback_completions(code: &str, prefix: &str) -> Vec<CompletionItem> {
             words.insert(w);
         }
     }
-    let mut res: Vec<CompletionItem> = words.into_iter().map(|w| CompletionItem {
-        label: w,
-        kind: Some(6), // Variable/Text kind
-        detail: None,
-        documentation: None,
-    }).collect();
+    let mut res: Vec<CompletionItem> = words
+        .into_iter()
+        .map(|w| CompletionItem {
+            label: w,
+            kind: Some(6), // Variable/Text kind
+            detail: None,
+            documentation: None,
+        })
+        .collect();
     res.sort();
     res
 }

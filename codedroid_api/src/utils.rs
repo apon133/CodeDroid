@@ -43,3 +43,65 @@ pub fn extract_prefix(code: &str, line: u32, character: u32) -> String {
         String::new()
     }
 }
+
+pub fn resolve_lsp_executable(lang: &str, cmd: &str) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    
+    // 1. Check if it's already in the PATH
+    #[cfg(not(windows))]
+    {
+        if let Ok(output) = std::process::Command::new("which").arg(cmd).output() {
+            if output.status.success() {
+                return cmd.to_string();
+            }
+        }
+    }
+    #[cfg(windows)]
+    {
+        if let Ok(output) = std::process::Command::new("where").arg(cmd).output() {
+            if output.status.success() {
+                return cmd.to_string();
+            }
+        }
+    }
+
+    // 2. Check common installation directories
+    let mut search_paths = vec![
+        format!("/opt/homebrew/bin/{}", cmd),
+        format!("/usr/local/bin/{}", cmd),
+        format!("{}/.npm-global/bin/{}", home, cmd),
+        format!("{}/go/bin/{}", home, cmd),
+    ];
+
+    // Language specific paths
+    match lang {
+        "ruby" => {
+            // Check user gems (common on macOS/Linux)
+            if let Ok(entries) = std::fs::read_dir(format!("{}/.gem/ruby", home)) {
+                for entry in entries.flatten() {
+                    let bin_path = entry.path().join("bin").join(cmd);
+                    search_paths.push(bin_path.to_string_lossy().to_string());
+                }
+            }
+        }
+        "go" => {
+            search_paths.push(format!("{}/go/bin/{}", home, cmd));
+        }
+        "python" => {
+            search_paths.push(format!("{}/.local/bin/{}", home, cmd));
+        }
+        "javascript" | "typescript" => {
+            search_paths.push(format!("{}/.npm-global/bin/{}", home, cmd));
+            search_paths.push(format!("{}/node_modules/.bin/{}", home, cmd));
+        }
+        _ => {}
+    }
+
+    for path in search_paths {
+        if std::path::Path::new(&path).exists() {
+            return path;
+        }
+    }
+
+    cmd.to_string()
+}

@@ -253,6 +253,7 @@ pub async fn get_completions(Json(payload): Json<CompletionRequest>) -> Json<Com
         "cpp" => format!("file://{}/main.cpp", project_dir),
         "java" => format!("file://{}/main.java", project_dir),
         "dart" => format!("file://{}/lib/main.dart", project_dir),
+        "ruby" => format!("file://{}/main.rb", project_dir),
         _ => format!("file://{}/main.txt", project_dir),
     };
 
@@ -263,6 +264,7 @@ pub async fn get_completions(Json(payload): Json<CompletionRequest>) -> Json<Com
         "go" => Some(("gopls", vec![])),
         "c" | "cpp" => Some(("clangd", vec![])),
         "dart" => Some(("dart", vec!["language-server"])),
+        "ruby" => Some(("solargraph", vec!["stdio"])),
         _ => None,
     };
 
@@ -310,14 +312,7 @@ environment:
             }
 
             let root_uri = format!("file://{}", project_dir);
-            let mut final_cmd = cmd.to_string();
-            if lang == "go" {
-                let home = std::env::var("HOME").unwrap_or_default();
-                let gopls_path = format!("{}/go/bin/gopls", home);
-                if std::path::Path::new(&gopls_path).exists() {
-                    final_cmd = gopls_path;
-                }
-            }
+            let final_cmd = crate::utils::resolve_lsp_executable(&lang, cmd);
 
             println!("🚀 Starting LSP server for {}: {} (root: {})", lang, final_cmd, root_uri);
             match lsp::LspClient::new(&final_cmd, &args, Some(&root_uri)) {
@@ -338,6 +333,7 @@ environment:
                 "c" => { let _ = fs::write(format!("{}/main.c", project_dir), &payload.code); },
                 "python" => { let _ = fs::write(format!("{}/main.py", project_dir), &payload.code); },
                 "go" => { let _ = fs::write(format!("{}/main.go", project_dir), &payload.code); },
+                "ruby" => { let _ = fs::write(format!("{}/main.rb", project_dir), &payload.code); },
                 _ => {}
             }
             

@@ -33,7 +33,7 @@ body { background: var(--bg); color: var(--text); font-family: var(--font-ui); h
 /* ── Buttons ── */
 .btn {
   border: none; cursor: pointer; font-family: var(--font-ui); font-size: 13px;
-  border-radius: var(--radius); padding: 6px 14px; transition: all .2s; display: flex; align-items: center; gap: 6px;
+  border-radius: var(--radius); padding: 6px 14px; transition: all .2s; display: inline-flex; align-items: center; gap: 6px;
 }
 .btn-icon { background: transparent; color: var(--text2); border-radius: 50%; width: 36px; height: 36px; padding: 0; justify-content: center; font-size: 18px; }
 .btn-icon:hover { background: rgba(255,255,255,.08); color: var(--text); }
@@ -120,8 +120,22 @@ body { background: var(--bg); color: var(--text); font-family: var(--font-ui); h
 .fw-item-name { font-size: 14px; font-weight: 600; }
 .fw-item-desc { font-size: 11px; color: var(--text2); }
 
-/* ── Editor Layout ── */
-.editor-layout { display: flex; height: calc(100vh - 50px); overflow: hidden; }
+.editor-page-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.editor-layout { 
+  display: flex; 
+  height: calc(100vh - 50px); 
+  width: 100%;
+  overflow: hidden; 
+  flex: 1; 
+}
 .file-tree-panel { width: 240px; border-right: 1px solid var(--border); background: var(--bg2); display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; }
 .file-tree-header { padding: 10px 12px; font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); }
 .file-item {
@@ -132,7 +146,52 @@ body { background: var(--bg); color: var(--text); font-family: var(--font-ui); h
 .file-item.active { background: rgba(0,122,204,.15); color: #fff; }
 .dir-item { color: var(--accent); font-weight: 600; }
 
-.editor-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.editor-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); min-width: 0; }
+
+/* ── Editor Footer ── */
+.editor-footer {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+  overflow-x: auto;
+  flex-shrink: 0;
+  z-index: 10;
+  height: 40px;
+  width: 100%;
+  white-space: nowrap;
+}
+.editor-footer::-webkit-scrollbar { display: none; }
+
+.btn-footer {
+  background: var(--bg3);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  flex-shrink: 0;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.btn-footer:hover {
+  background: var(--border);
+  color: #fff;
+  transform: translateY(-1px);
+}
+.btn-footer:active {
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: translateY(0);
+}
 
 /* ── Editor AppBar ── */
 .editor-bar {
@@ -349,4 +408,3 @@ select.input { width: auto; min-width: 140px; }
 .code-container {
     position: relative;
 }
-

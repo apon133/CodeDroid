@@ -259,7 +259,7 @@ pub fn EditorPage() -> impl IntoView {
     Effect::new(move |_| {
         let tree = file_tree_data.get();
         if !tree.is_empty() && active_tab.get_untracked().is_none() {
-            let language = project.language.to_lowercase();
+            let language = project_lang_str.get_value().to_lowercase();
             let mut best_match = None;
             
             // Priority 1: Match standard entry point for the project language
@@ -313,7 +313,7 @@ pub fn EditorPage() -> impl IntoView {
     });
 
     view! {
-        <div>
+        <div class="editor-page-root">
             <AppBar title=project.name.clone() back=true>
                 <button class="btn btn-icon" title="Search (Ctrl+F)"
                     on:click=move |_| show_search.update(|v| *v = !*v)>"🔍"</button>
@@ -345,7 +345,7 @@ pub fn EditorPage() -> impl IntoView {
                     file_tree=file_tree_data.into()
                     active_tab=active_tab.into()
                     open_file=open_file
-                    lang_icon=lang_icon(&project.language).to_string()
+                    lang_icon=lang_icon(&project_lang_str.get_value()).to_string()
                     project_name=project.name.clone()
                 />
 

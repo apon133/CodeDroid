@@ -256,12 +256,59 @@ pub fn EditorPage() -> impl IntoView {
     };
 
     // Open default file on mount
-    Effect::new({
-        let tree = file_tree_data.get_untracked();
-        move |_| {
-            if !tree.is_empty() {
-                open_file.run(tree[0].name.clone());
+    Effect::new(move |_| {
+        let tree = file_tree_data.get();
+        if !tree.is_empty() && active_tab.get_untracked().is_none() {
+            let language = project.language.to_lowercase();
+            let mut best_match = None;
+            
+            // Priority 1: Match standard entry point for the project language
+            for e in tree.iter() {
+                let n = e.name.to_lowercase();
+                match language.as_str() {
+                    "rust" if n == "src/main.rs" || n == "main.rs" => best_match = Some(e.name.clone()),
+                    "go" if n == "main.go" => best_match = Some(e.name.clone()),
+                    "dart" if n == "main.dart" => best_match = Some(e.name.clone()),
+                    "python" if n == "main.py" => best_match = Some(e.name.clone()),
+                    "java" if n == "main.java" || n == "src/main.java" => best_match = Some(e.name.clone()),
+                    "c" if n == "main.c" => best_match = Some(e.name.clone()),
+                    "cpp" if n == "main.cpp" => best_match = Some(e.name.clone()),
+                    "javascript" | "typescript" if n == "main.js" || n == "main.ts" || n == "index.js" || n == "index.ts" => best_match = Some(e.name.clone()),
+                    _ => {}
+                }
+                if best_match.is_some() { break; }
             }
+
+            // Priority 2: Match any entry point from the general list
+            if best_match.is_none() {
+                let main_files = [
+                    "src/main.rs", "main.rs", "main.dart", "main.go", "main.py",
+                    "main.js", "main.ts", "src/main.js", "src/main.ts",
+                    "src/main.jsx", "src/main.tsx", "index.js", "index.ts",
+                    "index.html", "Main.java", "main.c", "main.cpp",
+                    "Program.cs", "main.kt", "main.swift", "main.rb",
+                ];
+                for e in tree.iter() {
+                    let n = e.name.to_lowercase();
+                    if main_files.iter().any(|&m| {
+                        let m_low = m.to_lowercase();
+                        n == m_low || n.ends_with(&format!("/{}", m_low))
+                    }) {
+                        best_match = Some(e.name.clone());
+                        break;
+                    }
+                }
+            }
+
+            let default_file = best_match.unwrap_or_else(|| tree[0].name.clone());
+
+            spawn_local(async move {
+                // Small delay to ensure the editor and store are fully ready
+                gloo_timers::future::TimeoutFuture::new(100).await;
+                if active_tab.get_untracked().is_none() {
+                    open_file.run(default_file);
+                }
+            });
         }
     });
 

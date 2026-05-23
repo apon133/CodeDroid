@@ -323,6 +323,8 @@ impl LspClient {
             }
         });
         let _ = self.send_notification(&did_close);
+        self.opened_files.remove(file_uri);
+        self.file_versions.remove(file_uri);
 
         Ok(suggestions)
     }

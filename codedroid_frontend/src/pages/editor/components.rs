@@ -26,6 +26,21 @@ pub fn FileTree(
 
     let (press_id, set_press_id) = create_signal(0i32);
     let (collapsed_dirs, set_collapsed_dirs) = create_signal(std::collections::HashSet::<String>::new());
+    let (selected_path, set_selected_path) = create_signal(Option::<String>::None);
+    let get_target_dir = move || {
+        selected_path.get().map(|path| {
+            let is_dir = file_tree.get().iter().any(|f| f.name == path && f.is_dir);
+            if is_dir {
+                path
+            } else {
+                if let Some(pos) = path.rfind('/') {
+                    path[..pos].to_string()
+                } else {
+                    String::new()
+                }
+            }
+        }).unwrap_or_default()
+    };
     
     let start_long_press = Callback::new({
         let paste_entry = paste_entry.clone();
@@ -55,6 +70,7 @@ pub fn FileTree(
             class=move || if sidebar_open.get() { "file-tree-panel open" } else { "file-tree-panel" }
             on:mousedown=move |e| {
                 if e.target() == e.current_target() {
+                    set_selected_path.set(None);
                     start_long_press.run(None);
                 }
             }
@@ -62,6 +78,7 @@ pub fn FileTree(
             on:mouseleave=move |_| cancel_long_press.run(())
             on:touchstart=move |e| {
                 if e.target() == e.current_target() {
+                    set_selected_path.set(None);
                     start_long_press.run(None);
                 }
             }
@@ -72,12 +89,17 @@ pub fn FileTree(
                 <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700;">
                     {lang_icon}" "{project_name.to_uppercase()}
                 </span>
-                <div style="display:flex; gap:8px; flex-shrink:0;">
+                <div style="display:flex; gap:8px; flex-shrink:0; align-items:center;">
                     <button class="btn-tree-action-header" title="New File" style="background:none; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:4px;"
                         on:click=move |_| {
                             set_show_new_file.set(true);
                             set_show_new_folder.set(false);
-                            set_new_name.set(String::new());
+                            let target = get_target_dir();
+                            if !target.is_empty() {
+                                set_new_name.set(format!("{}/", target));
+                            } else {
+                                set_new_name.set(String::new());
+                            }
                         }
                     >
                         <LucideIcon name="file-plus" size="18" />
@@ -86,10 +108,34 @@ pub fn FileTree(
                         on:click=move |_| {
                             set_show_new_folder.set(true);
                             set_show_new_file.set(false);
-                            set_new_name.set(String::new());
+                            let target = get_target_dir();
+                            if !target.is_empty() {
+                                set_new_name.set(format!("{}/", target));
+                            } else {
+                                set_new_name.set(String::new());
+                            }
                         }
                     >
                         <LucideIcon name="folder-plus" size="18" />
+                    </button>
+                    <button 
+                        class="btn-tree-action-header" 
+                        title="Paste" 
+                        style=move || {
+                            let has_copied = copied_item.get().is_some();
+                            let opacity = if has_copied { "1.0" } else { "0.25" };
+                            let pointer = if has_copied { "pointer" } else { "default" };
+                            let events = if has_copied { "auto" } else { "none" };
+                            format!("background:none; border:none; cursor:{}; display:flex; align-items:center; justify-content:center; padding:4px; opacity:{}; transition: opacity 0.2s ease; pointer-events:{};", pointer, opacity, events)
+                        }
+                        on:click=move |_| {
+                            if copied_item.get().is_some() {
+                                let target = get_target_dir();
+                                paste_entry.run(if target.is_empty() { None } else { Some(target) });
+                            }
+                        }
+                    >
+                        <LucideIcon name="clipboard" size="18" />
                     </button>
                 </div>
             </div>
@@ -180,11 +226,21 @@ pub fn FileTree(
                                 <div
                                     class=move || {
                                         let active = active_tab.get().as_deref() == Some(&fname_active);
+                                        let selected = selected_path.get().as_deref() == Some(&fname_active);
                                         let base = if f_click.is_dir { "file-item dir-item" } else { "file-item" };
-                                        if active { format!("{} active", base) } else { base.to_string() }
+                                        let mut classes = base.to_string();
+                                        if active {
+                                            classes.push_str(" active");
+                                        }
+                                        if selected {
+                                            classes.push_str(" selected");
+                                        }
+                                        classes
                                     }
                                     style=format!("display: flex; justify-content: space-between; align-items: center; padding-right: 12px; padding-left: {}px; cursor: pointer; user-select: none;", 12 + indent)
-                                    on:click=move |_| {
+                                    on:click=move |e| {
+                                        e.stop_propagation();
+                                        set_selected_path.set(Some(fname_click.clone()));
                                         if !f_click.is_dir {
                                             open_file.run(fname_click.clone());
                                             toggle_sidebar.run(()); // Auto-close drawer on mobile when clicking file
@@ -238,6 +294,27 @@ pub fn FileTree(
                                     </div>
                                     
                                     <div class="file-item-actions" style="display:flex; gap:6px; flex-shrink:0; align-items:center">
+                                        {
+                                            let target_dir_outer = fname_click.clone();
+                                            move || {
+                                                let is_dir = f_click.is_dir;
+                                                let target_dir = target_dir_outer.clone();
+                                                let paste_entry = paste_entry.clone();
+                                                (is_dir && copied_item.get().is_some()).then(|| view! {
+                                                    <button 
+                                                        class="btn-tree-action" 
+                                                        style="background:transparent; border:none; color:var(--accent2); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;"
+                                                        title="Paste here"
+                                                        on:click=move |e| {
+                                                            e.stop_propagation();
+                                                            paste_entry.run(Some(target_dir.clone()));
+                                                        }
+                                                    >
+                                                        <LucideIcon name="clipboard" size="13" />
+                                                    </button>
+                                                })
+                                            }
+                                        }
                                         <button 
                                             class="btn-tree-action" 
                                             style="background:transparent; border:none; color:var(--text2); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center; opacity: 0.6;"

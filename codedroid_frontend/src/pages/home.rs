@@ -83,6 +83,26 @@ fn default_files(lang: &str, framework: &str, name: &str) -> Vec<(String, String
     }
 }
 
+fn format_project_path(path: &str) -> String {
+    if path.starts_with("/Codedroid_Projects") {
+        let is_mobile = web_sys::window()
+            .and_then(|w| w.navigator().user_agent().ok())
+            .map(|ua| {
+                let ua_lower = ua.to_lowercase();
+                ua_lower.contains("android") || ua_lower.contains("iphone") || ua_lower.contains("ipad")
+            })
+            .unwrap_or(false);
+
+        if is_mobile {
+            format!("phone/download/codedroid{}", &path["/Codedroid_Projects".len()..])
+        } else {
+            path.to_string()
+        }
+    } else {
+        path.to_string()
+    }
+}
+
 #[component]
 pub fn HomePage() -> impl IntoView {
     let navigate = use_navigate();
@@ -170,6 +190,7 @@ pub fn HomePage() -> impl IntoView {
                                     let pid2 = p.id.clone();
                                     let nav = navigate.clone();
                                     let (color, bg) = lang_color(&p.language);
+                                    let display_path = format_project_path(&p.path);
                                     view! {
                                         <div class="project-card"
                                             on:click=move |_| nav(&format!("/editor/{}", pid), Default::default())
@@ -179,7 +200,7 @@ pub fn HomePage() -> impl IntoView {
                                             </div>
                                             <div class="project-info">
                                                 <div class="project-name">{p.name.clone()}</div>
-                                                <div class="project-path">{p.path.clone()}</div>
+                                                <div class="project-path">{display_path.clone()}</div>
                                             </div>
                                             <span class="lang-badge" style=format!("color:{color};border-color:{color};background:{bg}")>
                                                 {p.language.to_uppercase()}

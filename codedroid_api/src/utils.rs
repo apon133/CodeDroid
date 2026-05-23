@@ -3,10 +3,46 @@ use std::fs;
 pub fn resolve_project_dir(path: &str) -> String {
     if path.starts_with("/Codedroid_Projects") {
         // Map web virtual path to a real local path
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        let local_path = format!("{}/.codedroid_web_cache{}", home, path);
-        let _ = fs::create_dir_all(&local_path);
-        local_path
+        let relative_path = &path["/Codedroid_Projects".len()..]; // e.g. "/project_name" or ""
+        
+        // Detect if we are running in Termux/Android
+        let is_android = std::env::var("ANDROID_DATA").is_ok()
+            || std::path::Path::new("/sdcard").exists()
+            || std::path::Path::new("/storage/emulated/0").exists();
+
+        if is_android {
+            // Target path: phone/download/codedroid -> /sdcard/Download/codedroid
+            let sdcard_path = format!("/sdcard/Download/codedroid{}", relative_path);
+            let emulated_path = format!("/storage/emulated/0/Download/codedroid{}", relative_path);
+            
+            // Try creating directories. If storage permission is granted, these will succeed.
+            if fs::create_dir_all(&sdcard_path).is_ok() {
+                sdcard_path
+            } else if fs::create_dir_all(&emulated_path).is_ok() {
+                emulated_path
+            } else {
+                // Try Termux storage shortcut ~/storage/shared
+                if let Ok(home) = std::env::var("HOME") {
+                    let termux_shared = format!("{}/storage/shared/Download/codedroid{}", home, relative_path);
+                    if fs::create_dir_all(&termux_shared).is_ok() {
+                        return termux_shared;
+                    }
+                }
+                
+                // Fallback to cache directory if shared storage isn't setup/permitted yet
+                eprintln!("⚠️ Warning: Android storage is not writable. Please run 'termux-setup-storage' in Termux to grant permission.");
+                let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+                let cache_path = format!("{}/.codedroid_web_cache{}", home, path);
+                let _ = fs::create_dir_all(&cache_path);
+                cache_path
+            }
+        } else {
+            // Default desktop path
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+            let local_path = format!("{}/.codedroid_web_cache{}", home, path);
+            let _ = fs::create_dir_all(&local_path);
+            local_path
+        }
     } else {
         path.to_string()
     }

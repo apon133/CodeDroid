@@ -8,6 +8,7 @@ use crate::store;
 use crate::components::app_bar::AppBar;
 use crate::components::snackbar::Snackbar;
 use crate::components::new_project_modal::{NewProjectModal, NewProjectResult};
+use crate::components::icon::LucideIcon;
 
 fn default_files(lang: &str, framework: &str, name: &str) -> Vec<(String, String)> {
     match lang {
@@ -139,9 +140,13 @@ pub fn HomePage() -> impl IntoView {
                         );
                         show_snack("API code copied!");
                     }
-                >"📋"</button>
+                >
+                    <LucideIcon name="copy" size="20" />
+                </button>
                 <a href="/settings" style="text-decoration:none">
-                    <button class="btn btn-icon" title="Settings">"⚙️"</button>
+                    <button class="btn btn-icon" title="Settings">
+                        <LucideIcon name="settings" size="20" />
+                    </button>
                 </a>
             </AppBar>
 
@@ -151,7 +156,9 @@ pub fn HomePage() -> impl IntoView {
                     if projs.is_empty() {
                         view! {
                             <div class="home-empty">
-                                <div class="icon">"📂"</div>
+                                <div class="icon" style="color:var(--text2); opacity: 0.5;">
+                                    <LucideIcon name="folder" size="48" />
+                                </div>
                                 <p>"No projects yet — create one!"</p>
                             </div>
                         }.into_any()
@@ -178,13 +185,15 @@ pub fn HomePage() -> impl IntoView {
                                                 {p.language.to_uppercase()}
                                             </span>
                                             <button class="btn btn-icon"
-                                                style="color:#ff453a;font-size:16px"
+                                                style="color:#ff453a;font-size:16px;display:flex;align-items:center;justify-content:center"
                                                 title="Delete"
                                                 on:click=move |e: MouseEvent| {
                                                     e.stop_propagation();
                                                     store::delete_project(&projects, &pid2);
                                                 }
-                                            >"🗑"</button>
+                                            >
+                                                <LucideIcon name="trash" size="18" />
+                                            </button>
                                         </div>
                                     }
                                 }).collect_view()}
@@ -194,7 +203,9 @@ pub fn HomePage() -> impl IntoView {
                 }}
             </div>
 
-            <button class="fab" title="New Project" on:click=move |_| show_modal.set(true)>"+"</button>
+            <button class="fab" title="New Project" on:click=move |_| show_modal.set(true)>
+                <LucideIcon name="plus" size="24" />
+            </button>
 
             {move || show_modal.get().then(|| view! {
                 <NewProjectModal on_create=on_create on_cancel=on_cancel />

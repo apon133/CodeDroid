@@ -7,7 +7,7 @@ mod runner;
 mod utils;
 mod handlers;
 
-use handlers::{run_code, stop_process, add_package, sync_file, get_completions};
+use handlers::{run_code, stop_process, add_package, sync_file, get_completions, delete_file, copy_file, create_dir};
 
 #[tokio::main]
 async fn main() {
@@ -16,6 +16,9 @@ async fn main() {
         .route("/stop", post(stop_process))
         .route("/add_package", post(add_package))
         .route("/sync_file", post(sync_file))
+        .route("/delete_file", post(delete_file))
+        .route("/copy_file", post(copy_file))
+        .route("/create_dir", post(create_dir))
         .route("/complete", post(get_completions))
         .layer(CorsLayer::permissive());
 

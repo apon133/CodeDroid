@@ -100,3 +100,37 @@ pub async fn get_completions_api(code: &str, language: &str, project_path: &str,
         .await
         .map_err(|e| e.to_string())
 }
+
+pub async fn delete_file_api(path: &str, is_dir: bool) -> Result<(), String> {
+    let body = json!({ "path": path, "is_dir": is_dir });
+    Request::post(&format!("{}/delete_file", API_URL))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub async fn copy_file_api(src_path: &str, dest_path: &str, is_dir: bool) -> Result<(), String> {
+    let body = json!({ "src_path": src_path, "dest_path": dest_path, "is_dir": is_dir });
+    Request::post(&format!("{}/copy_file", API_URL))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub async fn create_dir_api(path: &str) -> Result<(), String> {
+    let body = json!({ "path": path });
+    Request::post(&format!("{}/create_dir", API_URL))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+

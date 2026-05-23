@@ -1,5 +1,7 @@
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 use crate::pages::editor::utils::*;
+use crate::components::icon::LucideIcon;
 use web_sys::{Event, KeyboardEvent, MouseEvent};
 
 #[component]
@@ -9,28 +11,268 @@ pub fn FileTree(
     open_file: Callback<String>,
     lang_icon: String,
     project_name: String,
+    create_file: Callback<String>,
+    create_folder: Callback<String>,
+    delete_entry: Callback<FileEntry>,
+    copy_entry: Callback<FileEntry>,
+    copied_item: Signal<Option<FileEntry>>,
+    paste_entry: Callback<Option<String>>,
+    sidebar_open: Signal<bool>,
+    toggle_sidebar: Callback<()>,
 ) -> impl IntoView {
+    let (show_new_file, set_show_new_file) = create_signal(false);
+    let (show_new_folder, set_show_new_folder) = create_signal(false);
+    let (new_name, set_new_name) = create_signal(String::new());
+
+    let (press_id, set_press_id) = create_signal(0i32);
+    let (collapsed_dirs, set_collapsed_dirs) = create_signal(std::collections::HashSet::<String>::new());
+    
+    let start_long_press = Callback::new({
+        let paste_entry = paste_entry.clone();
+        move |target_dir: Option<String>| {
+            let next_id = press_id.get_untracked() + 1;
+            set_press_id.set(next_id);
+            let paste_entry = paste_entry.clone();
+            spawn_local(async move {
+                gloo_timers::future::TimeoutFuture::new(500).await;
+                if press_id.get_untracked() == next_id {
+                    paste_entry.run(target_dir);
+                }
+            });
+        }
+    });
+    
+    let cancel_long_press = Callback::new(move |_: ()| {
+        set_press_id.update(|id| *id += 1);
+    });
+
     view! {
-        <div class="file-tree-panel">
-            <div class="file-tree-header">
-                <span>{lang_icon}" "{project_name.to_uppercase()}</span>
-            </div>
-            {move || file_tree.get().into_iter().map(|f| {
-                let fname = f.name.clone();
-                let fname2 = f.name.clone();
-                view! {
-                    <div
-                        class=move || {
-                            let active = active_tab.get().as_deref() == Some(&fname2);
-                            if active { "file-item active" } else { "file-item" }
+        {move || sidebar_open.get().then(|| view! {
+            <div class="sidebar-overlay" on:click=move |_| toggle_sidebar.run(()) />
+        })}
+
+        <div 
+            class=move || if sidebar_open.get() { "file-tree-panel open" } else { "file-tree-panel" }
+            on:mousedown=move |e| {
+                if e.target() == e.current_target() {
+                    start_long_press.run(None);
+                }
+            }
+            on:mouseup=move |_| cancel_long_press.run(())
+            on:mouseleave=move |_| cancel_long_press.run(())
+            on:touchstart=move |e| {
+                if e.target() == e.current_target() {
+                    start_long_press.run(None);
+                }
+            }
+            on:touchend=move |_| cancel_long_press.run(())
+            on:touchcancel=move |_| cancel_long_press.run(())
+        >
+            <div class="file-tree-header" style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700;">
+                    {lang_icon}" "{project_name.to_uppercase()}
+                </span>
+                <div style="display:flex; gap:8px; flex-shrink:0;">
+                    <button class="btn-tree-action-header" title="New File" style="background:none; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:4px;"
+                        on:click=move |_| {
+                            set_show_new_file.set(true);
+                            set_show_new_folder.set(false);
+                            set_new_name.set(String::new());
                         }
-                        on:click=move |_| open_file.run(fname.clone())
                     >
-                        <span>{file_icon(&f.name)}</span>
-                        <span>{f.name.clone()}</span>
+                        <LucideIcon name="file-plus" size="18" />
+                    </button>
+                    <button class="btn-tree-action-header" title="New Folder" style="background:none; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:4px;"
+                        on:click=move |_| {
+                            set_show_new_folder.set(true);
+                            set_show_new_file.set(false);
+                            set_new_name.set(String::new());
+                        }
+                    >
+                        <LucideIcon name="folder-plus" size="18" />
+                    </button>
+                </div>
+            </div>
+
+            {move || (show_new_file.get() || show_new_folder.get()).then(|| {
+                let is_folder = show_new_folder.get();
+                view! {
+                    <div style="padding: 10px 14px; display:flex; flex-direction:column; gap:8px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.02)">
+                        <input
+                            class="input"
+                            style="font-size:12px; padding:6px 10px"
+                            type="text"
+                            placeholder=move || if is_folder { "Folder path (e.g. src/utils)..." } else { "File name (e.g. test.rs)..." }
+                            prop:value=move || new_name.get()
+                            on:input=move |e| set_new_name.set(event_target_value(&e))
+                            on:keydown=move |e: KeyboardEvent| {
+                                if e.key() == "Enter" {
+                                    let val = new_name.get();
+                                    if !val.trim().is_empty() {
+                                        if is_folder {
+                                            create_folder.run(val);
+                                            set_show_new_folder.set(false);
+                                        } else {
+                                            create_file.run(val);
+                                            set_show_new_file.set(false);
+                                        }
+                                        set_new_name.set(String::new());
+                                    }
+                                } else if e.key() == "Escape" {
+                                    set_show_new_file.set(false);
+                                    set_show_new_folder.set(false);
+                                    set_new_name.set(String::new());
+                                }
+                            }
+                        />
+                        <div style="display:flex; gap:6px; justify-content:flex-end">
+                            <button class="btn" style="padding:4px 8px; font-size:11px; background:transparent; border:1px solid var(--border); color:var(--text2); box-shadow:none"
+                                on:click=move |_| {
+                                    set_show_new_file.set(false);
+                                    set_show_new_folder.set(false);
+                                    set_new_name.set(String::new());
+                                }
+                            >"Cancel"</button>
+                            <button class="btn btn-primary" style="padding:4px 8px; font-size:11px"
+                                on:click=move |_| {
+                                    let val = new_name.get();
+                                    if !val.trim().is_empty() {
+                                        if is_folder {
+                                            create_folder.run(val);
+                                            set_show_new_folder.set(false);
+                                        } else {
+                                            create_file.run(val);
+                                            set_show_new_file.set(false);
+                                        }
+                                        set_new_name.set(String::new());
+                                    }
+                                }
+                            >"Create"</button>
+                        </div>
                     </div>
                 }
-            }).collect_view()}
+            })}
+
+            <div style="flex: 1; overflow-y: auto;">
+                {move || {
+                    let collapsed = collapsed_dirs.get();
+                    file_tree.get().into_iter()
+                        .filter(|f| {
+                            let ancestors = get_ancestors(&f.name);
+                            !ancestors.into_iter().any(|a| collapsed.contains(&a))
+                        })
+                        .map(|f| {
+                            let fname_click = f.name.clone();
+                            let fname_mousedown = f.name.clone();
+                            let fname_touchstart = f.name.clone();
+                            let fname_active = f.name.clone();
+                            let fname_lang = f.name.clone();
+                            
+                            let f_click = f.clone();
+                            let f_copy_btn = f.clone();
+                            let f_delete_btn = f.clone();
+                            
+                            let depth = path_depth(&f.name);
+                            let indent = depth * 16;
+                            let display_name = path_basename(&f.name).to_string();
+                            
+                            view! {
+                                <div
+                                    class=move || {
+                                        let active = active_tab.get().as_deref() == Some(&fname_active);
+                                        let base = if f_click.is_dir { "file-item dir-item" } else { "file-item" };
+                                        if active { format!("{} active", base) } else { base.to_string() }
+                                    }
+                                    style=format!("display: flex; justify-content: space-between; align-items: center; padding-right: 12px; padding-left: {}px; cursor: pointer; user-select: none;", 12 + indent)
+                                    on:click=move |_| {
+                                        if !f_click.is_dir {
+                                            open_file.run(fname_click.clone());
+                                            toggle_sidebar.run(()); // Auto-close drawer on mobile when clicking file
+                                        } else {
+                                            set_collapsed_dirs.update(|set| {
+                                                if set.contains(&fname_click) {
+                                                    set.remove(&fname_click);
+                                                } else {
+                                                    set.insert(fname_click.clone());
+                                                }
+                                            });
+                                        }
+                                    }
+                                    on:mousedown=move |_| start_long_press.run(if f_click.is_dir { Some(fname_mousedown.clone()) } else { None })
+                                    on:mouseup=move |_| cancel_long_press.run(())
+                                    on:mouseleave=move |_| cancel_long_press.run(())
+                                    on:touchstart=move |_| start_long_press.run(if f_click.is_dir { Some(fname_touchstart.clone()) } else { None })
+                                    on:touchend=move |_| cancel_long_press.run(())
+                                    on:touchcancel=move |_| cancel_long_press.run(())
+                                >
+                                    <div style="display:flex; align-items:center; gap:6px; min-width:0; flex:1">
+                                        {if f.is_dir {
+                                            let name_for_collapsed = f.name.clone();
+                                            let is_collapsed = move || collapsed_dirs.get().contains(&name_for_collapsed);
+                                            view! {
+                                                <span style="display:inline-flex; align-items:center; opacity:0.6; cursor:pointer; width: 14px; justify-content: center;">
+                                                    {move || if is_collapsed() {
+                                                        view! { <LucideIcon name="chevron-right" size="12" /> }.into_any()
+                                                    } else {
+                                                        view! { <LucideIcon name="chevron-down" size="12" /> }.into_any()
+                                                    }}
+                                                </span>
+                                                <span style="color: var(--accent2); display: inline-flex;"><LucideIcon name="folder" size="15" /></span>
+                                            }.into_any()
+                                        } else {
+                                            view! {
+                                                <span style="width: 14px;"></span>
+                                                <span style="font-size:14px; display:flex; align-items:center;">
+                                                    {file_icon(&f.name)}
+                                                </span>
+                                            }.into_any()
+                                        }}
+                                        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; margin-left: 4px;">
+                                            {display_name}
+                                            {move || (!f.is_dir).then(|| view! {
+                                                <span style="font-size: 10px; opacity: 0.5; margin-left: 6px; font-weight: 500; font-family: var(--font-ui)">
+                                                    {format!("({})", file_lang_name(&fname_lang))}
+                                                </span>
+                                            })}
+                                        </span>
+                                    </div>
+                                    
+                                    <div class="file-item-actions" style="display:flex; gap:6px; flex-shrink:0; align-items:center">
+                                        <button 
+                                            class="btn-tree-action" 
+                                            style="background:transparent; border:none; color:var(--text2); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center; opacity: 0.6;"
+                                            title="Copy"
+                                            on:click=move |e| {
+                                                e.stop_propagation();
+                                                copy_entry.run(f_copy_btn.clone());
+                                            }
+                                        >
+                                            <LucideIcon name="copy" size="13" />
+                                        </button>
+                                        <button 
+                                            class="btn-tree-action" 
+                                            style="background:transparent; border:none; color:#ff453a; cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center; opacity: 0.6;"
+                                            title="Delete"
+                                            on:click=move |e| {
+                                                e.stop_propagation();
+                                                delete_entry.run(f_delete_btn.clone());
+                                            }
+                                        >
+                                            <LucideIcon name="trash" size="13" />
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        }).collect_view()
+                }}
+            </div>
+
+            {move || copied_item.get().map(|item| view! {
+                <div style="font-size: 10px; color: var(--accent2); padding: 8px 14px; border-top: 1px solid var(--border); background: rgba(99, 102, 241, 0.05); display: flex; flex-direction: column; gap: 2px;">
+                    <div><strong>"📋 Copied: "</strong> {item.name}</div>
+                    <div style="opacity: 0.7">"Long-press folder/tree to paste"</div>
+                </div>
+            })}
         </div>
     }
 }

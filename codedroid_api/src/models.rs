@@ -48,3 +48,22 @@ pub struct CompletionRequest {
 pub struct CompletionResponse {
     pub suggestions: Vec<lsp::CompletionItem>,
 }
+
+#[derive(Deserialize)]
+pub struct DeleteRequest {
+    pub path: String,
+    pub is_dir: bool,
+}
+
+#[derive(Deserialize)]
+pub struct CopyRequest {
+    pub src_path: String,
+    pub dest_path: String,
+    pub is_dir: bool,
+}
+
+#[derive(Deserialize)]
+pub struct CreateDirRequest {
+    pub path: String,
+}
+

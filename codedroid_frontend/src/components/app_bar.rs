@@ -2,6 +2,8 @@ use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 use web_sys::MouseEvent;
 
+use crate::components::icon::LucideIcon;
+
 #[component]
 pub fn AppBar(
     title: String,
@@ -17,7 +19,7 @@ pub fn AppBar(
                 {if back {
                     view! {
                         <button class="btn btn-icon" on:click=on_back title="Back">
-                            "←"
+                            <LucideIcon name="arrow-left" size="20" />
                         </button>
                     }.into_any()
                 } else {

@@ -30,6 +30,40 @@ pub fn file_extension(name: &str) -> &str {
     name.rsplit('.').next().unwrap_or("")
 }
 
+pub fn file_lang_name(name: &str) -> &'static str {
+    if name == "Cargo.toml" { return "Rust Config"; }
+    if name == "go.mod" { return "Go Config"; }
+    if name == "package.json" { return "Node Config"; }
+    if name == "pubspec.yaml" { return "Dart Config"; }
+    
+    match file_extension(name) {
+        "rs"   => "Rust",
+        "go"   => "Go",
+        "py"   => "Python",
+        "js"   => "JavaScript",
+        "ts"   => "TypeScript",
+        "jsx"  => "React JS",
+        "tsx"  => "React TS",
+        "java" => "Java",
+        "dart" => "Dart",
+        "c"    => "C",
+        "cpp"  => "C++",
+        "h" | "hpp" => "Header",
+        "cs"   => "C#",
+        "kt"   => "Kotlin",
+        "swift"=> "Swift",
+        "rb"   => "Ruby",
+        "html" => "HTML",
+        "css"  => "CSS",
+        "toml" => "TOML",
+        "yaml" | "yml" => "YAML",
+        "json" => "JSON",
+        "md"   => "Markdown",
+        "sh"   => "Shell",
+        _      => "Text",
+    }
+}
+
 pub fn file_icon(name: &str) -> &'static str {
     match file_extension(name) {
         "rs"   => "🦀", "go"   => "🐹", "py"   => "🐍",
@@ -82,19 +116,102 @@ pub fn build_file_tree(project_id: &str) -> Vec<FileEntry> {
     let storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
     let len = storage.length().unwrap_or(0);
     let prefix = format!("codedroid_file_{}_", project_id);
-    let mut entries: Vec<FileEntry> = Vec::new();
+    let mut files = std::collections::HashSet::new();
+    let mut dirs = std::collections::HashSet::new();
 
     for i in 0..len {
         if let Ok(Some(k)) = storage.key(i) {
             if let Some(rel) = k.strip_prefix(&prefix) {
-                entries.push(FileEntry {
-                    name: rel.to_string(),
-                    key: k.clone(),
-                    is_dir: false,
-                });
+                if rel.ends_with("/.codedroid_dir") {
+                    let dir_name = rel.trim_end_matches("/.codedroid_dir");
+                    if !dir_name.is_empty() {
+                        dirs.insert(dir_name.to_string());
+                    }
+                } else if !rel.is_empty() {
+                    files.insert(rel.to_string());
+                    // Add implicit parent directories
+                    let mut parts: Vec<&str> = rel.split('/').collect();
+                    while parts.len() > 1 {
+                        parts.pop();
+                        let dir = parts.join("/");
+                        if !dir.is_empty() {
+                            dirs.insert(dir);
+                        }
+                    }
+                }
             }
         }
     }
-    entries.sort_by(|a, b| a.name.cmp(&b.name));
+
+    let mut entries: Vec<FileEntry> = Vec::new();
+    for d in dirs {
+        entries.push(FileEntry {
+            name: d.clone(),
+            key: format!("{}{}/.codedroid_dir", prefix, d),
+            is_dir: true,
+        });
+    }
+    for f in files {
+        if f != ".codedroid_dir" && !f.ends_with("/.codedroid_dir") {
+            entries.push(FileEntry {
+                name: f.clone(),
+                key: format!("{}{}", prefix, f),
+                is_dir: false,
+            });
+        }
+    }
+
+    // Sort hierarchically: directories first at each level, then files, sorted alphabetically
+    entries.sort_by(compare_hierarchical);
     entries
+}
+
+pub fn compare_hierarchical(a: &FileEntry, b: &FileEntry) -> std::cmp::Ordering {
+    let a_parts: Vec<&str> = a.name.split('/').collect();
+    let b_parts: Vec<&str> = b.name.split('/').collect();
+    
+    let min_len = std::cmp::min(a_parts.len(), b_parts.len());
+    for i in 0..min_len {
+        if a_parts[i] != b_parts[i] {
+            let a_is_dir = i < a_parts.len() - 1 || (i == a_parts.len() - 1 && a.is_dir);
+            let b_is_dir = i < b_parts.len() - 1 || (i == b_parts.len() - 1 && b.is_dir);
+            
+            if a_is_dir != b_is_dir {
+                if a_is_dir {
+                    return std::cmp::Ordering::Less;
+                } else {
+                    return std::cmp::Ordering::Greater;
+                }
+            }
+            return a_parts[i].cmp(b_parts[i]);
+        }
+    }
+    
+    a_parts.len().cmp(&b_parts.len())
+}
+
+
+pub fn path_basename(path: &str) -> &str {
+    path.split('/').last().unwrap_or(path)
+}
+
+pub fn path_depth(path: &str) -> usize {
+    if path.is_empty() {
+        return 0;
+    }
+    path.split('/').count() - 1
+}
+
+pub fn get_ancestors(path: &str) -> Vec<String> {
+    let mut ancestors = Vec::new();
+    let parts: Vec<&str> = path.split('/').collect();
+    let mut current = String::new();
+    for i in 0..(parts.len().saturating_sub(1)) {
+        if i > 0 {
+            current.push('/');
+        }
+        current.push_str(parts[i]);
+        ancestors.push(current.clone());
+    }
+    ancestors
 }

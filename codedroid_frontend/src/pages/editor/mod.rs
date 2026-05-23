@@ -12,6 +12,7 @@ use crate::store;
 use crate::api;
 use crate::components::app_bar::AppBar;
 use crate::components::snackbar::Snackbar;
+use crate::components::icon::LucideIcon;
 
 #[component]
 pub fn EditorPage() -> impl IntoView {
@@ -255,6 +256,211 @@ pub fn EditorPage() -> impl IntoView {
         }
     };
 
+    let copied_item: RwSignal<Option<FileEntry>> = RwSignal::new(None);
+    let sidebar_open: RwSignal<bool> = RwSignal::new(false);
+
+    let create_file = Callback::new({
+        let pid = pid.clone();
+        let ppath = ppath.clone();
+        let show_snack = show_snack.clone();
+        let open_file = open_file.clone();
+        let file_tree_data = file_tree_data.clone();
+        move |name: String| {
+            let key = store::file_key(&pid, &name);
+            store::save_file(&key, "// Start coding here...\n");
+            
+            // Sync to backend
+            let full_path = format!("{}/{}", ppath, name);
+            spawn_local(async move {
+                let _ = api::save_file_api(&full_path, "// Start coding here...\n").await;
+            });
+
+            // Refresh tree
+            file_tree_data.set(build_file_tree(&pid));
+            show_snack.run(format!("Created file: {}", name));
+            open_file.run(name);
+        }
+    });
+
+    let create_folder = Callback::new({
+        let pid = pid.clone();
+        let ppath = ppath.clone();
+        let show_snack = show_snack.clone();
+        let file_tree_data = file_tree_data.clone();
+        move |name: String| {
+            let key = format!("codedroid_file_{}_{}/.codedroid_dir", pid, name);
+            store::save_file(&key, "");
+
+            // Sync to backend
+            let full_path = format!("{}/{}", ppath, name);
+            spawn_local(async move {
+                let _ = api::create_dir_api(&full_path).await;
+            });
+
+            // Refresh tree
+            file_tree_data.set(build_file_tree(&pid));
+            show_snack.run(format!("Created folder: {}", name));
+        }
+    });
+
+    let delete_entry = Callback::new({
+        let pid = pid.clone();
+        let ppath = ppath.clone();
+        let show_snack = show_snack.clone();
+        let close_tab = close_tab.clone();
+        let file_tree_data = file_tree_data.clone();
+        move |entry: FileEntry| {
+            let storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
+            
+            if entry.is_dir {
+                // Delete all keys in LocalStorage matching prefix
+                let len = storage.length().unwrap_or(0);
+                let dir_prefix = format!("codedroid_file_{}_{}/", pid, entry.name);
+                let placeholder_key = format!("codedroid_file_{}_{}/.codedroid_dir", pid, entry.name);
+                
+                let mut keys_to_remove = Vec::new();
+                for i in 0..len {
+                    if let Ok(Some(k)) = storage.key(i) {
+                        if k.starts_with(&dir_prefix) || k == placeholder_key {
+                            keys_to_remove.push(k.clone());
+                            // Also close tab for any files in that directory
+                            if let Some(rel) = k.strip_prefix(&format!("codedroid_file_{}_", pid)) {
+                                close_tab.run(rel.to_string());
+                            }
+                        }
+                    }
+                }
+                for k in keys_to_remove {
+                    let _ = storage.remove_item(&k);
+                }
+
+                // Sync to backend
+                let full_path = format!("{}/{}", ppath, entry.name);
+                spawn_local(async move {
+                    let _ = api::delete_file_api(&full_path, true).await;
+                });
+                show_snack.run(format!("Deleted folder: {}", entry.name));
+            } else {
+                // Remove single file key
+                let key = store::file_key(&pid, &entry.name);
+                let _ = storage.remove_item(&key);
+                close_tab.run(entry.name.clone());
+
+                // Sync to backend
+                let full_path = format!("{}/{}", ppath, entry.name);
+                spawn_local(async move {
+                    let _ = api::delete_file_api(&full_path, false).await;
+                });
+                show_snack.run(format!("Deleted file: {}", entry.name));
+            }
+
+            // Refresh tree
+            file_tree_data.set(build_file_tree(&pid));
+        }
+    });
+
+    let copy_entry = Callback::new({
+        let show_snack = show_snack.clone();
+        move |entry: FileEntry| {
+            copied_item.set(Some(entry.clone()));
+            show_snack.run(format!("Copied {}! Long-press folder/explorer to paste.", entry.name));
+        }
+    });
+
+    let paste_entry = Callback::new({
+        let pid = pid.clone();
+        let ppath = ppath.clone();
+        let show_snack = show_snack.clone();
+        let open_file = open_file.clone();
+        let file_tree_data = file_tree_data.clone();
+        move |target_dir: Option<String>| {
+            if let Some(src_item) = copied_item.get_untracked() {
+                let storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
+                let target_folder = target_dir.unwrap_or_default();
+                
+                // Determine new path
+                let item_name = src_item.name.split('/').last().unwrap_or(&src_item.name);
+                let mut dest_name = if target_folder.is_empty() {
+                    item_name.to_string()
+                } else {
+                    format!("{}/{}", target_folder, item_name)
+                };
+
+                // Handle duplicates
+                if dest_name == src_item.name {
+                    if src_item.is_dir {
+                        dest_name = format!("{}_copy", dest_name);
+                    } else {
+                        if let Some(idx) = dest_name.rfind('.') {
+                            let (base, ext) = dest_name.split_at(idx);
+                            dest_name = format!("{}_copy{}", base, ext);
+                        } else {
+                            dest_name = format!("{}_copy", dest_name);
+                        }
+                    }
+                }
+
+                if src_item.is_dir {
+                    let len = storage.length().unwrap_or(0);
+                    let src_prefix = format!("codedroid_file_{}_{}/", pid, src_item.name);
+                    let mut copied_keys = Vec::new();
+                    
+                    for i in 0..len {
+                        if let Ok(Some(k)) = storage.key(i) {
+                            if k.starts_with(&src_prefix) {
+                                if let Some(sub) = k.strip_prefix(&src_prefix) {
+                                    if let Ok(Some(val)) = storage.get_item(&k) {
+                                        let new_k = format!("codedroid_file_{}_{}/{}", pid, dest_name, sub);
+                                        copied_keys.push((new_k, val));
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    for (k, v) in copied_keys {
+                        let _ = storage.set_item(&k, &v);
+                    }
+
+                    let src_marker = format!("codedroid_file_{}_{}/.codedroid_dir", pid, src_item.name);
+                    let dest_marker = format!("codedroid_file_{}_{}/.codedroid_dir", pid, dest_name);
+                    if let Ok(Some(_)) = storage.get_item(&src_marker) {
+                        let _ = storage.set_item(&dest_marker, "");
+                    }
+
+                    // Sync to backend
+                    let src_full = format!("{}/{}", ppath, src_item.name);
+                    let dest_full = format!("{}/{}", ppath, dest_name);
+                    spawn_local(async move {
+                        let _ = api::copy_file_api(&src_full, &dest_full, true).await;
+                    });
+                    show_snack.run(format!("Pasted folder as: {}", dest_name));
+                } else {
+                    let src_key = store::file_key(&pid, &src_item.name);
+                    if let Ok(Some(content)) = storage.get_item(&src_key) {
+                        let dest_key = store::file_key(&pid, &dest_name);
+                        let _ = storage.set_item(&dest_key, &content);
+
+                        // Sync to backend
+                        let src_full = format!("{}/{}", ppath, src_item.name);
+                        let dest_full = format!("{}/{}", ppath, dest_name);
+                        let open_file = open_file.clone();
+                        let dest_name_clone = dest_name.clone();
+                        spawn_local(async move {
+                            let _ = api::copy_file_api(&src_full, &dest_full, false).await;
+                            open_file.run(dest_name_clone);
+                        });
+                        show_snack.run(format!("Pasted file as: {}", dest_name));
+                    }
+                }
+
+                // Refresh tree
+                file_tree_data.set(build_file_tree(&pid));
+            }
+        }
+    });
+
+
     // Open default file on mount
     Effect::new(move |_| {
         let tree = file_tree_data.get();
@@ -315,27 +521,38 @@ pub fn EditorPage() -> impl IntoView {
     view! {
         <div class="editor-page-root">
             <AppBar title=project.name.clone() back=true>
+                <button class="btn btn-icon btn-menu" title="Toggle Files"
+                    style="margin-right: 6px;"
+                    on:click=move |_| sidebar_open.update(|v| *v = !*v)>
+                    <LucideIcon name="folder" size="20" />
+                </button>
                 <button class="btn btn-icon" title="Search (Ctrl+F)"
-                    on:click=move |_| show_search.update(|v| *v = !*v)>"🔍"</button>
+                    on:click=move |_| show_search.update(|v| *v = !*v)>
+                    <LucideIcon name="search" size="20" />
+                </button>
                 <button class="btn btn-icon" title="Dependencies"
-                    on:click=move |_| show_deps.update(|v| *v = !*v)>"📦"</button>
+                    on:click=move |_| show_deps.update(|v| *v = !*v)>
+                    <LucideIcon name="package" size="20" />
+                </button>
                 {move || dirty.get().then(|| view! {
                     <button class="btn btn-icon" title="Save (Ctrl+S)"
                         on:click=move |_| save_current.run(())
-                    >"💾"</button>
-                })}
-                {move || current_pid.get().map(|_| view! {
-                    <button class="btn btn-danger" on:click=move |_| stop_code.run(())>
-                        <span>"⏹"</span>" Stop"
+                    >
+                        <LucideIcon name="save" size="20" />
                     </button>
                 })}
-                <button class="btn btn-success" disabled=move || is_running.get()
+                {move || current_pid.get().map(|_| view! {
+                    <button class="btn btn-danger" style="display:inline-flex; align-items:center; gap:6px;" on:click=move |_| stop_code.run(())>
+                        <LucideIcon name="square" size="14" /> "Stop"
+                    </button>
+                })}
+                <button class="btn btn-success" style="display:inline-flex; align-items:center; gap:6px;" disabled=move || is_running.get()
                     on:click=move |_| run_code.run(())
                 >
                     {move || if is_running.get() {
                         view! { <><span class="spinner"></span>" Running..."</> }.into_any()
                     } else {
-                        view! { <>"▶ Run"</> }.into_any()
+                        view! { <><LucideIcon name="play" size="14" /> "Run"</> }.into_any()
                     }}
                 </button>
             </AppBar>
@@ -347,6 +564,14 @@ pub fn EditorPage() -> impl IntoView {
                     open_file=open_file
                     lang_icon=lang_icon(&project_lang_str.get_value()).to_string()
                     project_name=project.name.clone()
+                    create_file=create_file
+                    create_folder=create_folder
+                    delete_entry=delete_entry
+                    copy_entry=copy_entry
+                    copied_item=copied_item.into()
+                    paste_entry=paste_entry
+                    sidebar_open=sidebar_open.into()
+                    toggle_sidebar=Callback::new(move |_: ()| sidebar_open.set(false))
                 />
 
                 <div class="editor-main">
@@ -365,7 +590,9 @@ pub fn EditorPage() -> impl IntoView {
                                 on:input=move |e| find_text.set(event_target_value(&e))
                             />
                             <button class="btn btn-primary" style="padding:6px 12px;font-size:12px">"Find Next"</button>
-                            <button class="btn btn-icon" on:click=move |_| show_search.set(false)>"×"</button>
+                            <button class="btn btn-icon" on:click=move |_| show_search.set(false)>
+                                <LucideIcon name="x" size="16" />
+                            </button>
                         </div>
                     })}
 
@@ -568,8 +795,12 @@ pub fn EditorPage() -> impl IntoView {
                             }
                         }).collect_view()}
                         <div style="flex:1" />
-                        <button class="btn btn-footer" on:click=move |_| copy_code.run(())>"📋 Copy"</button>
-                        <button class="btn btn-footer" on:click=move |_| { code.set(String::new()); dirty.set(true); }>"🗑 Clear"</button>
+                        <button class="btn btn-footer" on:click=move |_| copy_code.run(())>
+                            <span style="display:inline-flex; align-items:center; gap:4px;"><LucideIcon name="copy" size="12" /> "Copy"</span>
+                        </button>
+                        <button class="btn btn-footer" on:click=move |_| { code.set(String::new()); dirty.set(true); }>
+                            <span style="display:inline-flex; align-items:center; gap:4px;"><LucideIcon name="trash" size="12" /> "Clear"</span>
+                        </button>
                     </div>
                 </div>
             </div>

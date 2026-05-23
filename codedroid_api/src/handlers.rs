@@ -1,7 +1,10 @@
 use axum::Json;
 use std::fs;
 use std::process::Command;
-use crate::models::{CodeRequest, CodeResponse, StopRequest, PackageRequest, SyncRequest, CompletionRequest, CompletionResponse};
+use crate::models::{
+    CodeRequest, CodeResponse, StopRequest, PackageRequest, SyncRequest,
+    CompletionRequest, CompletionResponse, DeleteRequest, CopyRequest, CreateDirRequest
+};
 use crate::utils::resolve_project_dir;
 use crate::runner::*;
 use crate::lsp;
@@ -380,3 +383,92 @@ environment:
 
     Json(CompletionResponse { suggestions })
 }
+
+pub async fn delete_file(Json(payload): Json<DeleteRequest>) -> Json<CodeResponse> {
+    let target_path = resolve_project_dir(&payload.path);
+    println!("🗑 Deleting file/folder: {} (is_dir: {})", target_path, payload.is_dir);
+    let res = if payload.is_dir {
+        fs::remove_dir_all(&target_path)
+    } else {
+        fs::remove_file(&target_path)
+    };
+    match res {
+        Ok(_) => Json(CodeResponse {
+            output: "Deleted successfully".to_string(),
+            error: "".to_string(),
+            pid: None,
+            url: None,
+        }),
+        Err(e) => Json(CodeResponse {
+            output: "".to_string(),
+            error: format!("Failed to delete: {}", e),
+            pid: None,
+            url: None,
+        }),
+    }
+}
+
+pub async fn copy_file(Json(payload): Json<CopyRequest>) -> Json<CodeResponse> {
+    let src = resolve_project_dir(&payload.src_path);
+    let dest = resolve_project_dir(&payload.dest_path);
+    println!("📋 Copying from {} to {} (is_dir: {})", src, dest, payload.is_dir);
+    
+    if let Some(parent) = std::path::Path::new(&dest).parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    let res = if payload.is_dir {
+        copy_dir_all(&src, &dest)
+    } else {
+        fs::copy(&src, &dest).map(|_| ())
+    };
+
+    match res {
+        Ok(_) => Json(CodeResponse {
+            output: "Copied successfully".to_string(),
+            error: "".to_string(),
+            pid: None,
+            url: None,
+        }),
+        Err(e) => Json(CodeResponse {
+            output: "".to_string(),
+            error: format!("Failed to copy: {}", e),
+            pid: None,
+            url: None,
+        }),
+    }
+}
+
+fn copy_dir_all(src: impl AsRef<std::path::Path>, dst: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+    fs::create_dir_all(&dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+    Ok(())
+}
+
+pub async fn create_dir(Json(payload): Json<CreateDirRequest>) -> Json<CodeResponse> {
+    let target_path = resolve_project_dir(&payload.path);
+    println!("📁 Creating directory: {}", target_path);
+    match fs::create_dir_all(&target_path) {
+        Ok(_) => Json(CodeResponse {
+            output: "Directory created".to_string(),
+            error: "".to_string(),
+            pid: None,
+            url: None,
+        }),
+        Err(e) => Json(CodeResponse {
+            output: "".to_string(),
+            error: format!("Failed to create directory: {}", e),
+            pid: None,
+            url: None,
+        }),
+    }
+}
+

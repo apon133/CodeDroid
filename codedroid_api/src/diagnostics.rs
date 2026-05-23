@@ -136,6 +136,7 @@ environment:
 
                 // Trigger document synchronization/change notification in LSP so that it starts compiling and publishes diagnostics
                 let _ = client.notify_file_changed(&file_uri, &payload.code, &lang);
+                let _ = client.notify_file_saved(&file_uri);
             }
         } // lock dropped here!
 

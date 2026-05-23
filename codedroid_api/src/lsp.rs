@@ -368,6 +368,23 @@ impl LspClient {
         Ok(())
     }
 
+    pub fn notify_file_saved(
+        &mut self,
+        file_uri: &str,
+    ) -> std::io::Result<()> {
+        let did_save = json!({
+            "jsonrpc": "2.0",
+            "method": "textDocument/didSave",
+            "params": {
+                "textDocument": {
+                    "uri": file_uri
+                }
+            }
+        });
+        self.send_notification(&did_save)?;
+        Ok(())
+    }
+
     pub fn get_diagnostics(&self, file_uri: &str) -> Vec<Diagnostic> {
         self.diagnostics
             .lock()

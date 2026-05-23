@@ -729,6 +729,115 @@ pub fn EditorPage() -> impl IntoView {
                                                     let _ = target.set_selection_range(new_pos, new_pos);
                                                 });
                                             }
+                                            
+                                            let key = e.key();
+                                            if key == "(" || key == "{" || key == "[" || key == "\"" || key == "'" {
+                                                e.prevent_default();
+                                                use wasm_bindgen::JsCast;
+                                                let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
+                                                let start = target.selection_start().unwrap().unwrap_or(0);
+                                                let end = target.selection_end().unwrap().unwrap_or(0);
+                                                let val = js_sys::JsString::from(target.value());
+                                                
+                                                let close_char = match key.as_str() {
+                                                    "(" => ")",
+                                                    "{" => "}",
+                                                    "[" => "]",
+                                                    "\"" => "\"",
+                                                    "'" => "'",
+                                                    _ => "",
+                                                };
+                                                
+                                                if start != end {
+                                                    let selected_text = val.substring(start, end);
+                                                    let new_val = format!(
+                                                        "{}{}{}{}{}",
+                                                        String::from(val.substring(0, start)),
+                                                        key,
+                                                        String::from(selected_text),
+                                                        close_char,
+                                                        String::from(val.substring(end, val.length()))
+                                                    );
+                                                    code.set(new_val);
+                                                    dirty.set(true);
+                                                    let new_start = start + 1;
+                                                    let new_end = end + 1;
+                                                    spawn_local(async move {
+                                                        let _ = gloo_timers::future::sleep(std::time::Duration::from_millis(10)).await;
+                                                        let _ = target.set_selection_range(new_start, new_end);
+                                                    });
+                                                } else {
+                                                    let new_val = format!(
+                                                        "{}{}{}{}",
+                                                        String::from(val.substring(0, start)),
+                                                        key,
+                                                        close_char,
+                                                        String::from(val.substring(end, val.length()))
+                                                    );
+                                                    code.set(new_val);
+                                                    dirty.set(true);
+                                                    let new_pos = start + 1;
+                                                    spawn_local(async move {
+                                                        let _ = gloo_timers::future::sleep(std::time::Duration::from_millis(10)).await;
+                                                        let _ = target.set_selection_range(new_pos, new_pos);
+                                                    });
+                                                }
+                                            }
+                                            else if key == ")" || key == "}" || key == "]" || key == "\"" || key == "'" {
+                                                use wasm_bindgen::JsCast;
+                                                let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
+                                                let start = target.selection_start().unwrap().unwrap_or(0);
+                                                let end = target.selection_end().unwrap().unwrap_or(0);
+                                                if start == end {
+                                                    let val = js_sys::JsString::from(target.value());
+                                                    if start < val.length() {
+                                                        let next_char = val.substring(start, start + 1);
+                                                        if next_char == key {
+                                                            e.prevent_default();
+                                                            let new_pos = start + 1;
+                                                            let _ = target.set_selection_range(new_pos, new_pos);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            else if key == "Backspace" {
+                                                use wasm_bindgen::JsCast;
+                                                let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
+                                                let start = target.selection_start().unwrap().unwrap_or(0);
+                                                let end = target.selection_end().unwrap().unwrap_or(0);
+                                                if start == end && start > 0 {
+                                                    let val = js_sys::JsString::from(target.value());
+                                                    if start < val.length() {
+                                                        let prev_char = val.substring(start - 1, start);
+                                                        let next_char = val.substring(start, start + 1);
+                                                        
+                                                        let is_pair = match (String::from(prev_char).as_str(), String::from(next_char).as_str()) {
+                                                            ("(", ")") => true,
+                                                            ("{", "}") => true,
+                                                            ("[", "]") => true,
+                                                            ("\"", "\"") => true,
+                                                            ("'", "'") => true,
+                                                            _ => false,
+                                                        };
+                                                        
+                                                        if is_pair {
+                                                            e.prevent_default();
+                                                            let new_val = format!(
+                                                                "{}{}",
+                                                                String::from(val.substring(0, start - 1)),
+                                                                String::from(val.substring(start + 1, val.length()))
+                                                            );
+                                                            code.set(new_val);
+                                                            dirty.set(true);
+                                                            let new_pos = start - 1;
+                                                            spawn_local(async move {
+                                                                let _ = gloo_timers::future::sleep(std::time::Duration::from_millis(10)).await;
+                                                                let _ = target.set_selection_range(new_pos, new_pos);
+                                                            });
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     />
                                     {move || (!suggestions.get().is_empty()).then(|| {

@@ -1036,7 +1036,7 @@ pub fn EditorPage() -> impl IntoView {
                                                     view! {
                                                         <button 
                                                             class=move || if selected_idx.get() == i { "suggestion-item selected" } else { "suggestion-item" }
-                                                            on:click=move |_| on_select(s2.clone())
+                                                            on:mousedown=move |e: web_sys::MouseEvent| { e.prevent_default(); on_select(s2.clone()); }
                                                             on:mouseenter=move |_| selected_idx.set(i)
                                                         >
                                                             <span class="suggestion-kind">{kind_icon(s.kind)}</span>

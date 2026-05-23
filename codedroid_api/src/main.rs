@@ -6,6 +6,8 @@ mod models;
 mod runner;
 mod utils;
 mod handlers;
+mod diagnostics;
+mod error_suggestions;
 
 use handlers::{run_code, stop_process, add_package, sync_file, get_completions, delete_file, copy_file, create_dir};
 
@@ -20,6 +22,8 @@ async fn main() {
         .route("/copy_file", post(copy_file))
         .route("/create_dir", post(create_dir))
         .route("/complete", post(get_completions))
+        .route("/diagnostics", post(diagnostics::get_diagnostics_handler))
+        .route("/error_suggestions", post(error_suggestions::get_error_suggestions_handler))
         .layer(CorsLayer::permissive());
 
     let addr = "0.0.0.0:3000";

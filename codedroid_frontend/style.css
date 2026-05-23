@@ -1013,3 +1013,247 @@ select.input { width: auto; min-width: 160px; }
   }
 }
 
+/* ── Problems Tab & List Styles ── */
+.bottom-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.problem-badge {
+  background: var(--accent);
+  color: white;
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+}
+.problems-container {
+  flex: 1;
+  background: #090c15;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.problems-container.empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--text2);
+  font-size: 14px;
+  font-style: italic;
+}
+.problem-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.problem-item:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+.problem-item.error {
+  border-left: 3px solid #ef4444;
+}
+.problem-item.warning {
+  border-left: 3px solid #f59e0b;
+}
+.problem-item.info {
+  border-left: 3px solid #3b82f6;
+}
+.problem-item.hint {
+  border-left: 3px solid #10b981;
+}
+.problem-icon {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+}
+.problem-message {
+  flex: 1;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.problem-source {
+  color: var(--accent2);
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+.problem-location {
+  color: var(--text2);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.problem-wrapper {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+.problem-wrapper .problem-item {
+  border-bottom: none;
+}
+.problem-expansion {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 10px 18px 16px 46px;
+  border-top: 1px solid rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+  font-family: var(--font-ui);
+}
+.suggestion-loading {
+  color: var(--text2);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.suggestions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.suggestion-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 800px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: slideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.suggestion-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.suggestion-card-icon {
+  font-size: 14px;
+}
+.suggestion-card-title {
+  font-weight: 600;
+  color: #fff;
+  font-size: 13px;
+}
+.suggestion-card-explanation {
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* ── Line Number Gutter Diagnostic Markers ── */
+.line-number-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  width: 100%;
+  padding-right: 6px;
+  position: relative;
+}
+.line-number-item.has-error {
+  color: #ef4444 !important;
+  font-weight: bold;
+}
+.line-number-item.has-warning {
+  color: #f59e0b !important;
+  font-weight: bold;
+}
+.gutter-error-icon {
+  font-size: 8px;
+  line-height: 1;
+  opacity: 0.95;
+}
+
+/* ── Inline Quick Fix Popover ── */
+.error-floating-popover {
+  position: absolute;
+  z-index: 1000;
+  background: #141724;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  border-radius: 6px;
+  padding: 10px 14px;
+  min-width: 280px;
+  max-width: 420px;
+  margin-top: 24px; /* Render just below current cursor line */
+  animation: slideIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.error-floating-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 6px;
+}
+.error-floating-icon {
+  font-size: 11px;
+  margin-top: 2px;
+}
+.error-floating-title {
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.error-floating-loading {
+  font-size: 11px;
+  color: var(--text2);
+  padding: 4px 0;
+}
+.error-floating-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.error-floating-suggestion-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--text);
+  transition: background 0.15s ease;
+}
+.error-floating-suggestion-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.error-floating-suggestion-item .suggestion-text {
+  font-weight: 500;
+}
+.error-floating-no-fix {
+  font-size: 11px;
+  color: var(--text2);
+  font-style: italic;
+  padding: 4px 0;
+}

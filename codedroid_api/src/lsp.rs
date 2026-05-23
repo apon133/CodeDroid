@@ -7,6 +7,27 @@ use std::thread;
 
 static LSP_SERVERS: OnceLock<Arc<Mutex<HashMap<String, LspClient>>>> = OnceLock::new();
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct Position {
+    pub line: u32,
+    pub character: u32,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct Range {
+    pub start: Position,
+    pub end: Position,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct Diagnostic {
+    pub range: Range,
+    pub severity: Option<u32>,
+    pub code: Option<serde_json::Value>,
+    pub source: Option<String>,
+    pub message: String,
+}
+
 pub fn get_servers() -> Arc<Mutex<HashMap<String, LspClient>>> {
     LSP_SERVERS
         .get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
@@ -19,6 +40,8 @@ pub struct LspClient {
     responses: Arc<Mutex<HashMap<usize, Value>>>,
     opened_files: HashSet<String>,
     file_versions: HashMap<String, i32>,
+    diagnostics: Arc<Mutex<HashMap<String, Vec<Diagnostic>>>>,
+    diagnostics_version: Arc<Mutex<HashMap<String, usize>>>,
 }
 
 impl LspClient {
@@ -34,6 +57,8 @@ impl LspClient {
         let stdout = child.stdout.take().unwrap();
 
         let responses = Arc::new(Mutex::new(HashMap::new()));
+        let diagnostics = Arc::new(Mutex::new(HashMap::new()));
+        let diagnostics_version = Arc::new(Mutex::new(HashMap::new()));
         let stderr = child.stderr.take().unwrap();
         let lang_name = cmd.to_string();
         thread::spawn(move || {
@@ -49,6 +74,8 @@ impl LspClient {
         });
 
         let responses_clone = responses.clone();
+        let diagnostics_clone = diagnostics.clone();
+        let diagnostics_version_clone = diagnostics_version.clone();
 
         thread::spawn(move || {
             let mut reader = BufReader::new(stdout);
@@ -77,6 +104,19 @@ impl LspClient {
                         if let Ok(val) = serde_json::from_slice::<Value>(&body) {
                             if let Some(id) = val.get("id").and_then(|id| id.as_u64()) {
                                 responses_clone.lock().unwrap().insert(id as usize, val);
+                            } else if let Some(method) = val.get("method").and_then(|m| m.as_str()) {
+                                if method == "textDocument/publishDiagnostics" {
+                                    if let Some(params) = val.get("params") {
+                                        if let (Some(uri), Some(diags)) = (params["uri"].as_str(), params["diagnostics"].as_array()) {
+                                            if let Ok(parsed_diags) = serde_json::from_value::<Vec<Diagnostic>>(json!(diags)) {
+                                                diagnostics_clone.lock().unwrap().insert(uri.to_string(), parsed_diags);
+                                                let mut versions = diagnostics_version_clone.lock().unwrap();
+                                                let entry = versions.entry(uri.to_string()).or_insert(0);
+                                                *entry += 1;
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -90,6 +130,8 @@ impl LspClient {
             responses,
             opened_files: HashSet::new(),
             file_versions: HashMap::new(),
+            diagnostics,
+            diagnostics_version,
         };
 
         let init_req = json!({
@@ -197,42 +239,7 @@ impl LspClient {
         character: u32,
         lang: &str,
     ) -> std::io::Result<Vec<CompletionItem>> {
-        if !self.opened_files.contains(file_uri) {
-            let did_open = json!({
-                "jsonrpc": "2.0",
-                "method": "textDocument/didOpen",
-                "params": {
-                    "textDocument": {
-                        "uri": file_uri,
-                        "languageId": lang,
-                        "version": 1,
-                        "text": code
-                    }
-                }
-            });
-            let _ = self.send_notification(&did_open);
-            self.opened_files.insert(file_uri.to_string());
-            self.file_versions.insert(file_uri.to_string(), 1);
-        } else {
-            let version = self.file_versions.get(file_uri).unwrap_or(&1) + 1;
-            let did_change = json!({
-                "jsonrpc": "2.0",
-                "method": "textDocument/didChange",
-                "params": {
-                    "textDocument": {
-                        "uri": file_uri,
-                        "version": version
-                    },
-                    "contentChanges": [
-                        {
-                            "text": code
-                        }
-                    ]
-                }
-            });
-            let _ = self.send_notification(&did_change);
-            self.file_versions.insert(file_uri.to_string(), version);
-        }
+        self.notify_file_changed(file_uri, code, lang)?;
 
         // Removed artificial 500ms sleep for performance.
         // LSP servers handle sequential requests correctly.
@@ -313,20 +320,70 @@ impl LspClient {
             println!("   ⚠️ LSP timed out for request {}", req_id);
         }
 
-        let did_close = json!({
-            "jsonrpc": "2.0",
-            "method": "textDocument/didClose",
-            "params": {
-                "textDocument": {
-                    "uri": file_uri
-                }
-            }
-        });
-        let _ = self.send_notification(&did_close);
-        self.opened_files.remove(file_uri);
-        self.file_versions.remove(file_uri);
-
         Ok(suggestions)
+    }
+
+    pub fn notify_file_changed(
+        &mut self,
+        file_uri: &str,
+        code: &str,
+        lang: &str,
+    ) -> std::io::Result<()> {
+        if !self.opened_files.contains(file_uri) {
+            let did_open = json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": file_uri,
+                        "languageId": lang,
+                        "version": 1,
+                        "text": code
+                    }
+                }
+            });
+            self.send_notification(&did_open)?;
+            self.opened_files.insert(file_uri.to_string());
+            self.file_versions.insert(file_uri.to_string(), 1);
+        } else {
+            let version = self.file_versions.get(file_uri).unwrap_or(&1) + 1;
+            let did_change = json!({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didChange",
+                "params": {
+                    "textDocument": {
+                        "uri": file_uri,
+                        "version": version
+                    },
+                    "contentChanges": [
+                        {
+                            "text": code
+                        }
+                    ]
+                }
+            });
+            self.send_notification(&did_change)?;
+            self.file_versions.insert(file_uri.to_string(), version);
+        }
+        Ok(())
+    }
+
+    pub fn get_diagnostics(&self, file_uri: &str) -> Vec<Diagnostic> {
+        self.diagnostics
+            .lock()
+            .unwrap()
+            .get(file_uri)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    pub fn get_diagnostics_version(&self, file_uri: &str) -> usize {
+        self.diagnostics_version
+            .lock()
+            .unwrap()
+            .get(file_uri)
+            .cloned()
+            .unwrap_or(0)
     }
 }
 

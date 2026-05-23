@@ -391,6 +391,71 @@ pub fn TabStrip(
     }
 }
 
+pub fn apply_replacement(code: &str, range: &crate::api::Range, replacement: &str) -> String {
+    let lines: Vec<&str> = code.lines().collect();
+    let mut new_lines = Vec::new();
+    
+    let start_line = range.start.line as usize;
+    let start_col = range.start.character as usize;
+    let end_line = range.end.line as usize;
+    let end_col = range.end.character as usize;
+    
+    if start_line == end_line && start_line < lines.len() {
+        for (i, line) in lines.iter().enumerate() {
+            if i == start_line {
+                let chars: Vec<char> = line.chars().collect();
+                let s = std::cmp::min(start_col, chars.len());
+                let e = std::cmp::min(end_col, chars.len());
+                
+                let mut new_line = String::new();
+                new_line.push_str(&chars[..s].iter().collect::<String>());
+                new_line.push_str(replacement);
+                new_line.push_str(&chars[e..].iter().collect::<String>());
+                new_lines.push(new_line);
+            } else {
+                new_lines.push(line.to_string());
+            }
+        }
+    } else if start_line < end_line && end_line < lines.len() {
+        if start_line == 0 && start_col == 0 && end_line == 0 && end_col == 0 {
+            let mut content = replacement.to_string();
+            content.push_str(code);
+            return content;
+        }
+        
+        for (i, line) in lines.iter().enumerate() {
+            if i < start_line || i > end_line {
+                new_lines.push(line.to_string());
+            } else if i == start_line {
+                let chars: Vec<char> = line.chars().collect();
+                let s = std::cmp::min(start_col, chars.len());
+                let mut new_line = chars[..s].iter().collect::<String>();
+                new_line.push_str(replacement);
+                new_lines.push(new_line);
+            } else if i == end_line {
+                let chars: Vec<char> = line.chars().collect();
+                let e = std::cmp::min(end_col, chars.len());
+                if let Some(last) = new_lines.last_mut() {
+                    last.push_str(&chars[e..].iter().collect::<String>());
+                }
+            }
+        }
+    } else {
+        if start_line == 0 && start_col == 0 && end_line == 0 && end_col == 0 {
+            let mut content = replacement.to_string();
+            content.push_str(code);
+            return content;
+        }
+        return code.to_string();
+    }
+    
+    let mut result = new_lines.join("\n");
+    if code.ends_with('\n') && !result.ends_with('\n') {
+        result.push('\n');
+    }
+    result
+}
+
 #[component]
 pub fn BottomPanel(
     bottom_tab: RwSignal<usize>,
@@ -398,7 +463,15 @@ pub fn BottomPanel(
     output: Signal<String>,
     is_error: Signal<bool>,
     show_snack: Callback<String>,
+    diagnostics_list: Signal<Vec<crate::api::Diagnostic>>,
+    on_click_problem: Callback<(u32, u32)>,
+    code: RwSignal<String>,
+    language: Signal<String>,
 ) -> impl IntoView {
+    let expanded_idx = RwSignal::new(Option::<usize>::None);
+    let suggestions_state = RwSignal::new(Option::<Vec<crate::api::CodeSuggestion>>::None);
+    let loading_suggestions = RwSignal::new(false);
+
     view! {
         <div class="bottom-panel">
             <div class="bottom-tabs">
@@ -412,6 +485,20 @@ pub fn BottomPanel(
                         on:click=move |_| bottom_tab.set(1)
                     >"PREVIEW"</button>
                 })}
+                <button
+                    class=move || if bottom_tab.get() == 2 { "bottom-tab active" } else { "bottom-tab" }
+                    on:click=move |_| bottom_tab.set(2)
+                >
+                    "PROBLEMS"
+                    {move || {
+                        let count = diagnostics_list.get().len();
+                        if count > 0 {
+                            view! { <span class="problem-badge">{count}</span> }.into_any()
+                        } else {
+                            view! { "" }.into_any()
+                        }
+                    }}
+                </button>
                 <div style="flex:1"/>
                 {move || (bottom_tab.get() == 0).then(|| view! {
                     <>
@@ -435,6 +522,143 @@ pub fn BottomPanel(
                             <iframe class="preview-frame" src=url />
                         }.into_any();
                     }
+                } else if bottom_tab.get() == 2 {
+                    let diags = diagnostics_list.get();
+                    if diags.is_empty() {
+                        return view! {
+                            <div class="problems-container empty">
+                                "No problems have been detected in the workspace so far."
+                            </div>
+                        }.into_any();
+                    }
+                    return view! {
+                        <div class="problems-container">
+                            {diags.into_iter().enumerate().map(|(idx, diag)| {
+                                let severity_class = match diag.severity.unwrap_or(1) {
+                                    1 => "problem-item error",
+                                    2 => "problem-item warning",
+                                    3 => "problem-item info",
+                                    4 => "problem-item hint",
+                                    _ => "problem-item error",
+                                };
+                                let severity_icon = match diag.severity.unwrap_or(1) {
+                                    1 => "🔴",
+                                    2 => "🟡",
+                                    3 => "🔵",
+                                    4 => "⚪",
+                                    _ => "🔴",
+                                };
+                                let line = diag.range.start.line;
+                                let col = diag.range.start.character;
+                                let msg = diag.message.clone();
+                                let source = diag.source.clone().unwrap_or_default();
+                                let code_val = diag.code.as_ref().map(|c| {
+                                    match c {
+                                        serde_json::Value::String(s) => format!(" [{}]", s),
+                                        serde_json::Value::Number(n) => format!(" [{}]", n),
+                                        _ => String::new(),
+                                    }
+                                }).unwrap_or_default();
+                                
+                                let diag_clone = diag.clone();
+                                let on_click_problem_cb = on_click_problem;
+                                let show_snack_cb = show_snack;
+                                view! {
+                                    <div class="problem-wrapper">
+                                        <div class=severity_class on:click=move |_| {
+                                            on_click_problem_cb.run((line, col));
+                                            let current_idx = expanded_idx.get_untracked();
+                                            if current_idx == Some(idx) {
+                                                expanded_idx.set(None);
+                                                suggestions_state.set(None);
+                                            } else {
+                                                expanded_idx.set(Some(idx));
+                                                suggestions_state.set(None);
+                                                loading_suggestions.set(true);
+                                                
+                                                let code_val = code.get_untracked();
+                                                let lang_val = language.get_untracked();
+                                                let diag_val = diag_clone.clone();
+                                                
+                                                spawn_local(async move {
+                                                    if let Ok(resp) = crate::api::get_error_suggestions_api(&code_val, &lang_val, &diag_val).await {
+                                                        suggestions_state.set(Some(resp.suggestions));
+                                                    }
+                                                    loading_suggestions.set(false);
+                                                });
+                                            }
+                                        }>
+                                            <span class="problem-icon">{severity_icon}</span>
+                                            <span class="problem-message">{msg}{code_val}</span>
+                                            {if !source.is_empty() { view! { <span class="problem-source">"["{source}"]"</span> }.into_any() } else { view! { "" }.into_any() }}
+                                            <span class="problem-location">"Ln "{line + 1}", Col "{col + 1}</span>
+                                        </div>
+                                        {move || {
+                                            if expanded_idx.get() == Some(idx) {
+                                                view! {
+                                                    <div class="problem-expansion">
+                                                        {move || {
+                                                            if loading_suggestions.get() {
+                                                                view! {
+                                                                    <div class="suggestion-loading">
+                                                                        <div class="spinner" style="width:14px;height:14px;border-width:1.5px;display:inline-block;vertical-align:middle;margin-right:8px" />
+                                                                        "Analyzing error and finding suggestions..."
+                                                                    </div>
+                                                                }.into_any()
+                                                            } else if let Some(suggs) = suggestions_state.get() {
+                                                                view! {
+                                                                    <div class="suggestions-list">
+                                                                        {suggs.into_iter().map(|sugg| {
+                                                                            let title = sugg.title.clone();
+                                                                            let explanation = sugg.explanation.clone();
+                                                                            let replacement = sugg.replacement.clone();
+                                                                            let range = sugg.range.clone();
+                                                                            
+                                                                            let code_sig = code;
+                                                                            let snack = show_snack_cb;
+                                                                            let has_fix = replacement.is_some() && range.is_some();
+                                                                            
+                                                                            let on_apply_fix = move |_| {
+                                                                                if let (Some(repl), Some(r)) = (&replacement, &range) {
+                                                                                    let orig = code_sig.get_untracked();
+                                                                                    let updated = apply_replacement(&orig, r, repl);
+                                                                                    code_sig.set(updated);
+                                                                                    snack.run("Quick Fix applied successfully!".to_string());
+                                                                                }
+                                                                            };
+                                                                            
+                                                                            view! {
+                                                                                <div class="suggestion-card">
+                                                                                    <div class="suggestion-card-header">
+                                                                                        <span class="suggestion-card-icon">"💡"</span>
+                                                                                        <span class="suggestion-card-title">{title}</span>
+                                                                                    </div>
+                                                                                    <div class="suggestion-card-explanation">{explanation}</div>
+                                                                                    {has_fix.then(|| view! {
+                                                                                        <button class="btn btn-primary btn-sm" on:click=on_apply_fix style="margin-top:8px">
+                                                                                            "Apply Quick Fix"
+                                                                                        </button>
+                                                                                    })}
+                                                                                </div>
+                                                                            }
+                                                                        }).collect_view()}
+                                                                    </div>
+                                                                }.into_any()
+                                                            } else {
+                                                                view! { "" }.into_any()
+                                                            }
+                                                        }}
+                                                    </div>
+                                                }.into_any()
+                                            } else {
+                                                view! { "" }.into_any()
+                                            }
+                                        }}
+                                    </div>
+                                }
+                            }).collect_view()}
+                        </div>
+                    }.into_any();
                 }
                 view! {
                     <div

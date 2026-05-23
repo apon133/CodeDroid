@@ -135,3 +135,80 @@ pub async fn create_dir_api(path: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct Position {
+    pub line: u32,
+    pub character: u32,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct Range {
+    pub start: Position,
+    pub end: Position,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct Diagnostic {
+    pub range: Range,
+    pub severity: Option<u32>,
+    pub code: Option<serde_json::Value>,
+    pub source: Option<String>,
+    pub message: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct DiagnosticsResponse {
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+pub async fn get_diagnostics_api(code: &str, language: &str, project_path: &str) -> Result<DiagnosticsResponse, String> {
+    let body = json!({
+        "code": code,
+        "language": language,
+        "project_path": project_path,
+    });
+    Request::post(&format!("{}/diagnostics", API_URL))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<DiagnosticsResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct CodeSuggestion {
+    pub title: String,
+    pub explanation: String,
+    pub replacement: Option<String>,
+    pub range: Option<Range>,
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct SuggestionResponse {
+    pub suggestions: Vec<CodeSuggestion>,
+}
+
+pub async fn get_error_suggestions_api(
+    code: &str,
+    language: &str,
+    diagnostic: &Diagnostic,
+) -> Result<SuggestionResponse, String> {
+    let body = json!({
+        "code": code,
+        "language": language,
+        "diagnostic": diagnostic,
+    });
+    Request::post(&format!("{}/error_suggestions", API_URL))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<SuggestionResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+

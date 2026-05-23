@@ -215,3 +215,17 @@ pub fn get_ancestors(path: &str) -> Vec<String> {
     }
     ancestors
 }
+
+pub fn pos_to_index(code: &str, line: u32, character: u32) -> u32 {
+    let mut current_idx = 0;
+    for (i, l) in code.lines().enumerate() {
+        if i as u32 == line {
+            let chars: Vec<char> = l.chars().collect();
+            let char_offset = std::cmp::min(character as usize, chars.len());
+            let offset_str: String = chars[..char_offset].iter().collect();
+            return current_idx + offset_str.encode_utf16().count() as u32;
+        }
+        current_idx += (l.encode_utf16().count() + 1) as u32;
+    }
+    current_idx
+}

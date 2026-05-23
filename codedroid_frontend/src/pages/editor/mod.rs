@@ -60,6 +60,9 @@ pub fn EditorPage() -> impl IntoView {
     let cursor_pos = RwSignal::new(0);
     let cursor_coords = RwSignal::new((0.0, 0.0));
     let last_request_id = RwSignal::new(0u64);
+    let diagnostics_list = RwSignal::new(Vec::<api::Diagnostic>::new());
+    let last_diag_req = RwSignal::new(0u64);
+    let active_error = RwSignal::new(Option::<(api::Diagnostic, Vec<api::CodeSuggestion>, bool)>::None);
 
     // Callbacks
     let show_snack = Callback::new({
@@ -71,16 +74,108 @@ pub fn EditorPage() -> impl IntoView {
         }
     });
 
+    let trigger_diagnostics = Callback::new({
+        let ppath = project.path.clone();
+        let lang = project.language.clone();
+        let diagnostics_list = diagnostics_list.clone();
+        let last_diag_req = last_diag_req.clone();
+        move |code_val: String| {
+            let ppath = ppath.clone();
+            let lang = lang.clone();
+            let req_id = last_diag_req.get_untracked() + 1;
+            last_diag_req.set(req_id);
+            spawn_local(async move {
+                gloo_timers::future::TimeoutFuture::new(800).await;
+                if last_diag_req.get_untracked() == req_id {
+                    if let Ok(resp) = api::get_diagnostics_api(&code_val, &lang, &ppath).await {
+                        if last_diag_req.get_untracked() == req_id {
+                            diagnostics_list.set(resp.diagnostics);
+                        }
+                    }
+                }
+            });
+        }
+    });
+
+    let check_error_at_cursor = Callback::new({
+        let code_sig = code;
+        let diagnostics_list = diagnostics_list.clone();
+        let project_lang_str = project_lang_str.clone();
+        let active_error = active_error.clone();
+        move |(line, _col): (u32, u32)| {
+            let diags = diagnostics_list.get_untracked();
+            let diag_opt = diags.iter().find(|d| d.range.start.line == line).cloned();
+            
+            if let Some(diag) = diag_opt {
+                let current = active_error.get_untracked();
+                if let Some((curr_diag, _, _)) = &current {
+                    if curr_diag.message == diag.message && curr_diag.range.start.line == diag.range.start.line {
+                        return;
+                    }
+                }
+                
+                active_error.set(Some((diag.clone(), Vec::new(), true)));
+                
+                let code_val = code_sig.get_untracked();
+                let lang_val = project_lang_str.get_value();
+                
+                spawn_local(async move {
+                    if let Ok(resp) = api::get_error_suggestions_api(&code_val, &lang_val, &diag).await {
+                        active_error.set(Some((diag, resp.suggestions, false)));
+                    } else {
+                        active_error.set(None);
+                    }
+                });
+            } else {
+                active_error.set(None);
+            }
+        }
+    });
+
+    let on_click_problem = Callback::new({
+        let code_signal = code;
+        let check_error = check_error_at_cursor.clone();
+        let cursor_coords = cursor_coords.clone();
+        move |(line, character): (u32, u32)| {
+            use wasm_bindgen::JsCast;
+            if let Some(target) = web_sys::window()
+                .and_then(|w| w.document())
+                .and_then(|d| d.query_selector(".code-editor").ok().flatten())
+            {
+                if let Ok(target) = target.dyn_into::<web_sys::HtmlTextAreaElement>() {
+                    let text = code_signal.get_untracked();
+                    let index = pos_to_index(&text, line, character);
+                    let _ = target.focus();
+                    let _ = target.set_selection_range(index, index);
+                    
+                    if let Some(mirror) = web_sys::window().unwrap().document().unwrap().get_element_by_id("cursor-mirror") {
+                        let text_before = &text[..index as usize];
+                        mirror.set_text_content(Some(text_before));
+                        let span = web_sys::window().unwrap().document().unwrap().create_element("span").unwrap();
+                        span.set_text_content(Some("|"));
+                        let _ = mirror.append_child(&span);
+                        let span_el = span.dyn_into::<web_sys::HtmlElement>().unwrap();
+                        cursor_coords.set((span_el.offset_left() as f64, span_el.offset_top() as f64 + 20.0));
+                    }
+                    
+                    check_error.run((line, character));
+                }
+            }
+        }
+    });
+
     let pid = project.id.clone();
     let open_file = Callback::new({
         let pid = pid.clone();
+        let trigger_diag = trigger_diagnostics.clone();
         move |name: String| {
             let key = store::file_key(&pid, &name);
             let content = store::load_file(&key);
             open_tabs.update(|t| { if !t.contains(&name) { t.push(name.clone()); }});
             active_tab.set(Some(name));
-            code.set(content);
+            code.set(content.clone());
             dirty.set(false);
+            trigger_diag.run(content);
         }
     });
 
@@ -88,6 +183,7 @@ pub fn EditorPage() -> impl IntoView {
     let save_current = Callback::new({
         let pid = pid.clone();
         let ppath = ppath.clone();
+        let trigger_diag = trigger_diagnostics.clone();
         move |_: ()| {
             if let Some(tab) = active_tab.get_untracked() {
                 let key = store::file_key(&pid, &tab);
@@ -97,9 +193,12 @@ pub fn EditorPage() -> impl IntoView {
 
                 let base_path = ppath.clone();
                 let tab_name = tab.clone();
+                let trigger_diag_clone = trigger_diag.clone();
+                let content_clone = content.clone();
                 spawn_local(async move {
                     let full_path = format!("{}/{}", base_path, tab_name);
-                    let _ = api::save_file_api(&full_path, &content).await;
+                    let _ = api::save_file_api(&full_path, &content_clone).await;
+                    trigger_diag_clone.run(content_clone);
                 });
             }
         }
@@ -613,10 +712,43 @@ pub fn EditorPage() -> impl IntoView {
 
                             view! {
                                 <>
-                                {move || s.show_line_numbers.then(|| view! {
-                                    <div class="line-numbers" style=format!("font-size:{}px", s.font_size)>
-                                        {(1..=line_count).map(|n| view! { <div>{n}</div> }).collect_view()}
-                                    </div>
+                                {move || s.show_line_numbers.then(|| {
+                                    let diags = diagnostics_list.get();
+                                    view! {
+                                        <div class="line-numbers" style=format!("font-size:{}px", s.font_size)>
+                                            {(1..=line_count).map(|n| {
+                                                let has_error = diags.iter().any(|d| d.range.start.line == (n - 1) as u32 && d.severity.unwrap_or(1) == 1);
+                                                let has_warning = diags.iter().any(|d| d.range.start.line == (n - 1) as u32 && d.severity.unwrap_or(1) == 2);
+                                                
+                                                let gutter_class = if has_error {
+                                                    "line-number-item has-error"
+                                                } else if has_warning {
+                                                    "line-number-item has-warning"
+                                                } else {
+                                                    "line-number-item"
+                                                };
+                                                
+                                                let gutter_marker = if has_error {
+                                                    "🔴"
+                                                } else if has_warning {
+                                                    "🟡"
+                                                } else {
+                                                    ""
+                                                };
+
+                                                view! {
+                                                    <div class=gutter_class title=move || if has_error { "Error on this line" } else if has_warning { "Warning on this line" } else { "" }>
+                                                        {if !gutter_marker.is_empty() {
+                                                            view! { <span class="gutter-error-icon">{gutter_marker}</span> }.into_any()
+                                                        } else {
+                                                            view! { "" }.into_any()
+                                                        }}
+                                                        <span class="gutter-number-text">{n}</span>
+                                                    </div>
+                                                }
+                                            }).collect_view()}
+                                        </div>
+                                    }
                                 })}
                                 <div class="code-container" style=move || format!(
                                         "font-size:{}px;white-space:{};tab-size:{}",
@@ -639,6 +771,7 @@ pub fn EditorPage() -> impl IntoView {
                                             let val = target.value();
                                             code.set(val.clone());
                                             dirty.set(true);
+                                             trigger_diagnostics.run(val.clone());
                                             if settings.get_untracked().auto_save { save_current.run(()); }
 
                                             let start = target.selection_start().unwrap().unwrap_or(0);
@@ -839,6 +972,57 @@ pub fn EditorPage() -> impl IntoView {
                                                 }
                                             }
                                         }
+                                        on:click=move |e: web_sys::MouseEvent| {
+                                            use wasm_bindgen::JsCast;
+                                            let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
+                                            let start = target.selection_start().unwrap().unwrap_or(0);
+                                            cursor_pos.set(start);
+                                            let val = target.value();
+                                            
+                                            if let Some(mirror) = web_sys::window().unwrap().document().unwrap().get_element_by_id("cursor-mirror") {
+                                                let text_before = &val[..start as usize];
+                                                mirror.set_text_content(Some(text_before));
+                                                let span = web_sys::window().unwrap().document().unwrap().create_element("span").unwrap();
+                                                span.set_text_content(Some("|"));
+                                                let _ = mirror.append_child(&span);
+                                                let span_el = span.dyn_into::<web_sys::HtmlElement>().unwrap();
+                                                cursor_coords.set((span_el.offset_left() as f64, span_el.offset_top() as f64 + 20.0));
+                                            }
+
+                                            let (line, character) = {
+                                                let text_before = &val[..start as usize];
+                                                let lines: Vec<&str> = text_before.split('\n').collect();
+                                                (lines.len().saturating_sub(1) as u32, lines.last().map(|l| l.chars().count()).unwrap_or(0) as u32)
+                                            };
+                                            check_error_at_cursor.run((line, character));
+                                        }
+                                        on:keyup=move |e: web_sys::KeyboardEvent| {
+                                            let key = e.key();
+                                            if ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].contains(&key.as_str()) {
+                                                use wasm_bindgen::JsCast;
+                                                let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
+                                                let start = target.selection_start().unwrap().unwrap_or(0);
+                                                cursor_pos.set(start);
+                                                let val = target.value();
+                                                
+                                                if let Some(mirror) = web_sys::window().unwrap().document().unwrap().get_element_by_id("cursor-mirror") {
+                                                    let text_before = &val[..start as usize];
+                                                    mirror.set_text_content(Some(text_before));
+                                                    let span = web_sys::window().unwrap().document().unwrap().create_element("span").unwrap();
+                                                    span.set_text_content(Some("|"));
+                                                    let _ = mirror.append_child(&span);
+                                                    let span_el = span.dyn_into::<web_sys::HtmlElement>().unwrap();
+                                                    cursor_coords.set((span_el.offset_left() as f64, span_el.offset_top() as f64 + 20.0));
+                                                }
+
+                                                let (line, character) = {
+                                                    let text_before = &val[..start as usize];
+                                                    let lines: Vec<&str> = text_before.split('\n').collect();
+                                                    (lines.len().saturating_sub(1) as u32, lines.last().map(|l| l.chars().count()).unwrap_or(0) as u32)
+                                                };
+                                                check_error_at_cursor.run((line, character));
+                                            }
+                                        }
                                     />
                                     {move || (!suggestions.get().is_empty()).then(|| {
                                         let coords = cursor_coords.get();
@@ -867,6 +1051,79 @@ pub fn EditorPage() -> impl IntoView {
                                             </div>
                                         }
                                     })}
+                                    {move || {
+                                        if let Some((diag, suggs, loading)) = active_error.get() {
+                                            let coords = cursor_coords.get();
+                                            let snack = show_snack;
+                                            let code_sig = code;
+                                            let active_error_sig = active_error;
+                                            
+                                            view! {
+                                                <div class="error-floating-popover" style=format!("left:{}px; top:{}px", coords.0, coords.1)>
+                                                    <div class="error-floating-header">
+                                                        <span class="error-floating-icon">"🔴"</span>
+                                                        <span class="error-floating-title">{diag.message}</span>
+                                                    </div>
+                                                    
+                                                    {move || {
+                                                        if loading {
+                                                            view! {
+                                                                <div class="error-floating-loading">
+                                                                    <div class="spinner" style="width:12px;height:12px;border-width:1.5px;display:inline-block;vertical-align:middle;margin-right:6px" />
+                                                                    "Finding Quick Fixes..."
+                                                                </div>
+                                                            }.into_any()
+                                                        } else if !suggs.is_empty() {
+                                                            view! {
+                                                                <div class="error-floating-suggestions">
+                                                                    {suggs.clone().into_iter().map(|sugg| {
+                                                                        let title = sugg.title.clone();
+                                                                        let replacement = sugg.replacement.clone();
+                                                                        let range = sugg.range.clone();
+                                                                        let snack_cb = snack;
+                                                                        let code_cb = code_sig;
+                                                                        let active_error_cb = active_error_sig;
+                                                                        
+                                                                        let has_fix = replacement.is_some() && range.is_some();
+                                                                        
+                                                                        let on_apply = move |_| {
+                                                                            if let (Some(repl), Some(r)) = (&replacement, &range) {
+                                                                                let orig = code_cb.get_untracked();
+                                                                                let updated = apply_replacement(&orig, r, repl);
+                                                                                code_cb.set(updated);
+                                                                                snack_cb.run("Quick Fix applied successfully!".to_string());
+                                                                                active_error_cb.set(None);
+                                                                            }
+                                                                        };
+                                                                        
+                                                                        view! {
+                                                                            <div class="error-floating-suggestion-item">
+                                                                                <span class="lightbulb-icon">"💡"</span>
+                                                                                <span class="suggestion-text">{title}</span>
+                                                                                {has_fix.then(|| view! {
+                                                                                    <button class="btn btn-primary btn-xs" on:click=on_apply style="margin-left:auto;padding:2px 6px;font-size:10px">
+                                                                                        "Fix"
+                                                                                    </button>
+                                                                                })}
+                                                                            </div>
+                                                                        }
+                                                                    }).collect_view()}
+                                                                </div>
+                                                            }.into_any()
+                                                        } else {
+                                                            view! {
+                                                                <div class="error-floating-no-fix">
+                                                                    "No quick fixes available."
+                                                                </div>
+                                                            }.into_any()
+                                                        }
+                                                    }}
+                                                </div>
+                                            }.into_any()
+                                        } else {
+                                            view! { "" }.into_any()
+                                        }
+                                    }}
                                     <div id="cursor-mirror" style=move || format!(
                                         "width:100%;font-size:{}px;line-height:1.6;tab-size:{}",
                                         settings.get().font_size,
@@ -884,6 +1141,10 @@ pub fn EditorPage() -> impl IntoView {
                         output=output.into()
                         is_error=is_error.into()
                         show_snack=show_snack
+                        diagnostics_list=diagnostics_list.into()
+                        on_click_problem=on_click_problem
+                        code=code
+                        language=Signal::derive(move || project_lang_str.get_value())
                     />
 
                     <div class="editor-footer">

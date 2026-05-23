@@ -69,19 +69,31 @@ To get real-time code completions, you need to install the language servers for 
 
 ---
 
-## 📦 Additional Languages
+## 📦 Language Setup & Auto-suggestions Guides
 
-Install the runtimes for the languages you want to execute:
+For detailed, step-by-step mobile environment setup and configuration instructions with auto-suggestions, click on your language below:
 
-| Language | Installation Command |
-|---|---|
-| **Dart** | `pkg install dart` |
-| **Go** | `pkg install golang` |
-| **Java** | `pkg install openjdk-17` |
-| **Kotlin** | `pkg install kotlin` |
-| **Swift** | `pkg install swift` |
-| **Ruby** | `pkg install ruby` |
-| **C#** | `pkg install dotnet-sdk` |
+| Language | Language Server / LSP | Detailed Guide |
+|---|---|---|
+| **Rust** | `rust-analyzer` | 👉 [Rust Setup Guide](./docs/languages/rust.md) |
+| **Go** | `gopls` | 👉 [Go Setup Guide](./docs/languages/go.md) |
+| **Dart** | `dart-language-server` | 👉 [Dart Setup Guide](./docs/languages/dart.md) |
+| **C** | `clangd` | 👉 [C Setup Guide](./docs/languages/c.md) |
+| **C++** | `clangd` | 👉 [C++ Setup Guide](./docs/languages/cpp.md) |
+| **C#** | `dotnet` | 👉 [C# Setup Guide](./docs/languages/csharp.md) |
+| **Java** | `jdtls` | 👉 [Java Setup Guide](./docs/languages/java.md) |
+| **Python** | `pylsp` | 👉 [Python Setup Guide](./docs/languages/python.md) |
+| **Kotlin** | `kotlin-language-server` | 👉 [Kotlin Setup Guide](./docs/languages/kotlin.md) |
+| **Swift** | `sourcekit-lsp` | 👉 [Swift Setup Guide](./docs/languages/swift.md) |
+| **Ruby** | `solargraph` | 👉 [Ruby Setup Guide](./docs/languages/ruby.md) |
+| **JavaScript** | `typescript-language-server` | 👉 [JavaScript Setup Guide](./docs/languages/javascript.md) |
+| **TypeScript** | `typescript-language-server` | 👉 [TypeScript Setup Guide](./docs/languages/typescript.md) |
+| **R** | `Rscript` | 👉 [R Setup Guide](./docs/languages/r.md) |
+| **Scala** | `scalac` | 👉 [Scala Setup Guide](./docs/languages/scala.md) |
+| **Perl** | `perl` | 👉 [Perl Setup Guide](./docs/languages/perl.md) |
+| **Haskell** | `runhaskell` | 👉 [Haskell Setup Guide](./docs/languages/haskell.md) |
+| **Pascal** | `fpc` | 👉 [Pascal Setup Guide](./docs/languages/pascal.md) |
+
 
 ---
 

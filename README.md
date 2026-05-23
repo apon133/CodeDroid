@@ -1,82 +1,96 @@
-# CodeDroid — Run Code on Your Phone 📱
+# CodeDroid — Mobile Code Execution Engine for Android & iOS
 
-> **The best mobile code execution engine and IDE for Web, Android, iOS, and desktop.**  
-> Write and run Python, Rust, Go, JavaScript, Java, C++, and 13+ languages — directly from your phone with real-time IntelliSense.
+<p align="center">
+  <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust">
+  <img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android">
+  <img src="https://img.shields.io/badge/iOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="iOS">
+  <img src="https://img.shields.io/badge/Web-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Web">
+  <img src="https://img.shields.io/badge/WebAssembly-654FF0?style=for-the-badge&logo=webassembly&logoColor=white" alt="WASM">
+  <img src="https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge" alt="License: GPL v3">
+</p>
+<p align="center">
+  <img src="https://img.shields.io/github/stars/apon133/CodeDroid?style=for-the-badge" alt="GitHub Stars">
+  <img src="https://img.shields.io/github/forks/apon133/CodeDroid?style=for-the-badge" alt="GitHub Forks">
+  <img src="https://img.shields.io/github/issues/apon133/CodeDroid?style=for-the-badge" alt="GitHub Issues">
+  <img src="https://img.shields.io/github/last-commit/apon133/CodeDroid?style=for-the-badge" alt="Last Commit">
+  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge" alt="PRs Welcome">
+</p>
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange.svg)](https://www.rust-lang.org/)
-[![Android Support](https://img.shields.io/badge/Android-Termux%20Ready-green.svg)](./TERMUX_SETUP.md)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/apon133/CodeDroid/pulls)
+> **Free, open-source mobile IDE and code execution engine** — write and run Python, Rust, Go, JavaScript, Java, C++, and 13+ languages directly on your Android or iOS device. No laptop needed.
+
+**[🌐 Live Demo](https://codedroid.netlify.app)** · **[📖 Termux Setup](./TERMUX_SETUP.md)** · **[🤝 Contributing](./CONTRIBUTING.md)**
 
 ---
 
 ## What is CodeDroid?
 
-**CodeDroid** is a free, open-source **mobile code editor and execution engine** that lets you write and run real code on your Android or iOS device — no laptop needed.
+CodeDroid is a **mobile programming environment** built for developers who code everywhere. Under the hood, it's a high-performance HTTP API server written in **Rust (Axum)** that communicates with your device's actual compilers and runtimes — not a sandbox, not a toy.
 
-Under the hood, it's a high-performance API server written in **Rust** that talks to your device's compilers and runtimes. It now features an integrated **Leptos-based Web IDE** (WASM) that provides a desktop-class coding experience on mobile. You can use the hosted version at **[codedroid.netlify.app](https://codedroid.netlify.app)**. You get a complete **mobile programming environment** that feels fast, works offline, and supports serious projects with real package managers and **LSP-powered code suggestions**.
-
----
-
-## Why CodeDroid?
-
-| Problem | CodeDroid's Solution |
-|---|---|
-| "I can't install a compiler on my phone" | Runs on Termux — full Linux environment on Android |
-| "Other mobile IDEs are too slow" | API server written in Rust — near-zero overhead |
-| "No IntelliSense on mobile" | **Integrated LSP support** (rust-analyzer, clangd, gopls, etc.) |
-| "No package manager support" | `pip install`, `cargo add`, `npm install` — all supported |
-| "I need to run a web server from my phone" | Built-in support for Vite, React, Vue dev servers |
+It pairs with an integrated **Leptos-based Web IDE** (compiled to WASM) that delivers a desktop-class coding experience on mobile. You get IntelliSense, real package managers, and even web server previews — all running on your phone via **Termux**.
 
 ---
 
-## Supported Languages & IntelliSense
+## ✨ Features
 
-CodeDroid supports **13+ programming languages** with real-time code suggestions for major ones.
+- **Real execution** — runs your code using actual system compilers (`rustc`, `gcc`, `python3`, `go`). Real output, real errors.
+- **LSP-powered IntelliSense** — real-time code completions, error highlighting, and hover documentation via language servers running on-device.
+- **Full package manager support** — `pip install`, `cargo add`, `npm install` — dependency installation handled automatically before execution.
+- **Web project support** — detects the dev server URL from output logs for instant React, Vue, and Vite previews in the built-in browser.
+- **13+ supported languages** — Python, Rust, Go, JavaScript/TypeScript, C/C++, Dart, Java, Kotlin, Swift, C#, Ruby, and more.
+- **Works offline** — the API server runs entirely on your device.
+- **Cross-platform** — Android (Termux), Linux, macOS, Windows.
 
-| Language | How It Runs | Package Manager | LSP Support (IntelliSense) |
+---
+
+## 🛠️ Supported Languages & IntelliSense
+
+| Language | Runtime | Package Manager | LSP / IntelliSense |
 |---|---|---|---|
-| **Rust** | `cargo` / `rustc` | `cargo` | ✅ `rust-analyzer` |
-| **Python** | `python3` | `pip3` | ✅ `pylsp` |
-| **Go** | `go run` | `go get` | ✅ `gopls` |
-| **JavaScript/TS** | `node` / `tsx` | `npm` | ✅ `typescript-language-server` |
-| **C / C++** | `gcc` / `g++` | `pkg install` | ✅ `clangd` |
-| **Dart** | `dart` | `pub` | ✅ `dart language-server` |
-| **Java** | `javac` + `java` | Maven | ✅ |
-| **Kotlin** | `kotlinc` | — | — |
-| **Swift** | `swift` | SPM | — |
-| **C#** | `dotnet` | `nuget` | — |
-| **Ruby** | `ruby` | `gem` | — |
+| [**Rust**](./docs/languages/rust.md) | `cargo` / `rustc` | `cargo` | ✅ `rust-analyzer` |
+| [**Python**](./docs/languages/python.md) | `python3` | `pip3` | ✅ `pylsp` |
+| [**Go**](./docs/languages/go.md) | `go run` | `go get` | ✅ `gopls` |
+| [**JavaScript**](./docs/languages/javascript.md) / [**TS**](./docs/languages/typescript.md) | `node` / `tsx` | `npm` | ✅ `typescript-language-server` |
+| [**C**](./docs/languages/c.md) / [**C++**](./docs/languages/cpp.md) | `gcc` / `g++` / `clang` | `pkg install` | ✅ `clangd` |
+| [**Dart**](./docs/languages/dart.md) | `dart` | `pub` | ✅ `dart language-server` |
+| [**Java**](./docs/languages/java.md) | `javac` + `java` | Maven | ✅ `jdtls` |
+| [**Kotlin**](./docs/languages/kotlin.md) | `kotlinc` | — | ✅ `kotlin-language-server` |
+| [**Swift**](./docs/languages/swift.md) | `swift` | SPM | ✅ `sourcekit-lsp` |
+| [**C#**](./docs/languages/csharp.md) | `dotnet` | `nuget` | — |
+| [**Ruby**](./docs/languages/ruby.md) | `ruby` | `gem` | ✅ `solargraph` |
+| [**R**](./docs/languages/r.md) | `Rscript` | — | — |
+| [**Scala**](./docs/languages/scala.md) | `scala` | — | — |
+| [**Perl**](./docs/languages/perl.md) | `perl` | — | — |
+| [**Haskell**](./docs/languages/haskell.md) | `runhaskell` | — | — |
+| [**Pascal**](./docs/languages/pascal.md) | `fpc` | — | — |
+
 
 ---
 
-## Key Features
+## 🚀 Getting Started
 
-### ⚡ Real Execution, Not a Sandbox Toy
-CodeDroid runs your code using actual system compilers — `rustc`, `gcc`, `python3`, `go`. No fake interpreters. Real output, real errors.
+### Prerequisites
 
-### 🧠 Intelligent Code Suggestions (LSP)
-CodeDroid isn't just a text editor. It provides **real-time code completions, error highlighting, and hover information** by running language servers directly on your phone.
+- Android device with [Termux](https://termux.dev) installed, **or** a Linux/macOS/Windows machine.
+- For the hosted Web IDE: any modern browser at **[codedroid.netlify.app](https://codedroid.netlify.app)**.
 
-### 📦 Full Package Manager Support
-Need a library? Just ask CodeDroid to install it. The API handles dependency installation automatically before execution.
+### Mobile Setup (Android / Termux)
 
-### 🖥️ Web Project Support
-Running a React, Vue, or Vite project? CodeDroid detects the dev server URL from the output logs and allows you to preview your site instantly in the built-in browser.
+Full step-by-step instructions: 👉 **[TERMUX_SETUP.md](./TERMUX_SETUP.md)**
 
 ---
 
-## API Reference
+## 📡 API Reference
 
-The CodeDroid API is a simple HTTP server. Here are the main endpoints:
+CodeDroid exposes a simple HTTP API. All endpoints accept and return JSON.
 
 ### `POST /run` — Execute Code
-Run any supported language. Returns stdout, stderr, and (for web projects) the server URL.
 
-### `POST /complete` — Get Code Suggestions
-Get intelligent code completions using LSP servers.
+Run code in any supported language. Returns `stdout`, `stderr`, and (for web projects) the live server URL.
 
-**Request:**
+### `POST /complete` — Get Code Completions
+
+Returns LSP-powered code suggestions for the given cursor position.
+
 ```json
 {
   "code": "fn main() { pri",
@@ -88,60 +102,58 @@ Get intelligent code completions using LSP servers.
 ```
 
 ### `POST /sync_file` — Sync File to Disk
-Updates or creates a file on the device. Essential for LSP and multi-file projects.
+
+Creates or updates a file on the device. Required for LSP and multi-file projects.
 
 ### `POST /stop` — Stop a Running Process
-Kill a long-running process (like a dev server) by PID.
+
+Kills a long-running process (e.g., a dev server) by PID.
 
 ---
 
-## Technical Architecture
+## 🏗️ Architecture
 
 ```
-       [ Modern Web IDE (Leptos/WASM) ]
+       [ Web IDE — Leptos / WASM ]
                    │
            HTTP / JSON Requests
                    ▼
-    [ CodeDroid API Server (Rust/Axum) ]
-          │                │
-    [ LSP Servers ]  [ System Runtimes ]
-    (rust-analyzer,   (python, cargo,
-     clangd, etc.)     gcc, node, etc.)
+    [ CodeDroid API Server — Rust / Axum ]
+          │                   │
+    [ LSP Servers ]     [ System Runtimes ]
+  (rust-analyzer,        (python3, cargo,
+   clangd, gopls…)        gcc, node, go…)
 ```
 
 ---
 
-## Tech Stack
+## 💻 Tech Stack
 
-- **Backend:** [Rust (Axum)](./codedroid_api/README.md)
-- **Frontend:** [Leptos (WASM)](./codedroid_frontend/README.md)
-- **IntelliSense:** LSP (Language Server Protocol)
-- **Deployment:** Termux (Android), Linux, macOS, Windows
-
----
-
-## Mobile Setup (Android / Termux)
-
-Full step-by-step guide: 👉 **[TERMUX_SETUP.md](./TERMUX_SETUP.md)**
+| Layer | Technology |
+|---|---|
+| API Server | [Rust (Axum)](./codedroid_api/README.md) |
+| Web IDE | [Leptos (WASM)](./codedroid_frontend/README.md) |
+| IntelliSense | LSP (Language Server Protocol) |
+| Runtime | Termux (Android), Linux, macOS, Windows |
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
-All contributions are welcome! Please see our **[CONTRIBUTING.md](./CONTRIBUTING.md)** for guidelines on how to report bugs, suggest features, and submit code changes.
-
----
-
-## License
-
-GNU General Public License v3.0 — see [LICENSE](LICENSE) for details.
+Contributions are welcome. Please read **[CONTRIBUTING.md](./CONTRIBUTING.md)** for guidelines on reporting bugs, suggesting features, and submitting pull requests.
 
 ---
 
-## Contact
+## 📄 License
 
-**Md Apon Ahmed**  
-GitHub: [@apon133](https://github.com/apon133)  
+GNU General Public License v3.0 — see [LICENSE](LICENSE) for full terms.
+
+---
+
+## 👤 Author
+
+**Md Apon Ahmed**
+GitHub: [@apon133](https://github.com/apon133)
 
 ---
 

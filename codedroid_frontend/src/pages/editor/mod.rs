@@ -214,7 +214,7 @@ pub fn EditorPage() -> impl IntoView {
         }
     });
 
-    let on_select = move |ins: String| {
+    let on_select = move |item: api::CompletionItem| {
         let cpos = cursor_pos.get_untracked();
         use wasm_bindgen::JsCast;
         if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
@@ -235,11 +235,20 @@ pub fn EditorPage() -> impl IntoView {
                     }
                     let before = val.substring(0, word_start as u32);
                     let after = val.substring(end, val.length());
+                    
+                    let (ins, cursor_offset) = resolve_completion(&item);
+                    
                     let new_val = format!("{}{}{}", String::from(before), ins, String::from(after));
                     code.set(new_val);
                     dirty.set(true);
                     suggestions.set(Vec::new());
-                    let new_pos = word_start as u32 + ins.encode_utf16().count() as u32;
+                    
+                    let new_pos = if let Some(offset) = cursor_offset {
+                        word_start as u32 + offset as u32
+                    } else {
+                        word_start as u32 + ins.encode_utf16().count() as u32
+                    };
+                    
                     spawn_local(async move {
                         if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
                             if let Ok(Some(target)) = doc.query_selector(".code-editor") {
@@ -680,7 +689,7 @@ pub fn EditorPage() -> impl IntoView {
                                                 match e.key().as_str() {
                                                     "ArrowDown" => { e.prevent_default(); selected_idx.set((current + 1) % total); }
                                                     "ArrowUp" => { e.prevent_default(); selected_idx.set((current + total - 1) % total); }
-                                                    "Enter" | "Tab" => { e.prevent_default(); if let Some(s) = suggestions.get().get(current) { on_select(s.label.clone()); } }
+                                                    "Enter" | "Tab" => { e.prevent_default(); if let Some(s) = suggestions.get().get(current) { on_select(s.clone()); } }
                                                     "Escape" => { suggestions.set(Vec::new()); }
                                                     _ => {}
                                                 }
@@ -734,7 +743,7 @@ pub fn EditorPage() -> impl IntoView {
                                                     view! {
                                                         <button 
                                                             class=move || if selected_idx.get() == i { "suggestion-item selected" } else { "suggestion-item" }
-                                                            on:click=move |_| on_select(s2.label.clone())
+                                                            on:click=move |_| on_select(s2.clone())
                                                             on:mouseenter=move |_| selected_idx.set(i)
                                                         >
                                                             <span class="suggestion-kind">{kind_icon(s.kind)}</span>
@@ -815,4 +824,69 @@ pub fn EditorPage() -> impl IntoView {
             <Snackbar message=snack_msg.read_only() />
         </div>
     }.into_any()
+}
+
+fn resolve_completion(item: &api::CompletionItem) -> (String, Option<usize>) {
+    if let Some(ref raw_snippet) = item.insert_text {
+        let mut result = String::new();
+        let mut cursor_offset = None;
+        let chars: Vec<char> = raw_snippet.chars().collect();
+        let mut i = 0;
+        
+        while i < chars.len() {
+            if chars[i] == '$' && i + 1 < chars.len() {
+                let next = chars[i + 1];
+                if next.is_ascii_digit() {
+                    let is_primary = next == '0' || next == '1';
+                    if is_primary && cursor_offset.is_none() {
+                        cursor_offset = Some(result.encode_utf16().count());
+                    }
+                    i += 2;
+                } else if next == '{' {
+                    let mut j = i + 2;
+                    let mut content = String::new();
+                    while j < chars.len() && chars[j] != '}' {
+                        content.push(chars[j]);
+                        j += 1;
+                    }
+                    if j < chars.len() {
+                        let placeholder = if let Some(colon_pos) = content.find(':') {
+                            &content[colon_pos + 1..]
+                        } else {
+                            ""
+                        };
+                        if cursor_offset.is_none() {
+                            cursor_offset = Some(result.encode_utf16().count());
+                        }
+                        result.push_str(placeholder);
+                        i = j + 1;
+                    } else {
+                        result.push('$');
+                        i += 1;
+                    }
+                } else {
+                    result.push('$');
+                    i += 1;
+                }
+            } else {
+                result.push(chars[i]);
+                i += 1;
+            }
+        }
+        (result, cursor_offset)
+    } else {
+        let label = &item.label;
+        if let Some(pos) = label.find("(...)") {
+            let cleaned = label.replace("(...)", "()");
+            (cleaned, Some(pos + 1))
+        } else if let Some(pos) = label.find("{...}") {
+            let cleaned = label.replace("{...}", "{}");
+            (cleaned, Some(pos + 1))
+        } else if let Some(pos) = label.find("[...]") {
+            let cleaned = label.replace("[...]", "[]");
+            (cleaned, Some(pos + 1))
+        } else {
+            (label.clone(), None)
+        }
+    }
 }

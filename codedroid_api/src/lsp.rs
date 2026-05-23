@@ -285,8 +285,14 @@ impl LspClient {
                         };
 
                         if matches {
+                            let insert_text = item["textEdit"]["newText"]
+                                .as_str()
+                                .or_else(|| item["insertText"].as_str())
+                                .map(|s| s.to_string());
+
                             suggestions.push(CompletionItem {
                                 label: label.to_string(),
+                                insert_text,
                                 kind: item["kind"].as_u64().map(|k| k as u32),
                                 detail: item["detail"].as_str().map(|s| s.to_string()),
                                 documentation: item["documentation"]
@@ -325,6 +331,7 @@ impl LspClient {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct CompletionItem {
     pub label: String,
+    pub insert_text: Option<String>,
     pub kind: Option<u32>,
     pub detail: Option<String>,
     pub documentation: Option<String>,
@@ -359,6 +366,7 @@ pub fn fallback_completions(code: &str, prefix: &str) -> Vec<CompletionItem> {
         .into_iter()
         .map(|w| CompletionItem {
             label: w,
+            insert_text: None,
             kind: Some(6), // Variable/Text kind
             detail: None,
             documentation: None,

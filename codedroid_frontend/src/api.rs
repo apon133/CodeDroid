@@ -72,6 +72,7 @@ pub async fn add_package(package: &str, language: &str, project_path: &str) -> R
 #[derive(serde::Deserialize, Clone, PartialEq)]
 pub struct CompletionItem {
     pub label: String,
+    pub insert_text: Option<String>,
     pub kind: Option<u32>,
     pub detail: Option<String>,
     pub documentation: Option<String>,

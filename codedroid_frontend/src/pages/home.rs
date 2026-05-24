@@ -83,8 +83,15 @@ fn default_files(lang: &str, framework: &str, name: &str) -> Vec<(String, String
                     ("package.json".into(), format!("{{\n  \"name\": \"{name}\",\n  \"type\": \"module\",\n  \"scripts\": {{ \"dev\": \"vite --host 0.0.0.0\" }},\n  \"dependencies\": {{ \"svelte\": \"^4.0.0\" }},\n  \"devDependencies\": {{ \"vite\": \"^5.0.0\", \"@sveltejs/vite-plugin-svelte\": \"^3.0.0\" }}\n}}")),
                 ],
                 "nextjs" => vec![
-                    ("pages/index.js".into(), "export default function Home() { return <h1>Hello Next.js!</h1>; }".into()),
-                    ("package.json".into(), format!("{{\n  \"name\": \"{name}\",\n  \"scripts\": {{ \"dev\": \"next dev -H 0.0.0.0\" }},\n  \"dependencies\": {{ \"next\": \"latest\", \"react\": \"latest\", \"react-dom\": \"latest\" }}\n}}")),
+                    ("app/layout.jsx".into(), "export default function RootLayout({ children }) {\n  return (\n    <html lang=\"en\">\n      <body style={{ margin: 0, fontFamily: 'sans-serif' }}>{children}</body>\n    </html>\n  );\n}".into()),
+                    ("app/page.jsx".into(), "export default function Home() {\n  return (\n    <div style={{ textAlign: 'center', padding: '2em' }}>\n      <h1 style={{ color: '#0070f3' }}>Hello Next.js!</h1>\n      <p>Welcome to your CodeDroid Next.js project using App Router.</p>\n    </div>\n  );\n}".into()),
+                    ("package.json".into(), format!("{{\n  \"name\": \"{name}\",\n  \"private\": true,\n  \"scripts\": {{ \"dev\": \"next dev -H 0.0.0.0 -p 3001\" }},\n  \"dependencies\": {{\n    \"next\": \"^14.2.0\",\n    \"react\": \"^18.3.0\",\n    \"react-dom\": \"^18.3.0\"\n  }}\n}}")),
+                ],
+                "remix" => vec![
+                    ("app/root.jsx".into(), "import { Links, Meta, Outlet, Scripts, ScrollRestoration } from '@remix-run/react';\n\nexport default function App() {\n  return (\n    <html lang=\"en\">\n      <head>\n        <meta charSet=\"utf-8\" />\n        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n        <Meta />\n        <Links />\n      </head>\n      <body>\n        <Outlet />\n        <ScrollRestoration />\n        <Scripts />\n      </body>\n    </html>\n  );\n}".into()),
+                    ("app/routes/_index.jsx".into(), "export default function Index() {\n  return (\n    <div style={{ textAlign: 'center', fontFamily: 'sans-serif', padding: '1em' }}>\n      <h1 style={{ color: '#319795' }}>Hello Remix!</h1>\n      <p>Welcome to your CodeDroid Remix project.</p>\n    </div>\n  );\n}".into()),
+                    ("vite.config.js".into(), "import { vitePlugin as remix } from '@remix-run/dev';\nimport { defineConfig } from 'vite';\n\nexport default defineConfig({\n  plugins: [remix()],\n});".into()),
+                    ("package.json".into(), format!("{{\n  \"name\": \"{name}\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {{ \"dev\": \"vite --host 0.0.0.0\" }},\n  \"dependencies\": {{\n    \"@remix-run/node\": \"^2.9.0\",\n    \"@remix-run/react\": \"^2.9.0\",\n    \"@remix-run/serve\": \"^2.9.0\",\n    \"isbot\": \"^4.1.0\",\n    \"react\": \"^18.2.0\",\n    \"react-dom\": \"^18.2.0\"\n  }},\n  \"devDependencies\": {{\n    \"@remix-run/dev\": \"^2.9.0\",\n    \"vite\": \"^5.1.0\"\n  }}\n}}")),
                 ],
                 _ => vec![(format!("main.{ext}"), format!("console.log('Hello {framework}!');"))],
             }

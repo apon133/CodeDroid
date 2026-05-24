@@ -48,6 +48,8 @@ pub fn EditorPage() -> impl IntoView {
     let current_pid: RwSignal<Option<u32>> = RwSignal::new(None);
     let preview_url: RwSignal<Option<String>> = RwSignal::new(None);
     let bottom_tab: RwSignal<usize> = RwSignal::new(0); // 0=terminal 1=preview
+    let show_mobile_full_preview: RwSignal<bool> = RwSignal::new(false);
+    let refresh_key: RwSignal<u32> = RwSignal::new(0);
     let show_search: RwSignal<bool> = RwSignal::new(false);
     let find_text: RwSignal<String> = RwSignal::new(String::new());
     let snack_msg: RwSignal<Option<String>> = RwSignal::new(None);
@@ -271,7 +273,6 @@ pub fn EditorPage() -> impl IntoView {
                         current_pid.set(r.pid);
                         if let Some(url) = r.url {
                             preview_url.set(Some(url));
-                            bottom_tab.set(1);
                         }
                     }
                     Err(e) => {
@@ -807,18 +808,26 @@ pub fn EditorPage() -> impl IntoView {
                 })}
                 {move || current_pid.get().map(|_| view! {
                     <button class="btn btn-danger" style="display:inline-flex; align-items:center; gap:6px;" on:click=move |_| stop_code.run(())>
-                        <LucideIcon name="square" size="14" /> "Stop"
+                        <LucideIcon name="square" size="14" /> <span class="btn-text">"Stop"</span>
                     </button>
                 })}
                 <button class="btn btn-success" style="display:inline-flex; align-items:center; gap:6px;" disabled=move || is_running.get()
                     on:click=move |_| run_code.run(())
                 >
                     {move || if is_running.get() {
-                        view! { <><span class="spinner"></span>" Running..."</> }.into_any()
+                        view! { <><span class="spinner"></span><span class="btn-text">" Running..."</span></> }.into_any()
                     } else {
-                        view! { <><LucideIcon name="play" size="14" /> "Run"</> }.into_any()
+                        view! { <><LucideIcon name="play" size="14" /> <span class="btn-text">"Run"</span></> }.into_any()
                     }}
                 </button>
+                {move || preview_url.get().is_some().then(|| view! {
+                    <button class="btn btn-success mobile-preview-toggle-btn"
+                        style="display:inline-flex; align-items:center; gap:6px; background:#4f46e5; border-color:#4f46e5;"
+                        on:click=move |_| show_mobile_full_preview.set(true)>
+                        <LucideIcon name="eye" size="16" />
+                        <span class="btn-text">"Preview"</span>
+                    </button>
+                })}
             </AppBar>
 
             <div class="editor-layout">
@@ -1368,6 +1377,35 @@ pub fn EditorPage() -> impl IntoView {
                         </button>
                     </div>
                 </div>
+
+                {move || preview_url.get().map(|url| {
+                    let final_url = move || {
+                        let k = refresh_key.get();
+                        if url.contains('?') {
+                            format!("{}&refresh={}", url, k)
+                        } else {
+                            format!("{}?refresh={}", url, k)
+                        }
+                    };
+                    view! {
+                        <>
+                        <div class="preview-resize-gutter"></div>
+                        <div class="desktop-preview-panel">
+                            <div class="preview-header">
+                                <span style="display:inline-flex; align-items:center; gap:6px; color:#fff; font-family:var(--font-ui); font-size:12px; font-weight:600;">
+                                    <LucideIcon name="globe" size="14" />
+                                    "Live Web Preview"
+                                </span>
+                                <button class="btn btn-xs" style="padding:2px 8px; font-size:11px; height:24px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); cursor:pointer;"
+                                    on:click=move |_| refresh_key.update(|k| *k += 1)>
+                                    "🔄 Refresh"
+                                </button>
+                            </div>
+                            <iframe class="preview-frame" src=final_url style="flex:1; border:none; background:#fff; width:100%; height:100%;" />
+                        </div>
+                        </>
+                    }
+                })}
             </div>
 
             <DependencyModal 
@@ -1376,6 +1414,35 @@ pub fn EditorPage() -> impl IntoView {
                 dep_output=dep_output.into()
                 add_dep=add_dep
             />
+
+            {move || show_mobile_full_preview.get().then(|| {
+                let url_opt = preview_url.get();
+                url_opt.map(|url| {
+                    let final_url = move || {
+                        let k = refresh_key.get();
+                        if url.contains('?') {
+                            format!("{}&refresh={}", url, k)
+                        } else {
+                            format!("{}?refresh={}", url, k)
+                        }
+                    };
+                    view! {
+                        <div class="mobile-preview-overlay active">
+                            <div class="preview-header">
+                                <button class="btn btn-icon" on:click=move |_| show_mobile_full_preview.set(false) title="Back to Code" style="background:transparent; border:none; color:var(--text); cursor:pointer; display:inline-flex; align-items:center; justify-content:center;">
+                                    <LucideIcon name="arrow-left" size="20" />
+                                </button>
+                                <span style="font-weight: 600; color: #fff; font-family: var(--font-ui); font-size: 14px;">"Web Preview"</span>
+                                <button class="btn btn-xs" style="padding:4px 10px; font-size:11px; height:26px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); cursor:pointer;"
+                                    on:click=move |_| refresh_key.update(|k| *k += 1)>
+                                    "🔄 Refresh"
+                                </button>
+                            </div>
+                            <iframe class="preview-frame" src=final_url style="flex:1; border:none; background:#fff; width:100%; height:100%;" />
+                        </div>
+                    }
+                })
+            })}
 
             <Snackbar message=snack_msg.read_only() />
         </div>

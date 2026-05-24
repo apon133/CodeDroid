@@ -104,6 +104,10 @@ pub fn LucideIcon(
             <path d="M12 20h9" />
             <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
         }.into_any(),
+        "eye" => view! {
+            <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0z" />
+            <circle cx="12" cy="12" r="3" />
+        }.into_any(),
         _ => view! {
             <circle cx="12" cy="12" r="10" />
         }.into_any()

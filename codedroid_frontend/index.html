@@ -30,6 +30,40 @@
         } else {
             console.warn('⚠️ Service Workers are not supported in this browser.');
         }
+
+        // Drag-to-resize handler for Desktop Live Preview panel
+        document.addEventListener('mousedown', function(e) {
+            if (e.target.classList.contains('preview-resize-gutter')) {
+                e.preventDefault();
+                const panel = document.querySelector('.desktop-preview-panel');
+                if (!panel) return;
+                
+                const startX = e.clientX;
+                const startWidth = panel.getBoundingClientRect().width;
+                
+                // Add dragging class to body to prevent iframe from capturing pointer events
+                document.body.classList.add('dragging-preview');
+                
+                function onMouseMove(moveEvent) {
+                    const deltaX = moveEvent.clientX - startX;
+                    // Dragging left increases size, dragging right decreases it
+                    const newWidth = Math.max(250, Math.min(1000, startWidth - deltaX));
+                    panel.style.width = newWidth + 'px';
+                    panel.style.flex = 'none'; // Lock the flex width
+                }
+                
+                function onMouseUp() {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                    document.body.style.cursor = 'default';
+                    document.body.classList.remove('dragging-preview');
+                }
+                
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+                document.body.style.cursor = 'col-resize';
+            }
+        });
     </script>
 </body>
 </html>

@@ -1350,3 +1350,132 @@ select.input { width: auto; min-width: 160px; }
   font-style: italic;
   padding: 4px 0;
 }
+
+/* ── Desktop/Mobile Preview Layout Styles ── */
+.desktop-preview-panel {
+  width: 45%;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: #07090e;
+  height: 100%;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  height: 36px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.preview-frame {
+  flex: 1;
+  border: none;
+  background: #fff;
+  width: 100%;
+  height: 100%;
+}
+
+.mobile-preview-overlay {
+  display: none;
+}
+
+/* Hide mobile toggle button on desktop */
+@media (min-width: 769px) {
+  .mobile-preview-toggle-btn {
+    display: none !important;
+  }
+}
+
+/* Style for mobile screens */
+@media (max-width: 768px) {
+  .desktop-preview-panel {
+    display: none !important;
+  }
+  
+  .mobile-preview-toggle-btn {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 6px;
+  }
+  
+  .mobile-preview-overlay.active {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    background: #000;
+    z-index: 99999; /* Top layer above drawer/modals */
+  }
+
+  .mobile-preview-overlay .preview-header {
+    height: 48px; /* Larger tap targets on mobile header */
+    padding: 0 16px;
+    background: #11131a;
+  }
+}
+
+.preview-resize-gutter {
+  width: 6px;
+  background: var(--bg2);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background 0.2s;
+  z-index: 15;
+}
+.preview-resize-gutter:hover {
+  background: var(--accent);
+}
+
+@media (max-width: 768px) {
+  .preview-resize-gutter {
+    display: none !important;
+  }
+}
+
+body.dragging-preview iframe {
+  pointer-events: none !important;
+}
+
+@media (max-width: 768px) {
+  .btn-text {
+    display: none !important;
+  }
+  .app-bar-actions {
+    gap: 6px !important;
+  }
+  .app-bar-actions .btn {
+    padding: 6px 8px !important;
+    gap: 0 !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-bar-title span:last-child {
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+

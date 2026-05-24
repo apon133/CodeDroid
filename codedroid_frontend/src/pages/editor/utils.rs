@@ -30,6 +30,25 @@ pub fn file_extension(name: &str) -> &str {
     name.rsplit('.').next().unwrap_or("")
 }
 
+pub fn is_project_source_file(filename: &str, lang: &str) -> bool {
+    let ext = file_extension(filename).to_lowercase();
+    match lang.to_lowercase().as_str() {
+        "rust" => ext == "rs",
+        "python" => ext == "py",
+        "go" => ext == "go",
+        "javascript" => ext == "js" || ext == "jsx",
+        "typescript" => ext == "ts" || ext == "tsx",
+        "c" => ext == "c" || ext == "h",
+        "cpp" => ext == "cpp" || ext == "cc" || ext == "h" || ext == "hpp",
+        "java" => ext == "java",
+        "dart" => ext == "dart",
+        "ruby" => ext == "rb",
+        "kotlin" => ext == "kt",
+        "swift" => ext == "swift",
+        _ => false,
+    }
+}
+
 pub fn file_lang_name(name: &str) -> &'static str {
     if name == "Cargo.toml" { return "Rust Config"; }
     if name == "go.mod" { return "Go Config"; }

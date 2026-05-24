@@ -79,7 +79,17 @@ pub fn EditorPage() -> impl IntoView {
         let lang = project.language.clone();
         let diagnostics_list = diagnostics_list.clone();
         let last_diag_req = last_diag_req.clone();
+        let active_tab = active_tab.clone();
         move |code_val: String| {
+            if let Some(ref filename) = active_tab.get_untracked() {
+                if !is_project_source_file(filename, &lang) {
+                    diagnostics_list.set(Vec::new());
+                    return;
+                }
+            } else {
+                diagnostics_list.set(Vec::new());
+                return;
+            }
             let ppath = ppath.clone();
             let lang = lang.clone();
             let req_id = last_diag_req.get_untracked() + 1;
@@ -795,8 +805,14 @@ pub fn EditorPage() -> impl IntoView {
                                             };
                                             selected_idx.set(0);
 
+                                            let is_source = if let Some(ref filename) = active_tab.get_untracked() {
+                                                is_project_source_file(filename, &project_lang_str.get_value())
+                                            } else {
+                                                false
+                                            };
+
                                             let chars: Vec<char> = val.chars().collect();
-                                            if start > 0 && start as usize <= chars.len() {
+                                            if is_source && start > 0 && start as usize <= chars.len() {
                                                 let last_char = chars[(start - 1) as usize];
                                                 if last_char.is_alphanumeric() || last_char == '.' {
                                                     let lang = project_lang_str.get_value();
@@ -831,6 +847,14 @@ pub fn EditorPage() -> impl IntoView {
                                             }
                                             if e.ctrl_key() && e.key() == " " {
                                                 e.prevent_default();
+                                                let is_source = if let Some(ref filename) = active_tab.get_untracked() {
+                                                    is_project_source_file(filename, &project_lang_str.get_value())
+                                                } else {
+                                                    false
+                                                };
+                                                if !is_source {
+                                                    return;
+                                                }
                                                 use wasm_bindgen::JsCast;
                                                 let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
                                                 let val = target.value();

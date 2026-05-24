@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use axum::{Json, http::StatusCode};
 use crate::lsp::{Diagnostic, Range, Position};
 

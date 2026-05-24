@@ -771,6 +771,7 @@ pub fn EditorPage() -> impl IntoView {
                                             let val = target.value();
                                             code.set(val.clone());
                                             dirty.set(true);
+                                            active_error.set(None);
                                              trigger_diagnostics.run(val.clone());
                                             if settings.get_untracked().auto_save { save_current.run(()); }
 
@@ -973,6 +974,7 @@ pub fn EditorPage() -> impl IntoView {
                                             }
                                         }
                                         on:click=move |e: web_sys::MouseEvent| {
+                                            suggestions.set(Vec::new());
                                             use wasm_bindgen::JsCast;
                                             let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
                                             let start = target.selection_start().unwrap().unwrap_or(0);
@@ -998,7 +1000,14 @@ pub fn EditorPage() -> impl IntoView {
                                         }
                                         on:keyup=move |e: web_sys::KeyboardEvent| {
                                             let key = e.key();
-                                            if ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].contains(&key.as_str()) {
+                                            let is_nav = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].contains(&key.as_str());
+                                            if is_nav {
+                                                if ("ArrowUp" == key || "ArrowDown" == key) && !suggestions.get().is_empty() {
+                                                    return;
+                                                }
+                                                if ["ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"].contains(&key.as_str()) {
+                                                    suggestions.set(Vec::new());
+                                                }
                                                 use wasm_bindgen::JsCast;
                                                 let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
                                                 let start = target.selection_start().unwrap().unwrap_or(0);
@@ -1052,6 +1061,9 @@ pub fn EditorPage() -> impl IntoView {
                                         }
                                     })}
                                     {move || {
+                                        if !suggestions.get().is_empty() {
+                                            return view! { "" }.into_any();
+                                        }
                                         if let Some((diag, suggs, loading)) = active_error.get() {
                                             let coords = cursor_coords.get();
                                             let snack = show_snack;

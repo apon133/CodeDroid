@@ -46,6 +46,10 @@ pub fn is_project_source_file(filename: &str, lang: &str) -> bool {
         "ruby" => ext == "rb",
         "kotlin" => ext == "kt",
         "swift" => ext == "swift",
+        "html" => ext == "html" || ext == "htm",
+        "css" => ext == "css",
+        "vue" => ext == "vue",
+        "svelte" => ext == "svelte",
         _ => false,
     }
 }

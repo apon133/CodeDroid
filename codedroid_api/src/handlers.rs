@@ -259,6 +259,10 @@ pub async fn get_completions(Json(payload): Json<CompletionRequest>) -> Json<Com
         "ruby" => format!("file://{}/main.rb", project_dir),
         "kotlin" => format!("file://{}/main.kt", project_dir),
         "swift" => format!("file://{}/main.swift", project_dir),
+        "html" => format!("file://{}/index.html", project_dir),
+        "css" => format!("file://{}/style.css", project_dir),
+        "vue" => format!("file://{}/Component.vue", project_dir),
+        "svelte" => format!("file://{}/Component.svelte", project_dir),
         _ => format!("file://{}/main.txt", project_dir),
     };
 
@@ -274,6 +278,10 @@ pub async fn get_completions(Json(payload): Json<CompletionRequest>) -> Json<Com
         "kotlin" => Some(("kotlin-language-server", vec![])),
         "java" => Some(("jdtls", vec!["-data", &jdtls_data])),
         "swift" => Some(("sourcekit-lsp", vec![])),
+        "html" => Some(("vscode-html-language-server", vec!["--stdio"])),
+        "css" => Some(("vscode-css-language-server", vec!["--stdio"])),
+        "vue" => Some(("vue-language-server", vec!["--stdio"])),
+        "svelte" => Some(("svelteserver", vec!["--stdio"])),
         _ => None,
     };
 
@@ -348,6 +356,10 @@ environment:
                 "kotlin" => { let _ = fs::write(format!("{}/main.kt", project_dir), &payload.code); },
                 "java" => { let _ = fs::write(format!("{}/main.java", project_dir), &payload.code); },
                 "swift" => { let _ = fs::write(format!("{}/main.swift", project_dir), &payload.code); },
+                "html" => { let _ = fs::write(format!("{}/index.html", project_dir), &payload.code); },
+                "css" => { let _ = fs::write(format!("{}/style.css", project_dir), &payload.code); },
+                "vue" => { let _ = fs::write(format!("{}/Component.vue", project_dir), &payload.code); },
+                "svelte" => { let _ = fs::write(format!("{}/Component.svelte", project_dir), &payload.code); },
                 _ => {}
             }
             

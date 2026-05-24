@@ -116,25 +116,27 @@ pub fn NewProjectModal(
 
                     // Framework list
                     <div class=move || if active_tab.get() == 1 { "tab-panel active" } else { "tab-panel" }>
-                        {FRAMEWORKS.iter().map(|(id, name_fw, desc)| {
-                            let id = *id;
-                            let name_fw = *name_fw;
-                            let desc = *desc;
-                            view! {
-                                <div
-                                    class=move || if framework.get() == id { "fw-item selected" } else { "fw-item" }
-                                    on:click=move |_| {
-                                        framework.set(id.to_string());
-                                        lang.set("javascript".to_string());
-                                    }
-                                >
-                                    <div>
-                                        <div class="fw-item-name">{name_fw}</div>
-                                        <div class="fw-item-desc">{desc}</div>
+                        <div class="fw-panel-list">
+                            {FRAMEWORKS.iter().map(|(id, name_fw, desc)| {
+                                let id = *id;
+                                let name_fw = *name_fw;
+                                let desc = *desc;
+                                view! {
+                                    <div
+                                        class=move || if framework.get() == id { "fw-item selected" } else { "fw-item" }
+                                        on:click=move |_| {
+                                            framework.set(id.to_string());
+                                            lang.set("javascript".to_string());
+                                        }
+                                    >
+                                        <div>
+                                            <div class="fw-item-name">{name_fw}</div>
+                                            <div class="fw-item-desc">{desc}</div>
+                                        </div>
                                     </div>
-                                </div>
-                            }
-                        }).collect_view()}
+                                }
+                            }).collect_view()}
+                        </div>
                     </div>
                 </div>
 

@@ -9,7 +9,7 @@ mod handlers;
 mod diagnostics;
 mod error_suggestions;
 
-use handlers::{run_code, stop_process, add_package, sync_file, get_completions, delete_file, copy_file, create_dir};
+use handlers::{run_code, stop_process, add_package, sync_file, get_completions, delete_file, copy_file, create_dir, move_file};
 
 #[tokio::main]
 async fn main() {
@@ -20,6 +20,7 @@ async fn main() {
         .route("/sync_file", post(sync_file))
         .route("/delete_file", post(delete_file))
         .route("/copy_file", post(copy_file))
+        .route("/move_file", post(move_file))
         .route("/create_dir", post(create_dir))
         .route("/complete", post(get_completions))
         .route("/diagnostics", post(diagnostics::get_diagnostics_handler))

@@ -36,11 +36,12 @@ body {
   color: var(--text); 
   font-family: var(--font-ui); 
   height: 100vh; 
+  height: 100dvh; 
   overflow: hidden; 
   background-image: radial-gradient(circle at 50% -20%, rgba(99, 102, 241, 0.15), transparent 60%);
 }
 
-#root { height: 100vh; display: flex; flex-direction: column; }
+#root { height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
 
 /* ── App Bar ── */
 .app-bar {
@@ -145,6 +146,7 @@ body {
   display: flex; 
   flex-direction: column; 
   height: calc(100vh - 60px); 
+  height: calc(100dvh - 60px); 
   max-width: 1000px;
   width: 100%;
   margin: 0 auto;
@@ -438,6 +440,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   overflow: hidden;
   background: var(--bg);
@@ -446,6 +449,7 @@ body {
 .editor-layout { 
   display: flex; 
   height: calc(100vh - 60px); 
+  height: calc(100dvh - 60px); 
   width: 100%;
   overflow: hidden; 
   flex: 1; 
@@ -734,6 +738,7 @@ body {
   margin: 0 auto;
   overflow-y: auto; 
   height: calc(100vh - 60px); 
+  height: calc(100dvh - 60px); 
 }
 .settings-section { margin-bottom: 40px; }
 .settings-section-title { 
@@ -824,7 +829,6 @@ select.input { width: auto; min-width: 160px; }
 
 /* ── Responsive ── */
 @media (max-width: 700px) {
-  .file-tree-panel { display: none; }
   .lang-grid { grid-template-columns: repeat(2, 1fr); }
   .home { padding: 16px; }
 }
@@ -1015,6 +1019,90 @@ select.input { width: auto; min-width: 160px; }
   
   .editor-layout {
     position: relative;
+  }
+
+  /* Suggestions Overlay */
+  .suggestions-floating {
+    min-width: 240px;
+    max-width: calc(100vw - 32px);
+  }
+  .suggestion-docs {
+    display: none !important;
+  }
+
+  /* Tab Close Button Visibility */
+  .tab-close {
+    opacity: 0.6;
+  }
+
+  /* Project List Delete Button and spacing */
+  .project-card {
+    padding: 12px 14px;
+    gap: 12px;
+  }
+  .project-card .btn-icon {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+
+  /* Compact line numbers and container for code space on mobile */
+  .line-numbers {
+    width: 40px !important;
+    padding: 12px 4px !important;
+  }
+  .code-layer {
+    padding: 12px 8px !important;
+  }
+
+  /* Bottom Panel height */
+  .bottom-panel {
+    height: 180px !important;
+  }
+}
+
+/* Extra small mobile styles */
+@media (max-width: 480px) {
+  .app-bar {
+    padding: 0 12px;
+  }
+  .app-bar-title {
+    font-size: 16px;
+  }
+  .home {
+    padding: 12px;
+  }
+  .settings {
+    padding: 16px 12px;
+  }
+  .setting-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 0;
+  }
+  .setting-row > div {
+    width: 100%;
+  }
+  .slider-control, select.input, .toggle, .setting-row input[type="url"] {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .modal-overlay {
+    padding: 10px;
+  }
+  .modal {
+    max-height: 95vh;
+    max-height: 95dvh;
+  }
+  .modal-header {
+    padding: 16px 18px 0;
+    font-size: 18px;
+  }
+  .modal-body {
+    padding: 16px 18px;
+  }
+  .modal-footer {
+    padding: 12px 18px;
   }
 }
 

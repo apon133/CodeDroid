@@ -137,6 +137,17 @@ pub async fn copy_file_api(src_path: &str, dest_path: &str, is_dir: bool) -> Res
     Ok(())
 }
 
+pub async fn move_file_api(src_path: &str, dest_path: &str) -> Result<(), String> {
+    let body = json!({ "src_path": src_path, "dest_path": dest_path });
+    Request::post(&format!("{}/move_file", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub async fn create_dir_api(path: &str) -> Result<(), String> {
     let body = json!({ "path": path });
     Request::post(&format!("{}/create_dir", get_api_url()))

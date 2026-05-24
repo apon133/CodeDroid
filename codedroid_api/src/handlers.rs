@@ -3,7 +3,8 @@ use std::fs;
 use std::process::Command;
 use crate::models::{
     CodeRequest, CodeResponse, StopRequest, PackageRequest, SyncRequest,
-    CompletionRequest, CompletionResponse, DeleteRequest, CopyRequest, CreateDirRequest
+    CompletionRequest, CompletionResponse, DeleteRequest, CopyRequest, CreateDirRequest,
+    MoveRequest
 };
 use crate::utils::resolve_project_dir;
 use crate::runner::*;
@@ -499,6 +500,31 @@ pub async fn create_dir(Json(payload): Json<CreateDirRequest>) -> Json<CodeRespo
         Err(e) => Json(CodeResponse {
             output: "".to_string(),
             error: format!("Failed to create directory: {}", e),
+            pid: None,
+            url: None,
+        }),
+    }
+}
+
+pub async fn move_file(Json(payload): Json<MoveRequest>) -> Json<CodeResponse> {
+    let src = resolve_project_dir(&payload.src_path);
+    let dest = resolve_project_dir(&payload.dest_path);
+    println!("🚚 Moving/renaming from {} to {}", src, dest);
+
+    if let Some(parent) = std::path::Path::new(&dest).parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    match fs::rename(&src, &dest) {
+        Ok(_) => Json(CodeResponse {
+            output: "Moved successfully".to_string(),
+            error: "".to_string(),
+            pid: None,
+            url: None,
+        }),
+        Err(e) => Json(CodeResponse {
+            output: "".to_string(),
+            error: format!("Failed to move: {}", e),
             pid: None,
             url: None,
         }),

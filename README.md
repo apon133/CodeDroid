@@ -32,13 +32,17 @@ It pairs with an integrated **Leptos-based Web IDE** (compiled to WASM) that del
 
 ## ✨ Features
 
-- **Real execution** — runs your code using actual system compilers (`rustc`, `gcc`, `python3`, `go`). Real output, real errors.
-- **LSP-powered IntelliSense** — real-time code completions, error highlighting, and hover documentation via language servers running on-device.
-- **Full package manager support** — `pip install`, `cargo add`, `npm install` — dependency installation handled automatically before execution.
-- **Web project support** — detects the dev server URL from output logs for instant React, Vue, and Vite previews in the built-in browser.
-- **13+ supported languages** — Python, Rust, Go, JavaScript/TypeScript, C/C++, Dart, Java, Kotlin, Swift, C#, Ruby, and more.
-- **Works offline** — the API server runs entirely on your device.
-- **Cross-platform** — Android (Termux), Linux, macOS, Windows.
+- **Mobile-First Responsive Layout** — Optimized interface for touch devices, viewport overlays, and smaller screen form factors (320px–768px). Features a slide-out file explorer overlay drawer, auto-collapsing sidebar upon opening files, persistent touch targets for closing tabs/deleting projects, and layouts utilizing CSS `100dvh` to handle virtual keyboards elegantly.
+- **Real-Time Execution Engine** — Runs code using actual system compilers (`rustc`, `gcc`, `python3`, `go`, `clang`, etc.). Real native execution with live output streams, stdout/stderr capture, and run process termination controls (PID-based).
+- **LSP-powered IntelliSense** — Floating completions, code diagnostics, hover documentation, and error overlays via system language servers (`rust-analyzer`, `typescript-language-server`, `gopls`, `clangd`, `pylsp`, etc.) running on-device. Optimized to auto-hide extra details panels on mobile screens to prevent viewport overflow.
+- **Save-Triggered Updates** — Supports `textDocument/didSave` notifications to automatically sync files to the local disk and instantly refresh compilation diagnostics.
+- **Comprehensive Web Technology Support** — Native LSP mapping and server initialization for web languages including HTML, CSS, JavaScript, TypeScript, JSX, TSX, Svelte, Vue, and Angular.
+- **Full Package Manager Integration** — Auto-detects and installs dependencies using `npm`, `pip3`, `cargo`, `pub`, `go get`, and custom package managers before run execution.
+- **Live Web Preview & Refresh** — Auto-detects dev server URLs (e.g. Vite, Webpack) from stdout logs, featuring an in-editor browser preview with manual/automatic refresh, and remote/iOS client accessibility via local network IP resolution.
+- **Standard Project Scaffolding Templates** — Bootstrap projects with pre-configured modern templates for React (Vite), Vue (Vite), Svelte (Vite), Next.js (App Router), Remix, and Angular.
+- **Advanced File Management & Sidebar Drawer** — Dynamic side drawer directory tree viewer with navigation, context-aware file actions (create, delete, copy, paste), and full **Rename & Move** support for both files and directories with LocalStorage synchronization.
+- **Bracket Matching & Typing Aids** — Automatic matching bracket insertion and paired deletion helpers in the Web IDE editor.
+- **Highly Configurable & Offline** — Works fully offline with local-first storage sync. Easily configure custom backend API endpoints with a built-in server connection test utility.
 
 ---
 
@@ -135,6 +139,20 @@ Kills a long-running process (e.g., a dev server) by PID.
 | Web IDE | [Leptos (WASM)](./codedroid_frontend/README.md) |
 | IntelliSense | LSP (Language Server Protocol) |
 | Runtime | Termux (Android), Linux, macOS, Windows |
+
+---
+
+## 🔮 Upcoming Features / Roadmap
+
+We are constantly improving CodeDroid to deliver a desktop-grade IDE experience on mobile. Here are the features planned for upcoming releases:
+
+- **Browser-Only Mode (Offline-First PWA)**: Enable a lightweight execution fallback using WASM-based compilers (e.g., WebContainers or in-browser Python/JS runtimes) so you can run simple code snippets without setting up a backend.
+- **Local File System Access (OPFS / File System Access API)**: Allow the Web IDE to open, modify, and save directories directly on your device's filesystem without needing the backend bridge.
+- **Advanced LSP Actions**: Add support for Go to Definition, Find References, and Rename refactoring directly inside the editor UI.
+- **Git & GitHub Integration**: Integrated source control to clone repositories, track changes, view diffs, make commits, and push/pull directly from the editor.
+- **Interactive Terminal Emulator**: A fully interactive Web Terminal component (via `xterm.js`) connected to your device's shell (e.g., Termux bash/zsh), rather than just viewing static execution logs.
+- **Collaboration & Pair Programming**: Connect multiple frontend Web IDEs to a single backend session for real-time remote collaboration.
+- **Custom Themes & Extension Support**: Add VS Code-compatible custom themes and editor keybindings (such as Vim/Emacs keymaps).
 
 ---
 

@@ -17,12 +17,15 @@ pub fn FileTree(
     copy_entry: Callback<FileEntry>,
     copied_item: Signal<Option<FileEntry>>,
     paste_entry: Callback<Option<String>>,
+    move_entry: Callback<(FileEntry, String)>,
     sidebar_open: Signal<bool>,
     toggle_sidebar: Callback<()>,
 ) -> impl IntoView {
     let (show_new_file, set_show_new_file) = create_signal(false);
     let (show_new_folder, set_show_new_folder) = create_signal(false);
     let (new_name, set_new_name) = create_signal(String::new());
+    let (show_rename, set_show_rename) = create_signal(Option::<FileEntry>::None);
+    let (rename_name, set_rename_name) = create_signal(String::new());
 
     let (press_id, set_press_id) = create_signal(0i32);
     let (collapsed_dirs, set_collapsed_dirs) = create_signal(std::collections::HashSet::<String>::new());
@@ -200,6 +203,57 @@ pub fn FileTree(
                 }
             })}
 
+            {move || show_rename.get().map(|entry| {
+                let entry_kd = entry.clone();
+                let entry_click = entry.clone();
+                view! {
+                    <div style="padding: 10px 14px; display:flex; flex-direction:column; gap:8px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.02)">
+                        <div style="font-size:10px; color:var(--text2)">
+                            "Rename / Move: " <strong style="color: var(--accent2);">{entry.name.clone()}</strong>
+                        </div>
+                        <input
+                            class="input"
+                            style="font-size:12px; padding:6px 10px"
+                            type="text"
+                            placeholder="New path (e.g. src/new_name.rs)..."
+                            prop:value=move || rename_name.get()
+                            on:input=move |e| set_rename_name.set(event_target_value(&e))
+                            on:keydown=move |e: KeyboardEvent| {
+                                if e.key() == "Enter" {
+                                    let val = rename_name.get();
+                                    if !val.trim().is_empty() {
+                                        move_entry.run((entry_kd.clone(), val));
+                                        set_show_rename.set(None);
+                                        set_rename_name.set(String::new());
+                                    }
+                                } else if e.key() == "Escape" {
+                                    set_show_rename.set(None);
+                                    set_rename_name.set(String::new());
+                                }
+                            }
+                        />
+                        <div style="display:flex; gap:6px; justify-content:flex-end">
+                            <button class="btn" style="padding:4px 8px; font-size:11px; background:transparent; border:1px solid var(--border); color:var(--text2); box-shadow:none"
+                                on:click=move |_| {
+                                    set_show_rename.set(None);
+                                    set_rename_name.set(String::new());
+                                }
+                            >"Cancel"</button>
+                            <button class="btn btn-primary" style="padding:4px 8px; font-size:11px"
+                                on:click=move |_| {
+                                    let val = rename_name.get();
+                                    if !val.trim().is_empty() {
+                                        move_entry.run((entry_click.clone(), val));
+                                        set_show_rename.set(None);
+                                        set_rename_name.set(String::new());
+                                    }
+                                }
+                            >"Rename / Move"</button>
+                        </div>
+                    </div>
+                }
+            })}
+
             <div style="flex: 1; overflow-y: auto;">
                 {move || {
                     let collapsed = collapsed_dirs.get();
@@ -218,6 +272,7 @@ pub fn FileTree(
                             let f_click = f.clone();
                             let f_copy_btn = f.clone();
                             let f_delete_btn = f.clone();
+                            let f_rename_btn = f.clone();
                             
                             let depth = path_depth(&f.name);
                             let indent = depth * 16;
@@ -316,6 +371,22 @@ pub fn FileTree(
                                                 })
                                             }
                                         }
+                                        <button 
+                                            class="btn-tree-action" 
+                                            style="background:transparent; border:none; color:var(--text2); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center; opacity: 0.6;"
+                                            title="Rename/Move"
+                                            on:click=move |e| {
+                                                e.stop_propagation();
+                                                let rename_target = f_rename_btn.clone();
+                                                let path = rename_target.name.clone();
+                                                set_show_rename.set(Some(rename_target));
+                                                set_rename_name.set(path);
+                                                set_show_new_file.set(false);
+                                                set_show_new_folder.set(false);
+                                            }
+                                        >
+                                            <LucideIcon name="edit" size="13" />
+                                        </button>
                                         <button 
                                             class="btn-tree-action" 
                                             style="background:transparent; border:none; color:var(--text2); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center; opacity: 0.6;"

@@ -63,6 +63,12 @@ pub struct CopyRequest {
 }
 
 #[derive(Deserialize)]
+pub struct MoveRequest {
+    pub src_path: String,
+    pub dest_path: String,
+}
+
+#[derive(Deserialize)]
 pub struct CreateDirRequest {
     pub path: String,
 }

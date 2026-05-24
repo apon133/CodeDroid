@@ -26,6 +26,7 @@ pub struct Settings {
     pub word_wrap: bool,
     pub auto_save: bool,
     pub tab_size: usize,
+    pub api_url: String,
 }
 
 impl Default for Settings {
@@ -37,6 +38,7 @@ impl Default for Settings {
             word_wrap: false,
             auto_save: true,
             tab_size: 4,
+            api_url: "http://localhost:3000".to_string(),
         }
     }
 }

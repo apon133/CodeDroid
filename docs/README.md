@@ -2,6 +2,8 @@
 
 Welcome to the CodeDroid documentation! Below you'll find setup guides for every supported language and framework — each with Termux installation steps and LSP auto-suggestion configuration.
 
+> 📱 **Want to use CodeDroid on iPhone or iPad?** See the [Network Access Guide](NETWORK_ACCESS.md) to connect any device over local WiFi.
+
 ---
 
 ## 🌍 Web Technologies

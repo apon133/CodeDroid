@@ -1,4 +1,4 @@
-use axum::{routing::post, Router};
+use axum::{routing::{post, get}, Router};
 use tower_http::cors::CorsLayer;
 
 mod lsp;
@@ -24,6 +24,7 @@ async fn main() {
         .route("/complete", post(get_completions))
         .route("/diagnostics", post(diagnostics::get_diagnostics_handler))
         .route("/error_suggestions", post(error_suggestions::get_error_suggestions_handler))
+        .route("/ping", get(|| async { "pong" }))
         .layer(CorsLayer::permissive());
 
     let addr = "0.0.0.0:3000";

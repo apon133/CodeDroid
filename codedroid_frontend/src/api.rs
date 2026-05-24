@@ -1,8 +1,21 @@
+pub const DEFAULT_API_URL: &str = "http://localhost:3000";
+
+/// Returns the backend API URL — reads from LocalStorage settings if set,
+/// otherwise falls back to DEFAULT_API_URL (localhost:3000).
+pub fn get_api_url() -> String {
+    use gloo_storage::{LocalStorage, Storage};
+    if let Ok(settings) = LocalStorage::get::<crate::models::Settings>("codedroid_settings") {
+        let url = settings.api_url.trim().to_string();
+        if !url.is_empty() {
+            return url;
+        }
+    }
+    DEFAULT_API_URL.to_string()
+}
+
 use gloo_net::http::Request;
 use serde_json::json;
 use crate::models::RunResponse;
-
-pub const API_URL: &str = "http://localhost:3000";
 
 pub async fn run_code(
     code: &str,
@@ -17,7 +30,7 @@ pub async fn run_code(
         "cargo_toml": cargo_toml,
     });
 
-    Request::post(&format!("{}/run", API_URL))
+    Request::post(&format!("{}/run", get_api_url()))
         .json(&body)
         .map_err(|e| e.to_string())?
         .send()
@@ -30,7 +43,7 @@ pub async fn run_code(
 
 pub async fn stop_process(pid: u32) -> Result<RunResponse, String> {
     let body = json!({ "pid": pid });
-    Request::post(&format!("{}/stop", API_URL))
+    Request::post(&format!("{}/stop", get_api_url()))
         .json(&body)
         .map_err(|e| e.to_string())?
         .send()
@@ -43,7 +56,7 @@ pub async fn stop_process(pid: u32) -> Result<RunResponse, String> {
 
 pub async fn save_file_api(path: &str, content: &str) -> Result<(), String> {
     let body = json!({ "path": path, "content": content });
-    Request::post(&format!("{}/sync_file", API_URL))
+    Request::post(&format!("{}/sync_file", get_api_url()))
         .json(&body)
         .map_err(|e| e.to_string())?
         .send()
@@ -58,7 +71,7 @@ pub async fn add_package(package: &str, language: &str, project_path: &str) -> R
         "language": language,
         "project_path": project_path,
     });
-    Request::post(&format!("{}/add_package", API_URL))
+    Request::post(&format!("{}/add_package", get_api_url()))
         .json(&body)
         .map_err(|e| e.to_string())?
         .send()
@@ -91,7 +104,7 @@ pub async fn get_completions_api(code: &str, language: &str, project_path: &str,
         "line": line,
         "character": character
     });
-    Request::post(&format!("{}/complete", API_URL))
+    Request::post(&format!("{}/complete", get_api_url()))
         .json(&body)
         .map_err(|e| e.to_string())?
         .send()
@@ -104,7 +117,7 @@ pub async fn get_completions_api(code: &str, language: &str, project_path: &str,
 
 pub async fn delete_file_api(path: &str, is_dir: bool) -> Result<(), String> {
     let body = json!({ "path": path, "is_dir": is_dir });
-    Request::post(&format!("{}/delete_file", API_URL))
+    Request::post(&format!("{}/delete_file", get_api_url()))
         .json(&body)
         .map_err(|e| e.to_string())?
         .send()
@@ -115,7 +128,7 @@ pub async fn delete_file_api(path: &str, is_dir: bool) -> Result<(), String> {
 
 pub async fn copy_file_api(src_path: &str, dest_path: &str, is_dir: bool) -> Result<(), String> {
     let body = json!({ "src_path": src_path, "dest_path": dest_path, "is_dir": is_dir });
-    Request::post(&format!("{}/copy_file", API_URL))
+    Request::post(&format!("{}/copy_file", get_api_url()))
         .json(&body)
         .map_err(|e| e.to_string())?
         .send()
@@ -126,7 +139,7 @@ pub async fn copy_file_api(src_path: &str, dest_path: &str, is_dir: bool) -> Res
 
 pub async fn create_dir_api(path: &str) -> Result<(), String> {
     let body = json!({ "path": path });
-    Request::post(&format!("{}/create_dir", API_URL))
+    Request::post(&format!("{}/create_dir", get_api_url()))
         .json(&body)
         .map_err(|e| e.to_string())?
         .send()
@@ -167,7 +180,7 @@ pub async fn get_diagnostics_api(code: &str, language: &str, project_path: &str)
         "language": language,
         "project_path": project_path,
     });
-    Request::post(&format!("{}/diagnostics", API_URL))
+    Request::post(&format!("{}/diagnostics", get_api_url()))
         .json(&body)
         .map_err(|e| e.to_string())?
         .send()
@@ -201,7 +214,7 @@ pub async fn get_error_suggestions_api(
         "language": language,
         "diagnostic": diagnostic,
     });
-    Request::post(&format!("{}/error_suggestions", API_URL))
+    Request::post(&format!("{}/error_suggestions", get_api_url()))
         .json(&body)
         .map_err(|e| e.to_string())?
         .send()

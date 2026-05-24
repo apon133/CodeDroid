@@ -138,10 +138,67 @@ pub fn SettingsPage() -> impl IntoView {
                 </div>
 
                 <div class="settings-section">
+                    <div class="settings-section-title">"🌐 Backend Server"</div>
+
+                    <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:10px">
+                        <div>
+                            <div class="setting-label">"API Server URL"</div>
+                            <div class="setting-desc">"Set a custom backend URL to use a remote server (e.g. Android on local WiFi). Leave empty to use default."</div>
+                        </div>
+                        <div style="display:flex;gap:8px;width:100%;align-items:center">
+                            <input
+                                type="url"
+                                class="input"
+                                style="flex:1;font-size:13px"
+                                placeholder="http://localhost:3000"
+                                prop:value=move || settings.get().api_url.clone()
+                                on:input=move |e: Event| {
+                                    settings.update(|s| s.api_url = event_target_value(&e));
+                                    save();
+                                }
+                            />
+                            <button
+                                class="btn-secondary"
+                                style="font-size:12px;padding:6px 12px;white-space:nowrap"
+                                on:click=move |_| {
+                                    let url = settings.get_untracked().api_url.clone();
+                                    let url = if url.trim().is_empty() {
+                                        crate::api::DEFAULT_API_URL.to_string()
+                                    } else {
+                                        url
+                                    };
+                                    leptos::task::spawn_local(async move {
+                                        let test_url = format!("{}/ping", url);
+                                        let win = web_sys::window().unwrap();
+                                        match gloo_net::http::Request::get(&test_url).send().await {
+                                            Ok(r) if r.ok() => {
+                                                let _ = win.alert_with_message("✅ Connected! Backend is reachable.");
+                                            }
+                                            _ => {
+                                                let _ = win.alert_with_message("❌ Cannot reach backend. Check URL and make sure the server is running.");
+                                            }
+                                        }
+                                    });
+                                }
+                            >
+                                "Test"
+                            </button>
+                        </div>
+                        <div style="font-size:11px;color:var(--text2)">
+                            "Example: " <code style="color:var(--accent)">"http://192.168.1.100:3000"</code>
+                            " (Android phone IP on same WiFi)"
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
                     <div class="settings-section-title">"About"</div>
                     <div style="color:var(--text2);font-size:13px;line-height:1.8">
                         <p>"🦀 "<strong>"CodeDroid IDE"</strong>" — Built with Rust + Leptos"</p>
-                        <p>"Backend: Axum API running on "<code style="color:var(--accent)">"http://localhost:3000"</code></p>
+                        <p>"Active backend: "<code style="color:var(--accent)">{move || {
+                            let url = settings.get().api_url;
+                            if url.trim().is_empty() { crate::api::DEFAULT_API_URL.to_string() } else { url }
+                        }}</code></p>
                         <p>"Frontend: Leptos (WASM) compiled with Trunk"</p>
                     </div>
                 </div>

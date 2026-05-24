@@ -7,6 +7,8 @@ pub struct Project {
     pub language: String,
     pub path: String,
     pub created_at: u64,
+    #[serde(default)]
+    pub framework: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -86,5 +88,56 @@ pub fn lang_color(lang: &str) -> (&'static str, &'static str) {
         "csharp"     => ("#239120", "rgba(35,145,32,.15)"),
         "ruby"       => ("#CC342D", "rgba(204,52,45,.15)"),
         _            => ("#007ACC", "rgba(0,122,204,.15)"),
+    }
+}
+
+pub fn project_icon(lang: &str, framework: &str) -> &'static str {
+    if !framework.is_empty() && framework != "none" {
+        match framework {
+            "react" => "/assets/icons/react.svg",
+            "vue" => "/assets/icons/vue.svg",
+            "svelte" => "/assets/icons/svelte.svg",
+            "angular" => "/assets/icons/angular.svg",
+            "nextjs" => "/assets/icons/nextjs.svg",
+            "remix" => "/assets/icons/react.svg",
+            "vanilla" => "/assets/icons/javascript.svg",
+            _ => "/assets/icons/generic.svg",
+        }
+    } else {
+        lang_icon(lang)
+    }
+}
+
+pub fn project_badge_info(lang: &str, framework: &str) -> (String, &'static str, &'static str) {
+    if !framework.is_empty() && framework != "none" {
+        match framework {
+            "react" => ("React".to_string(), "#61DAFB", "rgba(97,218,251,.15)"),
+            "vue" => ("Vue".to_string(), "#4FC08D", "rgba(79,192,141,.15)"),
+            "svelte" => ("Svelte".to_string(), "#FF3E00", "rgba(255,62,0,.15)"),
+            "angular" => ("Angular".to_string(), "#DD0031", "rgba(221,0,49,.15)"),
+            "nextjs" => ("Next.js".to_string(), "#FFFFFF", "rgba(255,255,255,.15)"),
+            "remix" => ("Remix".to_string(), "#E3F2FD", "rgba(227,242,253,.15)"),
+            "vanilla" => ("Vanilla JS".to_string(), "#F7DF1E", "rgba(247,223,30,.15)"),
+            _ => (framework.to_uppercase(), "#007ACC", "rgba(0,122,204,.15)"),
+        }
+    } else {
+        let (color, bg) = lang_color(lang);
+        let name = match lang {
+            "rust" => "Rust",
+            "go" => "Go",
+            "python" => "Python",
+            "java" => "Java",
+            "dart" => "Dart",
+            "javascript" => "JavaScript",
+            "typescript" => "TypeScript",
+            "kotlin" => "Kotlin",
+            "swift" => "Swift",
+            "cpp" => "C++",
+            "c" => "C",
+            "csharp" => "C#",
+            "ruby" => "Ruby",
+            _ => lang,
+        };
+        (name.to_string(), color, bg)
     }
 }

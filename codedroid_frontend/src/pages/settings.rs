@@ -3,6 +3,7 @@ use web_sys::Event;
 use crate::models::Settings;
 use crate::store;
 use crate::components::app_bar::AppBar;
+use crate::components::icon::LucideIcon;
 
 #[component]
 pub fn SettingsPage() -> impl IntoView {
@@ -158,8 +159,8 @@ pub fn SettingsPage() -> impl IntoView {
                                 }
                             />
                             <button
-                                class="btn-secondary"
-                                style="font-size:12px;padding:6px 12px;white-space:nowrap"
+                                class="btn btn-secondary"
+                                style="font-size:12px;padding:6px 12px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px"
                                 on:click=move |_| {
                                     let url = settings.get_untracked().api_url.clone();
                                     let url = if url.trim().is_empty() {
@@ -181,7 +182,8 @@ pub fn SettingsPage() -> impl IntoView {
                                     });
                                 }
                             >
-                                "Test"
+                                <LucideIcon name="globe" size="14" />
+                                "Test Connection"
                             </button>
                         </div>
                         <div style="font-size:11px;color:var(--text2)">

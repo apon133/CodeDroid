@@ -3,7 +3,7 @@ use leptos_router::hooks::use_navigate;
 use web_sys::MouseEvent;
 use uuid::Uuid;
 
-use crate::models::{Project, lang_icon, lang_color};
+use crate::models::Project;
 use crate::store;
 use crate::components::app_bar::AppBar;
 use crate::components::snackbar::Snackbar;
@@ -135,9 +135,10 @@ pub fn HomePage() -> impl IntoView {
     let projects: RwSignal<Vec<Project>> = RwSignal::new(store::load_projects());
     let show_modal = RwSignal::new(false);
     let snack_msg: RwSignal<Option<String>> = RwSignal::new(None);
+    let confirm_delete: RwSignal<Option<Project>> = RwSignal::new(None);
 
     // Show snackbar for 3s then hide
-    let show_snack = move |msg: &str| {
+    let _show_snack = move |msg: &str| {
         let msg = msg.to_string();
         snack_msg.set(Some(msg));
         let snack = snack_msg;
@@ -154,6 +155,7 @@ pub fn HomePage() -> impl IntoView {
                 language: result.lang.clone(),
                 path: path.clone(),
                 created_at: js_sys::Date::now() as u64,
+                framework: result.framework.clone(),
             };
 
             // Store default files in localStorage
@@ -177,17 +179,6 @@ pub fn HomePage() -> impl IntoView {
     view! {
         <div>
             <AppBar title="CodeDroid".to_string()>
-                <button class="btn btn-icon" title="Copy API Code"
-                    on:click=move |_| {
-                        let window = web_sys::window().unwrap();
-                        let _ = window.navigator().clipboard().write_text(
-                            "curl https://github.com/your/codedroid_api"
-                        );
-                        show_snack("API code copied!");
-                    }
-                >
-                    <LucideIcon name="copy" size="20" />
-                </button>
                 <a href="/settings" style="text-decoration:none">
                     <button class="btn btn-icon" title="Settings">
                         <LucideIcon name="settings" size="20" />
@@ -212,32 +203,32 @@ pub fn HomePage() -> impl IntoView {
                             <div class="projects-list">
                                 {projs.into_iter().map(|p| {
                                     let pid = p.id.clone();
-                                    let pid2 = p.id.clone();
                                     let nav = navigate.clone();
-                                    let (color, bg) = lang_color(&p.language);
+                                    let icon_url = crate::models::project_icon(&p.language, &p.framework);
+                                    let (badge_text, color, bg) = crate::models::project_badge_info(&p.language, &p.framework);
                                     let display_path = format_project_path(&p.path);
-                                    let lang_name = p.language.clone();
-                                    let lang_name_alt = p.language.clone();
+                                    let alt_text = badge_text.clone();
+                                    let p_clone = p.clone();
                                     view! {
                                         <div class="project-card"
                                             on:click=move |_| nav(&format!("/editor/{}", pid), Default::default())
                                         >
                                             <div class="project-icon">
-                                                <img src=lang_icon(&lang_name) class="lang-icon-img" alt=lang_name_alt />
+                                                <img src=icon_url class="lang-icon-img" alt=alt_text />
                                             </div>
                                             <div class="project-info">
                                                 <div class="project-name">{p.name.clone()}</div>
                                                 <div class="project-path">{display_path.clone()}</div>
                                             </div>
                                             <span class="lang-badge" style=format!("color:{color};border-color:{color};background:{bg}")>
-                                                {p.language.to_uppercase()}
+                                                {badge_text}
                                             </span>
                                             <button class="btn btn-icon"
                                                 style="color:#ff453a;font-size:16px;display:flex;align-items:center;justify-content:center"
                                                 title="Delete"
                                                 on:click=move |e: MouseEvent| {
                                                     e.stop_propagation();
-                                                    store::delete_project(&projects, &pid2);
+                                                    confirm_delete.set(Some(p_clone.clone()));
                                                 }
                                             >
                                                 <LucideIcon name="trash" size="18" />
@@ -257,6 +248,47 @@ pub fn HomePage() -> impl IntoView {
 
             {move || show_modal.get().then(|| view! {
                 <NewProjectModal on_create=on_create on_cancel=on_cancel />
+            })}
+
+            {move || confirm_delete.get().map(|proj| {
+                let proj2 = proj.clone();
+                let projects_clone = projects.clone();
+                let close = move |_: MouseEvent| confirm_delete.set(None);
+                let delete = move |_: MouseEvent| {
+                    store::delete_project(&projects_clone, &proj2.id);
+                    confirm_delete.set(None);
+                };
+                view! {
+                    <div class="modal-overlay" on:click=close>
+                        <div class="modal" on:click=move |e: MouseEvent| e.stop_propagation()
+                            style="max-width:400px;text-align:center;padding:24px"
+                        >
+                            <div style="font-size:36px;color:#ff453a;margin-bottom:16px">
+                                <LucideIcon name="alert-triangle" size="48" />
+                            </div>
+                            <div class="modal-header" style="justify-content:center;border-bottom:none;padding:0;margin-bottom:12px;font-size:20px">
+                                "Delete Project"
+                            </div>
+                            <div style="color:var(--text2);font-size:14px;line-height:1.6;margin-bottom:24px">
+                                "Are you sure you want to delete project "
+                                <strong style="color:var(--text1)">{proj.name.clone()}</strong>
+                                "? This action cannot be undone."
+                            </div>
+                            <div class="modal-footer" style="border-top:none;padding:0;justify-content:center;gap:12px">
+                                <button class="btn" on:click=close
+                                    style="background:transparent;color:var(--text2);border:1px solid var(--border);padding:10px 20px"
+                                >
+                                    "Cancel"
+                                </button>
+                                <button class="btn btn-primary" on:click=delete
+                                    style="background:#ff453a;color:#ffffff;border:none;padding:10px 20px"
+                                >
+                                    "Delete"
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                }
             })}
 
             <Snackbar message=snack_msg.read_only() />

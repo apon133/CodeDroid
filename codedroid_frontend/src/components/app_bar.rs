@@ -24,7 +24,9 @@ pub fn AppBar(
                     }.into_any()
                 } else {
                     view! {
-                        <span class="logo">"⟨/"</span>
+                        <span class="logo">
+                            <LucideIcon name="code" size="22" />
+                        </span>
                     }.into_any()
                 }}
                 <span>{title}</span>

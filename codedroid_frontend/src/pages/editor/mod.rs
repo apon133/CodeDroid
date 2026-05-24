@@ -1396,9 +1396,9 @@ pub fn EditorPage() -> impl IntoView {
                                     <LucideIcon name="globe" size="14" />
                                     "Live Web Preview"
                                 </span>
-                                <button class="btn btn-xs" style="padding:2px 8px; font-size:11px; height:24px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); cursor:pointer;"
+                                <button class="btn btn-xs" style="padding:2px 8px; font-size:11px; height:24px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); cursor:pointer; display:inline-flex; align-items:center; gap:4px;"
                                     on:click=move |_| refresh_key.update(|k| *k += 1)>
-                                    "🔄 Refresh"
+                                    <LucideIcon name="refresh" size="12" /> "Refresh"
                                 </button>
                             </div>
                             <iframe class="preview-frame" src=final_url style="flex:1; border:none; background:#fff; width:100%; height:100%;" />
@@ -1433,9 +1433,9 @@ pub fn EditorPage() -> impl IntoView {
                                     <LucideIcon name="arrow-left" size="20" />
                                 </button>
                                 <span style="font-weight: 600; color: #fff; font-family: var(--font-ui); font-size: 14px;">"Web Preview"</span>
-                                <button class="btn btn-xs" style="padding:4px 10px; font-size:11px; height:26px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); cursor:pointer;"
+                                <button class="btn btn-xs" style="padding:4px 10px; font-size:11px; height:26px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); cursor:pointer; display:inline-flex; align-items:center; gap:4px;"
                                     on:click=move |_| refresh_key.update(|k| *k += 1)>
-                                    "🔄 Refresh"
+                                    <LucideIcon name="refresh" size="12" /> "Refresh"
                                 </button>
                             </div>
                             <iframe class="preview-frame" src=final_url style="flex:1; border:none; background:#fff; width:100%; height:100%;" />

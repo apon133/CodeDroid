@@ -535,7 +535,7 @@ pub fn apply_replacement(code: &str, range: &crate::api::Range, replacement: &st
 pub fn BottomPanel(
     bottom_tab: RwSignal<usize>,
     preview_url: Signal<Option<String>>,
-    output: Signal<String>,
+    output: RwSignal<String>,
     is_error: Signal<bool>,
     show_snack: Callback<String>,
     diagnostics_list: Signal<Vec<crate::api::Diagnostic>>,
@@ -578,10 +578,16 @@ pub fn BottomPanel(
                             let _ = w.navigator().clipboard().write_text(&output.get_untracked());
                             show_snack.run("Output copied!".to_string());
                         }
-                    >"📋"</button>
-                    <button class="btn btn-icon" style="font-size:12px" title="Clear"
-                        on:click=move |_| { /* This logic should probably be passed in if output is ReadOnly */ }
-                    >"🗑"</button>
+                    >
+                        <LucideIcon name="copy" size="16" />
+                    </button>
+                    <button class="btn btn-icon" style="font-size:12px" title="Clear terminal"
+                        on:click=move |_| {
+                            output.set(String::new());
+                        }
+                    >
+                        <LucideIcon name="trash" size="16" />
+                    </button>
                     </>
                 })}
             </div>

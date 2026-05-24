@@ -1,6 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500;600&display=swap');
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; transition: none !important; animation: none !important; }
 
 :root {
   --bg: #090d16;
@@ -68,11 +68,11 @@ body {
   letter-spacing: -0.5px;
 }
 .app-bar-title span.logo { 
-  background: var(--accent-gradient);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  font-weight: 800;
+  color: var(--accent2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 0 4px var(--accent-glow));
 }
 .app-bar-actions { display: flex; gap: 10px; align-items: center; }
 
@@ -120,6 +120,16 @@ body {
 .btn-primary:hover { 
   box-shadow: 0 0 15px var(--accent-glow);
   filter: brightness(1.1);
+}
+.btn-secondary { 
+  background: var(--bg3); 
+  color: var(--text); 
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover { 
+  background: rgba(255, 255, 255, 0.06); 
+  border-color: rgba(255, 255, 255, 0.15); 
+  color: #fff;
 }
 .btn-success { 
   background: linear-gradient(135deg, var(--green) 0%, #059669 100%); 
@@ -1080,10 +1090,19 @@ select.input { width: auto; min-width: 160px; }
     gap: 12px;
     padding: 14px 0;
   }
+  .setting-row:has(.toggle) {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
   .setting-row > div {
     width: 100%;
   }
-  .slider-control, select.input, .toggle, .setting-row input[type="url"] {
+  .setting-row:has(.toggle) > div {
+    width: auto;
+  }
+  .slider-control, select.input, .setting-row input[type="url"] {
     width: 100% !important;
     min-width: 0 !important;
   }

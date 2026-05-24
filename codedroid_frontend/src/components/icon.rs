@@ -50,6 +50,12 @@ pub fn LucideIcon(
             <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
             <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
         }.into_any(),
+        "refresh" => view! {
+            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+            <path d="M16 16h5v5" />
+        }.into_any(),
         "arrow-left" => view! {
             <path d="m12 19-7-7 7-7" />
             <path d="M19 12H5" />
@@ -107,6 +113,11 @@ pub fn LucideIcon(
         "eye" => view! {
             <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0z" />
             <circle cx="12" cy="12" r="3" />
+        }.into_any(),
+        "alert-triangle" => view! {
+            <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+            <line x1="12" x2="12" y1="9" y2="13" />
+            <line x1="12" x2="12.01" y1="17" y2="17" />
         }.into_any(),
         _ => view! {
             <circle cx="12" cy="12" r="10" />

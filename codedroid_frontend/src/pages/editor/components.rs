@@ -86,8 +86,9 @@ pub fn FileTree(
             on:touchcancel=move |_| cancel_long_press.run(())
         >
             <div class="file-tree-header" style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700;">
-                    {lang_icon}" "{project_name.to_uppercase()}
+                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; display:flex; align-items:center; gap:6px;">
+                    <img src=lang_icon class="lang-icon-header" alt="lang icon" style="width:16px; height:16px; object-fit:contain;" />
+                    " "{project_name.to_uppercase()}
                 </span>
                 <div style="display:flex; gap:8px; flex-shrink:0; align-items:center;">
                     <button class="btn-tree-action-header" title="New File" style="background:none; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:4px;"
@@ -278,8 +279,8 @@ pub fn FileTree(
                                         } else {
                                             view! {
                                                 <span style="width: 14px;"></span>
-                                                <span style="font-size:14px; display:flex; align-items:center;">
-                                                    {file_icon(&f.name)}
+                                                <span style="display:inline-flex; align-items:center;">
+                                                    <img src=file_icon(&f.name) class="file-icon-img" alt="" style="width:14px; height:14px; object-fit:contain;" />
                                                 </span>
                                             }.into_any()
                                         }}
@@ -377,7 +378,10 @@ pub fn TabStrip(
                         }
                         on:click=move |_| open_file.run(tab2.clone())
                     >
-                        <span>{file_icon(&tab)}" "{tab.clone()}</span>
+                        <span style="display:inline-flex; align-items:center; gap:6px;">
+                            <img src=file_icon(&tab) class="tab-icon-img" alt="" style="width:14px; height:14px; object-fit:contain;" />
+                            {tab.clone()}
+                        </span>
                         <span class="tab-close"
                             on:click=move |e: MouseEvent| {
                                 e.stop_propagation();

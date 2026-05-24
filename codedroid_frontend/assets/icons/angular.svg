@@ -1,0 +1,11 @@
+<svg viewBox="0 0 200 235" xmlns="http://www.w3.org/2000/svg">
+  <title>Angular Logo</title>
+  <!-- Outer Shield -->
+  <path fill="#dd002e" d="M 0 50 L 100 0 L 200 50 L 190 185 L 100 235 L 10 185 Z"/>
+  <!-- Darker Shield Portion (Fold Effect) -->
+  <path fill="#c4002b" d="M 100 0 L 200 50 L 190 185 L 100 235 Z"/>
+  <!-- Letter A -->
+  <path fill="#fff" d="M 100 35 L 30 185 H 50 L 100 70 Z"/>
+  <path fill="#fff" d="M 100 35 L 170 185 L 150 185 L 100 70 Z"/>
+  <path fill="#fff" d="M 78 120 L 122 120 L 132 140 L 68 140 Z"/>
+</svg>

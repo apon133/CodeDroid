@@ -191,12 +191,14 @@ pub fn HomePage() -> impl IntoView {
                                     let nav = navigate.clone();
                                     let (color, bg) = lang_color(&p.language);
                                     let display_path = format_project_path(&p.path);
+                                    let lang_name = p.language.clone();
+                                    let lang_name_alt = p.language.clone();
                                     view! {
                                         <div class="project-card"
                                             on:click=move |_| nav(&format!("/editor/{}", pid), Default::default())
                                         >
                                             <div class="project-icon">
-                                                {lang_icon(&p.language)}
+                                                <img src=lang_icon(&lang_name) class="lang-icon-img" alt=lang_name_alt />
                                             </div>
                                             <div class="project-info">
                                                 <div class="project-name">{p.name.clone()}</div>

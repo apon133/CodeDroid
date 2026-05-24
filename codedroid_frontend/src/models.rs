@@ -51,18 +51,20 @@ pub struct RunResponse {
 
 pub fn lang_icon(lang: &str) -> &'static str {
     match lang {
-        "rust" => "🦀",
-        "go" => "🐹",
-        "python" => "🐍",
-        "javascript" | "typescript" => "⚡",
-        "java" => "☕",
-        "dart" => "🎯",
-        "c" | "cpp" => "⚙️",
-        "csharp" => "🔷",
-        "kotlin" => "🟣",
-        "swift" => "🍎",
-        "ruby" => "💎",
-        _ => "📄",
+        "rust" => "/assets/icons/rust.svg",
+        "go" => "/assets/icons/go.svg",
+        "python" => "/assets/icons/python.svg",
+        "javascript" => "/assets/icons/javascript.svg",
+        "typescript" => "/assets/icons/typescript.svg",
+        "java" => "/assets/icons/java.svg",
+        "dart" => "/assets/icons/dart.svg",
+        "c" => "/assets/icons/c.svg",
+        "cpp" => "/assets/icons/cpp.svg",
+        "csharp" => "/assets/icons/csharp.svg",
+        "kotlin" => "/assets/icons/kotlin.svg",
+        "swift" => "/assets/icons/swift.svg",
+        "ruby" => "/assets/icons/ruby.svg",
+        _ => "/assets/icons/generic.svg",
     }
 }
 

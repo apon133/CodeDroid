@@ -214,6 +214,11 @@ body {
   font-size: 20px; 
   transition: var(--transition);
 }
+.project-icon .lang-icon-img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
 .project-card:hover .project-icon {
   background: rgba(99, 102, 241, 0.2);
   transform: scale(1.05);

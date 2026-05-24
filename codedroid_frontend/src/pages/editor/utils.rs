@@ -50,12 +50,17 @@ pub fn is_project_source_file(filename: &str, lang: &str) -> bool {
 }
 
 pub fn file_lang_name(name: &str) -> &'static str {
-    if name == "Cargo.toml" { return "Rust Config"; }
-    if name == "go.mod" { return "Go Config"; }
-    if name == "package.json" { return "Node Config"; }
-    if name == "pubspec.yaml" { return "Dart Config"; }
+    let lower_name = name.to_lowercase();
+    if lower_name == "cargo.toml" { return "Rust Config"; }
+    if lower_name == "go.mod" { return "Go Config"; }
+    if lower_name == "package.json" { return "Node Config"; }
+    if lower_name == "pubspec.yaml" { return "Dart Config"; }
+    if lower_name == "gemfile" || lower_name == "gemfile.lock" { return "Ruby Config"; }
+    if lower_name == "requirements.txt" || lower_name == "pipfile" || lower_name == "pyproject.toml" { return "Python Config"; }
+    if lower_name == "build.gradle" || lower_name == "pom.xml" { return "Java Config"; }
+    if lower_name == "composer.json" { return "PHP Config"; }
     
-    match file_extension(name) {
+    match file_extension(name).to_lowercase().as_str() {
         "rs"   => "Rust",
         "go"   => "Go",
         "py"   => "Python",
@@ -63,12 +68,16 @@ pub fn file_lang_name(name: &str) -> &'static str {
         "ts"   => "TypeScript",
         "jsx"  => "React JS",
         "tsx"  => "React TS",
+        "vue"  => "Vue",
+        "svelte" => "Svelte",
         "java" => "Java",
         "dart" => "Dart",
         "c"    => "C",
         "cpp"  => "C++",
         "h" | "hpp" => "Header",
         "cs"   => "C#",
+        "csproj" => "NuGet Project",
+        "sln"  => "Visual Studio Solution",
         "kt"   => "Kotlin",
         "swift"=> "Swift",
         "rb"   => "Ruby",
@@ -77,20 +86,54 @@ pub fn file_lang_name(name: &str) -> &'static str {
         "toml" => "TOML",
         "yaml" | "yml" => "YAML",
         "json" => "JSON",
-        "md"   => "Markdown",
-        "sh"   => "Shell",
+        "md" | "markdown" => "Markdown",
+        "sh" | "bash" => "Shell",
         _      => "Text",
     }
 }
 
 pub fn file_icon(name: &str) -> &'static str {
-    match file_extension(name) {
-        "rs"   => "🦀", "go"   => "🐹", "py"   => "🐍",
-        "js" | "ts" | "jsx" | "tsx" => "⚡",
-        "java" => "☕", "dart" => "🎯", "c" | "cpp" | "h" | "hpp" => "⚙️",
-        "cs"   => "🔷", "kt"   => "🟣", "swift" => "🍎", "rb"   => "💎",
-        "html" => "🌐", "css"  => "🎨", "toml" | "yaml" | "json" => "📋",
-        _      => "📄",
+    let lower_name = name.to_lowercase();
+    if lower_name == "cargo.toml" || lower_name == "cargo.lock" { return "/assets/icons/cargo.svg"; }
+    if lower_name == "go.mod" || lower_name == "go.sum" || lower_name == "go.work" { return "/assets/icons/gomod.svg"; }
+    if lower_name == "package.json" || lower_name == "package-lock.json" || lower_name == "yarn.lock" || lower_name == "pnpm-lock.yaml" { return "/assets/icons/npm.svg"; }
+    if lower_name == "pubspec.yaml" || lower_name == "pubspec.lock" { return "/assets/icons/flutter.svg"; }
+    if lower_name == "requirements.txt" || lower_name == "pipfile" || lower_name == "pipfile.lock" || lower_name == "pyproject.toml" || lower_name == "setup.py" { return "/assets/icons/python.svg"; }
+    if lower_name == "build.gradle" || lower_name == "build.gradle.kts" || lower_name == "settings.gradle" || lower_name == "settings.gradle.kts" || lower_name == "gradle.properties" { return "/assets/icons/gradle.svg"; }
+    if lower_name == "pom.xml" { return "/assets/icons/maven.svg"; }
+    if lower_name == "composer.json" || lower_name == "composer.lock" { return "/assets/icons/composer.svg"; }
+    if lower_name == "gemfile" || lower_name == "gemfile.lock" { return "/assets/icons/ruby.svg"; }
+    if lower_name == "nuxt.config.js" || lower_name == "nuxt.config.ts" { return "/assets/icons/nuxt.svg"; }
+    if lower_name == "next.config.js" || lower_name == "next.config.mjs" || lower_name == "next.config.ts" { return "/assets/icons/nextjs.svg"; }
+    if lower_name == "angular.json" { return "/assets/icons/angular.svg"; }
+
+    match file_extension(name).to_lowercase().as_str() {
+        "rs"   => "/assets/icons/rust.svg",
+        "go"   => "/assets/icons/go.svg",
+        "py"   => "/assets/icons/python.svg",
+        "js"   => "/assets/icons/javascript.svg",
+        "jsx"  => "/assets/icons/react.svg",
+        "ts"   => "/assets/icons/typescript.svg",
+        "tsx"  => "/assets/icons/react.svg",
+        "vue"  => "/assets/icons/vue.svg",
+        "svelte" => "/assets/icons/svelte.svg",
+        "java" => "/assets/icons/java.svg",
+        "dart" => "/assets/icons/dart.svg",
+        "c" | "h" => "/assets/icons/c.svg",
+        "cpp" | "hpp" | "cc" => "/assets/icons/cpp.svg",
+        "cs"   => "/assets/icons/csharp.svg",
+        "csproj" | "sln" => "/assets/icons/nuget.svg",
+        "kt"   => "/assets/icons/kotlin.svg",
+        "swift"=> "/assets/icons/swift.svg",
+        "rb"   => "/assets/icons/ruby.svg",
+        "yaml" | "yml" => "/assets/icons/yaml.svg",
+        "toml" => "/assets/icons/toml.svg",
+        "json" => "/assets/icons/json.svg",
+        "md" | "markdown" => "/assets/icons/markdown.svg",
+        "html" => "/assets/icons/html.svg",
+        "css"  => "/assets/icons/css.svg",
+        "sh" | "bash" => "/assets/icons/shell.svg",
+        _      => "/assets/icons/generic.svg",
     }
 }
 

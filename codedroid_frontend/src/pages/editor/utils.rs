@@ -13,6 +13,7 @@ pub fn highlight_code(code: &str, ext: &str) -> String {
         "dart" | "kt" => "java",
         "ts" | "tsx" | "jsx" => "js",
         "swift" => "cs",
+        "vue" | "svelte" => "html",
         _ => ext,
     };
 

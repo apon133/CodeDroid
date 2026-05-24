@@ -328,6 +328,23 @@ environment:
 "#;
                     let _ = fs::write(pubspec_path, default_pubspec);
                 }
+            } else if lang == "jsx" || lang == "tsx" || lang == "javascript" || lang == "typescript" {
+                let jsconfig_path = format!("{}/jsconfig.json", project_dir);
+                let tsconfig_path = format!("{}/tsconfig.json", project_dir);
+                if !std::path::Path::new(&jsconfig_path).exists() && !std::path::Path::new(&tsconfig_path).exists() {
+                    println!("📝 Creating default jsconfig.json for JS/JSX LSP");
+                    let default_config = r#"{
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "allowJs": true,
+    "checkJs": false
+  }
+}"#;
+                    let _ = fs::write(jsconfig_path, default_config);
+                }
             }
 
             let root_uri = format!("file://{}", project_dir);

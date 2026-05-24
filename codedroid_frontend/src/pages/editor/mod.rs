@@ -898,8 +898,9 @@ pub fn EditorPage() -> impl IntoView {
                                                 let lang = file_to_lsp_lang(&active_file);
                                                 let path = project_path_str.get_value();
                                                 let before_cursor = val.chars().take(start as usize).collect::<String>();
-                                                let line = before_cursor.lines().count().saturating_sub(1) as u32;
-                                                let character = before_cursor.lines().last().unwrap_or("").chars().count() as u32;
+                                                let lines: Vec<&str> = before_cursor.split('\n').collect();
+                                                let line = lines.len().saturating_sub(1) as u32;
+                                                let character = lines.last().map(|l| l.chars().count()).unwrap_or(0) as u32;
                                                 spawn_local(async move {
                                                     if let Ok(resp) = api::get_completions_api(&val, &lang, &path, line, character).await {
                                                         suggestions.set(resp.suggestions);

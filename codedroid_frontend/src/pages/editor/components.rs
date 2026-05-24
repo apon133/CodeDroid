@@ -475,6 +475,7 @@ pub fn BottomPanel(
     let expanded_idx = RwSignal::new(Option::<usize>::None);
     let suggestions_state = RwSignal::new(Option::<Vec<crate::api::CodeSuggestion>>::None);
     let loading_suggestions = RwSignal::new(false);
+    let (refresh_key, set_refresh_key) = create_signal(0u32);
 
     view! {
         <div class="bottom-panel">
@@ -483,12 +484,16 @@ pub fn BottomPanel(
                     class=move || if bottom_tab.get() == 0 { "bottom-tab active" } else { "bottom-tab" }
                     on:click=move |_| bottom_tab.set(0)
                 >"TERMINAL"</button>
-                {move || preview_url.get().map(|_| view! {
-                    <button
-                        class=move || if bottom_tab.get() == 1 { "bottom-tab active" } else { "bottom-tab" }
-                        on:click=move |_| bottom_tab.set(1)
-                    >"PREVIEW"</button>
-                })}
+                {move || {
+                    let is_web = language.get().to_lowercase() == "javascript" || language.get().to_lowercase() == "typescript";
+                    let has_url = preview_url.get().is_some();
+                    (is_web || has_url).then(|| view! {
+                        <button
+                            class=move || if bottom_tab.get() == 1 { "bottom-tab active" } else { "bottom-tab" }
+                            on:click=move |_| bottom_tab.set(1)
+                        >"PREVIEW"</button>
+                    })
+                }}
                 <button
                     class=move || if bottom_tab.get() == 2 { "bottom-tab active" } else { "bottom-tab" }
                     on:click=move |_| bottom_tab.set(2)
@@ -522,8 +527,33 @@ pub fn BottomPanel(
             {move || {
                 if bottom_tab.get() == 1 {
                     if let Some(url) = preview_url.get() {
+                        let final_url = move || {
+                            let k = refresh_key.get();
+                            if url.contains('?') {
+                                format!("{}&refresh={}", url, k)
+                            } else {
+                                format!("{}?refresh={}", url, k)
+                            }
+                        };
                         return view! {
-                            <iframe class="preview-frame" src=url />
+                            <div style="display:flex; flex-direction:column; height:100%; width:100%;">
+                                <div style="display:flex; justify-content:flex-end; padding:4px 8px; background:var(--bg2); border-bottom:1px solid var(--border);">
+                                    <button class="btn" on:click=move |_| set_refresh_key.update(|k| *k += 1) style="padding:2px 8px; font-size:11px; display:inline-flex; align-items:center; gap:4px; height:24px; background:var(--bg3); border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--text); cursor:pointer;">
+                                        "🔄 Refresh"
+                                    </button>
+                                </div>
+                                <iframe class="preview-frame" src=final_url style="flex:1; border:none; background:#fff; width:100%; height:100%;" />
+                            </div>
+                        }.into_any();
+                    } else {
+                        return view! {
+                            <div class="preview-placeholder" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:var(--text2); padding: 20px; text-align:center; background:#07090e; font-family:var(--font-ui);">
+                                <div style="font-size:36px; margin-bottom:8px;">"🌐"</div>
+                                <div style="font-size:14px; font-weight:bold; margin-bottom:6px; color:#fff;">Web Preview Server Offline</div>
+                                <div style="font-size:12px; max-width:320px; opacity:0.7; margin-bottom:12px; line-height:1.4;">
+                                    "Start the dev server by clicking the 'Run' button in the toolbar to see the live app preview."
+                                </div>
+                            </div>
                         }.into_any();
                     }
                 } else if bottom_tab.get() == 2 {

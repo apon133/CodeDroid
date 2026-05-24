@@ -72,6 +72,13 @@ fn default_files(lang: &str, framework: &str, name: &str) -> Vec<(String, String
                     ("src/main.js".into(), "import { createApp } from 'vue';\nimport App from './App.vue';\ncreateApp(App).mount('#app');".into()),
                     ("package.json".into(), format!("{{\n  \"name\": \"{name}\",\n  \"type\": \"module\",\n  \"scripts\": {{ \"dev\": \"vite --host 0.0.0.0\" }},\n  \"dependencies\": {{ \"vue\": \"^3.0.0\" }},\n  \"devDependencies\": {{ \"vite\": \"^5.0.0\", \"@vitejs/plugin-vue\": \"^5.0.0\" }}\n}}")),
                 ],
+                "svelte" => vec![
+                    ("index.html".into(), "<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"UTF-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n  <title>Svelte App</title>\n</head>\n<body>\n  <div id=\"app\"></div>\n  <script type=\"module\" src=\"/src/main.js\"></script>\n</body>\n</html>".into()),
+                    ("src/main.js".into(), "import App from './App.svelte';\n\nconst app = new App({\n  target: document.getElementById('app'),\n});\n\nexport default app;".into()),
+                    ("src/App.svelte".into(), "<script>\n  let name = 'Svelte';\n</script>\n\n<main>\n  <h1>Hello {name}!</h1>\n  <p>Welcome to your CodeDroid Svelte project.</p>\n</main>\n\n<style>\n  main {\n    text-align: center;\n    padding: 1em;\n    font-family: sans-serif;\n  }\n  h1 {\n    color: #ff3e00;\n    font-size: 2.5rem;\n  }\n</style>".into()),
+                    ("vite.config.js".into(), "import { defineConfig } from 'vite';\nimport { svelte } from '@sveltejs/vite-plugin-svelte';\n\nexport default defineConfig({\n  plugins: [svelte()],\n});".into()),
+                    ("package.json".into(), format!("{{\n  \"name\": \"{name}\",\n  \"type\": \"module\",\n  \"scripts\": {{ \"dev\": \"vite --host 0.0.0.0\" }},\n  \"dependencies\": {{ \"svelte\": \"^4.0.0\" }},\n  \"devDependencies\": {{ \"vite\": \"^5.0.0\", \"@vitejs/plugin-svelte\": \"^3.0.0\" }}\n}}")),
+                ],
                 "nextjs" => vec![
                     ("pages/index.js".into(), "export default function Home() { return <h1>Hello Next.js!</h1>; }".into()),
                     ("package.json".into(), format!("{{\n  \"name\": \"{name}\",\n  \"scripts\": {{ \"dev\": \"next dev -H 0.0.0.0\" }},\n  \"dependencies\": {{ \"next\": \"latest\", \"react\": \"latest\", \"react-dom\": \"latest\" }}\n}}")),

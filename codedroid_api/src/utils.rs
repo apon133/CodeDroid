@@ -48,18 +48,43 @@ pub fn resolve_project_dir(path: &str) -> String {
     }
 }
 
+/// Returns the machine's primary local-network IPv4 address (e.g. 192.168.x.x).
+/// Falls back to "localhost" if it can't be determined.
+pub fn get_local_ip() -> String {
+    // Use a UDP socket trick: connect to a public address (no packet sent)
+    // and read what local IP the OS chose for routing.
+    if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
+        if socket.connect("8.8.8.8:80").is_ok() {
+            if let Ok(addr) = socket.local_addr() {
+                let ip = addr.ip().to_string();
+                if ip != "0.0.0.0" && !ip.starts_with("127.") {
+                    return ip;
+                }
+            }
+        }
+    }
+    "localhost".to_string()
+}
+
 pub fn find_url_in_output(output: &str) -> Option<String> {
     // Look for patterns like http://localhost:5173 or http://127.0.0.1:3000 or http://192.168.1.5:8080
-    let re = regex::Regex::new(r"http://([a-zA-Z0-9\.]+):(\d+)").unwrap();
+    let re = regex::Regex::new(r"http://([a-zA-Z0-9\.\-]+):(\d+)").unwrap();
     if let Some(caps) = re.captures(output) {
         let host = caps.get(1).map_or("localhost", |m| m.as_str());
         let port = caps.get(2).map_or("3000", |m| m.as_str());
-        
-        // Skip common false positives if necessary, but generally any http://host:port is a good candidate
-        if host == "0.0.0.0" {
-            return Some(format!("http://localhost:{}", port));
-        }
-        return Some(format!("http://{}:{}", host, port));
+
+        // Replace localhost / 127.0.0.1 / 0.0.0.0 with the real LAN IP
+        // so that URLs work when opened from a mobile phone on the same WiFi.
+        let resolved_host = if host == "localhost"
+            || host == "127.0.0.1"
+            || host == "0.0.0.0"
+        {
+            get_local_ip()
+        } else {
+            host.to_string()
+        };
+
+        return Some(format!("http://{}:{}", resolved_host, port));
     }
     None
 }

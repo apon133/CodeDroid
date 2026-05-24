@@ -350,15 +350,15 @@ pub fn EditorPage() -> impl IntoView {
                     let (ins, cursor_offset) = resolve_completion(&item);
                     
                     let new_val = format!("{}{}{}", String::from(before), ins, String::from(after));
-                    code.set(new_val);
-                    dirty.set(true);
-                    suggestions.set(Vec::new());
-                    
                     let new_pos = if let Some(offset) = cursor_offset {
                         word_start as u32 + offset as u32
                     } else {
                         word_start as u32 + ins.encode_utf16().count() as u32
                     };
+                    
+                    code.set(new_val);
+                    dirty.set(true);
+                    suggestions.set(Vec::new());
                     
                     spawn_local(async move {
                         if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
@@ -848,7 +848,7 @@ pub fn EditorPage() -> impl IntoView {
                                             let chars: Vec<char> = val.chars().collect();
                                             if is_source && start > 0 && start as usize <= chars.len() {
                                                 let last_char = chars[(start - 1) as usize];
-                                                if last_char.is_alphanumeric() || last_char == '.' {
+                                                if last_char.is_alphanumeric() || last_char == '.' || last_char == '<' || last_char == '/' || last_char == ':' || last_char == '@' || last_char == '$' || last_char == '-' || last_char == '"' || last_char == '\'' || last_char == '=' {
                                                     let active_file = active_tab.get_untracked().unwrap_or_default();
                                                     let lang = file_to_lsp_lang(&active_file);
                                                     let path = project_path_str.get_value();

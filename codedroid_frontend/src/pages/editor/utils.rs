@@ -35,8 +35,10 @@ pub fn file_to_lsp_lang(filename: &str) -> String {
     match file_extension(filename).to_lowercase().as_str() {
         "rs" => "rust".to_string(),
         "py" => "python".to_string(),
-        "js" | "jsx" => "javascript".to_string(),
-        "ts" | "tsx" => "typescript".to_string(),
+        "js" => "javascript".to_string(),
+        "jsx" => "jsx".to_string(),
+        "ts" => "typescript".to_string(),
+        "tsx" => "tsx".to_string(),
         "go" => "go".to_string(),
         "c" | "h" => "c".to_string(),
         "cpp" | "hpp" | "cc" => "cpp".to_string(),
@@ -53,24 +55,18 @@ pub fn file_to_lsp_lang(filename: &str) -> String {
     }
 }
 
-pub fn is_project_source_file(filename: &str, lang: &str) -> bool {
+fn is_web_lang(lang: &str) -> bool {
+    let l = lang.to_lowercase();
+    l == "javascript" || l == "typescript" || l == "html" || l == "css" || l == "vue" || l == "svelte" ||
+    l == "react" || l == "nextjs" || l == "next.js" || l == "remix" || l == "angular" || l == "vanilla" ||
+    l == "jsx" || l == "tsx"
+}
+
+pub fn is_project_source_file(filename: &str, _lang: &str) -> bool {
     let ext = file_extension(filename).to_lowercase();
-    match lang.to_lowercase().as_str() {
-        "rust" => ext == "rs",
-        "python" => ext == "py",
-        "go" => ext == "go",
-        "javascript" | "typescript" | "html" | "css" | "vue" | "svelte" => {
-            ext == "js" || ext == "jsx" || ext == "ts" || ext == "tsx" || ext == "vue" || ext == "svelte" || ext == "html" || ext == "css"
-        }
-        "c" => ext == "c" || ext == "h",
-        "cpp" => ext == "cpp" || ext == "cc" || ext == "h" || ext == "hpp",
-        "java" => ext == "java",
-        "dart" => ext == "dart",
-        "ruby" => ext == "rb",
-        "kotlin" => ext == "kt",
-        "swift" => ext == "swift",
-        _ => false,
-    }
+    matches!(ext.as_str(), 
+        "rs" | "py" | "js" | "jsx" | "ts" | "tsx" | "go" | "c" | "h" | "cpp" | "hpp" | "cc" | "java" | "dart" | "rb" | "kt" | "swift" | "html" | "htm" | "css" | "vue" | "svelte"
+    )
 }
 
 pub fn file_lang_name(name: &str) -> &'static str {

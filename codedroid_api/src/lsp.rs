@@ -76,6 +76,7 @@ impl LspClient {
         let responses_clone = responses.clone();
         let diagnostics_clone = diagnostics.clone();
         let diagnostics_version_clone = diagnostics_version.clone();
+        let stdin_clone = stdin.clone();
 
         thread::spawn(move || {
             let mut reader = BufReader::new(stdout);
@@ -86,7 +87,7 @@ impl LspClient {
                     if len == 0 {
                         return;
                     } // EOF
-                    if line == "\r\n" {
+                    if line.trim().is_empty() {
                         break;
                     }
                     if line.starts_with("Content-Length:") {
@@ -116,6 +117,24 @@ impl LspClient {
                                             }
                                         }
                                     }
+                                } else if method == "tsserver/request" {
+                                    if let Some(params) = val.get("params").and_then(|p| p.as_array()) {
+                                        if let Some(first_param) = params.first().and_then(|fp| fp.as_array()) {
+                                            if let Some(nested_id) = first_param.first().and_then(|id| id.as_u64()) {
+                                                let response = json!({
+                                                    "jsonrpc": "2.0",
+                                                    "method": "tsserver/response",
+                                                    "params": [[nested_id, Value::Null]]
+                                                });
+                                                let body = response.to_string();
+                                                let msg = format!("Content-Length: {}\r\n\r\n{}", body.len(), body);
+                                                if let Ok(mut stdin_lock) = stdin_clone.lock() {
+                                                    let _ = stdin_lock.write_all(msg.as_bytes());
+                                                    let _ = stdin_lock.flush();
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -141,6 +160,14 @@ impl LspClient {
             "params": {
                 "processId": std::process::id(),
                 "rootUri": root_uri,
+                "initializationOptions": {
+                    "typescript": {
+                        "tsdk": "/opt/homebrew/lib/node_modules/typescript/lib"
+                    },
+                    "vue": {
+                        "hybridMode": false
+                    }
+                },
                 "capabilities": {
                     "textDocument": {
                         "synchronization": {
@@ -329,6 +356,14 @@ impl LspClient {
         code: &str,
         lang: &str,
     ) -> std::io::Result<()> {
+        let lang_lower = lang.to_lowercase();
+        let lsp_lang = match lang_lower.as_str() {
+            "jsx" => "javascriptreact",
+            "tsx" => "typescriptreact",
+            "js" => "javascript",
+            "ts" => "typescript",
+            other => other,
+        };
         if !self.opened_files.contains(file_uri) {
             let did_open = json!({
                 "jsonrpc": "2.0",
@@ -336,7 +371,7 @@ impl LspClient {
                 "params": {
                     "textDocument": {
                         "uri": file_uri,
-                        "languageId": lang,
+                        "languageId": lsp_lang,
                         "version": 1,
                         "text": code
                     }

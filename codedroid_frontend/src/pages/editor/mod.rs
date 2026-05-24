@@ -81,23 +81,25 @@ pub fn EditorPage() -> impl IntoView {
         let last_diag_req = last_diag_req.clone();
         let active_tab = active_tab.clone();
         move |code_val: String| {
-            if let Some(ref filename) = active_tab.get_untracked() {
-                if !is_project_source_file(filename, &lang) {
+            let filename = match active_tab.get_untracked() {
+                Some(f) => f,
+                None => {
                     diagnostics_list.set(Vec::new());
                     return;
                 }
-            } else {
+            };
+            if !is_project_source_file(&filename, &lang) {
                 diagnostics_list.set(Vec::new());
                 return;
             }
+            let file_lang = file_to_lsp_lang(&filename);
             let ppath = ppath.clone();
-            let lang = lang.clone();
             let req_id = last_diag_req.get_untracked() + 1;
             last_diag_req.set(req_id);
             spawn_local(async move {
                 gloo_timers::future::TimeoutFuture::new(800).await;
                 if last_diag_req.get_untracked() == req_id {
-                    if let Ok(resp) = api::get_diagnostics_api(&code_val, &lang, &ppath).await {
+                    if let Ok(resp) = api::get_diagnostics_api(&code_val, &file_lang, &ppath).await {
                         if last_diag_req.get_untracked() == req_id {
                             diagnostics_list.set(resp.diagnostics);
                         }
@@ -847,7 +849,8 @@ pub fn EditorPage() -> impl IntoView {
                                             if is_source && start > 0 && start as usize <= chars.len() {
                                                 let last_char = chars[(start - 1) as usize];
                                                 if last_char.is_alphanumeric() || last_char == '.' {
-                                                    let lang = project_lang_str.get_value();
+                                                    let active_file = active_tab.get_untracked().unwrap_or_default();
+                                                    let lang = file_to_lsp_lang(&active_file);
                                                     let path = project_path_str.get_value();
                                                     let req_id = last_request_id.get_untracked() + 1;
                                                     last_request_id.set(req_id);
@@ -891,7 +894,8 @@ pub fn EditorPage() -> impl IntoView {
                                                 let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
                                                 let val = target.value();
                                                 let start = target.selection_start().unwrap().unwrap_or(0);
-                                                let lang = project_lang_str.get_value();
+                                                let active_file = active_tab.get_untracked().unwrap_or_default();
+                                                let lang = file_to_lsp_lang(&active_file);
                                                 let path = project_path_str.get_value();
                                                 let before_cursor = val.chars().take(start as usize).collect::<String>();
                                                 let line = before_cursor.lines().count().saturating_sub(1) as u32;

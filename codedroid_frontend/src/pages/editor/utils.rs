@@ -31,14 +31,37 @@ pub fn file_extension(name: &str) -> &str {
     name.rsplit('.').next().unwrap_or("")
 }
 
+pub fn file_to_lsp_lang(filename: &str) -> String {
+    match file_extension(filename).to_lowercase().as_str() {
+        "rs" => "rust".to_string(),
+        "py" => "python".to_string(),
+        "js" | "jsx" => "javascript".to_string(),
+        "ts" | "tsx" => "typescript".to_string(),
+        "go" => "go".to_string(),
+        "c" | "h" => "c".to_string(),
+        "cpp" | "hpp" | "cc" => "cpp".to_string(),
+        "java" => "java".to_string(),
+        "dart" => "dart".to_string(),
+        "rb" => "ruby".to_string(),
+        "kt" => "kotlin".to_string(),
+        "swift" => "swift".to_string(),
+        "html" | "htm" => "html".to_string(),
+        "css" => "css".to_string(),
+        "vue" => "vue".to_string(),
+        "svelte" => "svelte".to_string(),
+        _ => "text".to_string(),
+    }
+}
+
 pub fn is_project_source_file(filename: &str, lang: &str) -> bool {
     let ext = file_extension(filename).to_lowercase();
     match lang.to_lowercase().as_str() {
         "rust" => ext == "rs",
         "python" => ext == "py",
         "go" => ext == "go",
-        "javascript" => ext == "js" || ext == "jsx",
-        "typescript" => ext == "ts" || ext == "tsx",
+        "javascript" | "typescript" | "html" | "css" | "vue" | "svelte" => {
+            ext == "js" || ext == "jsx" || ext == "ts" || ext == "tsx" || ext == "vue" || ext == "svelte" || ext == "html" || ext == "css"
+        }
         "c" => ext == "c" || ext == "h",
         "cpp" => ext == "cpp" || ext == "cc" || ext == "h" || ext == "hpp",
         "java" => ext == "java",
@@ -46,10 +69,6 @@ pub fn is_project_source_file(filename: &str, lang: &str) -> bool {
         "ruby" => ext == "rb",
         "kotlin" => ext == "kt",
         "swift" => ext == "swift",
-        "html" => ext == "html" || ext == "htm",
-        "css" => ext == "css",
-        "vue" => ext == "vue",
-        "svelte" => ext == "svelte",
         _ => false,
     }
 }

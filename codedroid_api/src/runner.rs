@@ -197,6 +197,47 @@ pub fn run_with_timeout_web(mut cmd: Command) -> Json<CodeResponse> {
     }
 }
 
+fn get_port_from_package_json(project_dir: &str) -> Option<u16> {
+    let pkg_path = format!("{}/package.json", project_dir);
+    if let Ok(content) = fs::read_to_string(pkg_path) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(dev_script) = json.get("scripts")
+                .and_then(|s| s.get("dev"))
+                .and_then(|d| d.as_str())
+            {
+                let re_port = regex::Regex::new(r"(?:--port|-p)\s+(\d+)").unwrap();
+                if let Some(caps) = re_port.captures(dev_script) {
+                    if let Some(p_str) = caps.get(1) {
+                        if let Ok(port) = p_str.as_str().parse::<u16>() {
+                            return Some(port);
+                        }
+                    }
+                }
+                if dev_script.contains("vite") {
+                    return Some(5173);
+                }
+                if dev_script.contains("next dev") {
+                    if dev_script.contains("-p ") {
+                        let re_next_port = regex::Regex::new(r"-p\s+(\d+)").unwrap();
+                        if let Some(caps) = re_next_port.captures(dev_script) {
+                            if let Some(p_str) = caps.get(1) {
+                                if let Ok(port) = p_str.as_str().parse::<u16>() {
+                                    return Some(port);
+                                }
+                            }
+                        }
+                    }
+                    return Some(3000);
+                }
+                if dev_script.contains("ng serve") {
+                    return Some(4200);
+                }
+            }
+        }
+    }
+    None
+}
+
 pub fn run_javascript_framework(_payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
     // Ensure node_modules exists
     if !fs::metadata(format!("{}/node_modules", project_dir)).is_ok() {
@@ -204,6 +245,7 @@ pub fn run_javascript_framework(_payload: CodeRequest, project_dir: &str) -> Jso
         let install_output = Command::new("npm")
             .arg("install")
             .current_dir(project_dir)
+            .env("NG_CLI_ANALYTICS", "false")
             .output();
             
         match install_output {
@@ -233,9 +275,20 @@ pub fn run_javascript_framework(_payload: CodeRequest, project_dir: &str) -> Jso
         }
     }
 
+    let fallback_port = get_port_from_package_json(project_dir);
+
     let mut cmd = Command::new("npm");
-    cmd.args(["run", "dev"]).current_dir(project_dir);
-    run_with_timeout_web(cmd)
+    cmd.args(["run", "dev"])
+        .current_dir(project_dir)
+        .env("NG_CLI_ANALYTICS", "false");
+    
+    let mut response = run_with_timeout_web(cmd);
+    if response.url.is_none() {
+        if let Some(port) = fallback_port {
+            response.url = Some(format!("http://localhost:{}", port));
+        }
+    }
+    response
 }
 
 pub fn run_vanilla_js(_payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {

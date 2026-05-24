@@ -102,11 +102,23 @@ pub fn resolve_lsp_executable(lang: &str, cmd: &str) -> String {
         }
     }
 
-    // 2. Check common installation directories
+    // 2. Check common installation directories.
+    // Termux on Android uses $PREFIX = /data/data/com.termux/files/usr
+    let termux_prefix = std::env::var("PREFIX")
+        .unwrap_or_else(|_| "/data/data/com.termux/files/usr".to_string());
+
     let mut search_paths = vec![
+        // Termux (Android) — checked first on Android devices
+        format!("{}/bin/{}", termux_prefix, cmd),
+        // macOS Homebrew (Apple Silicon)
         format!("/opt/homebrew/bin/{}", cmd),
+        // macOS Homebrew (Intel) / Linux
         format!("/usr/local/bin/{}", cmd),
+        // Linux system bin
+        format!("/usr/bin/{}", cmd),
+        // npm global installs (cross-platform)
         format!("{}/.npm-global/bin/{}", home, cmd),
+        // Go binaries
         format!("{}/go/bin/{}", home, cmd),
     ];
 
@@ -126,18 +138,27 @@ pub fn resolve_lsp_executable(lang: &str, cmd: &str) -> String {
         }
         "python" => {
             search_paths.push(format!("{}/.local/bin/{}", home, cmd));
+            // Termux Python packages
+            search_paths.push(format!("{}/bin/{}", termux_prefix, cmd));
         }
-        "javascript" | "typescript" => {
+        "javascript" | "typescript" | "jsx" | "tsx" | "vue" | "svelte" => {
+            // npm global (cross-platform)
             search_paths.push(format!("{}/.npm-global/bin/{}", home, cmd));
             search_paths.push(format!("{}/node_modules/.bin/{}", home, cmd));
+            // Termux npm global location
+            search_paths.push(format!("{}/lib/node_modules/.bin/{}", termux_prefix, cmd));
         }
         "kotlin" => {
             search_paths.push(format!("/opt/homebrew/bin/{}", cmd));
             search_paths.push(format!("/usr/local/bin/{}", cmd));
+            // Termux
+            search_paths.push(format!("{}/bin/{}", termux_prefix, cmd));
         }
         "java" => {
             search_paths.push(format!("/opt/homebrew/bin/{}", cmd));
             search_paths.push(format!("/usr/local/bin/{}", cmd));
+            // Termux
+            search_paths.push(format!("{}/bin/{}", termux_prefix, cmd));
         }
         "swift" => {
             search_paths.push("/usr/bin/sourcekit-lsp".to_string());
@@ -154,4 +175,36 @@ pub fn resolve_lsp_executable(lang: &str, cmd: &str) -> String {
     }
 
     cmd.to_string()
+}
+
+/// Dynamically resolve the TypeScript SDK `lib` directory.
+/// Searches Termux, npm-global, Homebrew, /usr/local, and /usr/lib in order.
+pub fn resolve_typescript_sdk() -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let termux_prefix = std::env::var("PREFIX")
+        .unwrap_or_else(|_| "/data/data/com.termux/files/usr".to_string());
+
+    let candidates = vec![
+        // Termux global npm modules
+        format!("{}/lib/node_modules/typescript/lib", termux_prefix),
+        // npm global (~/.npm-global)
+        format!("{}/.npm-global/lib/node_modules/typescript/lib", home),
+        // macOS Homebrew (Apple Silicon)
+        "/opt/homebrew/lib/node_modules/typescript/lib".to_string(),
+        // macOS Homebrew (Intel) / Linux
+        "/usr/local/lib/node_modules/typescript/lib".to_string(),
+        // Linux system npm
+        "/usr/lib/node_modules/typescript/lib".to_string(),
+        // Local node_modules fallback
+        format!("{}/node_modules/typescript/lib", home),
+    ];
+
+    for path in candidates {
+        if std::path::Path::new(&path).exists() {
+            return path;
+        }
+    }
+
+    // Last resort: let the LSP server figure it out itself
+    "/usr/local/lib/node_modules/typescript/lib".to_string()
 }

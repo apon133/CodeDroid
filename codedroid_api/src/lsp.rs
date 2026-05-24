@@ -162,7 +162,7 @@ impl LspClient {
                 "rootUri": root_uri,
                 "initializationOptions": {
                     "typescript": {
-                        "tsdk": "/opt/homebrew/lib/node_modules/typescript/lib"
+                        "tsdk": crate::utils::resolve_typescript_sdk()
                     },
                     "vue": {
                         "hybridMode": false

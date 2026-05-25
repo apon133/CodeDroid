@@ -297,6 +297,47 @@ pub fn EditorPage() -> impl IntoView {
         }
     });
 
+    let format_code = Callback::new({
+        let ppath = ppath.clone();
+        let plang = project.language.clone();
+        let trigger_diag = trigger_diagnostics.clone();
+        move |_: ()| {
+            if is_running.get_untracked() { return; }
+            let current_code = code.get_untracked();
+            if current_code.trim().is_empty() { return; }
+            
+            let lang = if let Some(ref filename) = active_tab.get_untracked() {
+                file_to_lsp_lang(filename)
+            } else {
+                plang.clone()
+            };
+            
+            let path = ppath.clone();
+            
+            spawn_local(async move {
+                let res = api::format_code_api(&current_code, &lang, &path).await;
+                match res {
+                    Ok(r) => {
+                        if let Some(err) = r.error {
+                            output.set(format!("⚠️ Formatting Warning/Error:\n{}", err));
+                            is_error.set(true);
+                            bottom_tab.set(0);
+                        } else {
+                            code.set(r.formatted_code.clone());
+                            trigger_diag.run(r.formatted_code);
+                            dirty.set(true);
+                        }
+                    }
+                    Err(e) => {
+                        output.set(format!("❌ Formatting connection error:\n{}", e));
+                        is_error.set(true);
+                        bottom_tab.set(0);
+                    }
+                }
+            });
+        }
+    });
+
     let add_dep = Callback::new({
         let ppath = ppath.clone();
         let plang = project.language.clone();
@@ -799,6 +840,10 @@ pub fn EditorPage() -> impl IntoView {
                     on:click=move |_| show_deps.update(|v| *v = !*v)>
                     <LucideIcon name="package" size="20" />
                 </button>
+                <button class="btn btn-icon" title="Format Code (Shift+Alt+F)"
+                    on:click=move |_| format_code.run(())>
+                    <LucideIcon name="code" size="20" />
+                </button>
                 {move || dirty.get().then(|| view! {
                     <button class="btn btn-icon" title="Save (Ctrl+S)"
                         on:click=move |_| save_current.run(())
@@ -1065,6 +1110,7 @@ pub fn EditorPage() -> impl IntoView {
                                         }
                                         on:keydown=move |e: web_sys::KeyboardEvent| {
                                             if (e.ctrl_key() || e.meta_key()) && e.key() == "s" { e.prevent_default(); save_current.run(()); }
+                                            if e.shift_key() && e.alt_key() && (e.key() == "f" || e.key() == "F") { e.prevent_default(); format_code.run(()); }
                                             if (e.ctrl_key() || e.meta_key()) && e.key() == "f" { e.prevent_default(); show_search.update(|v| *v = !*v); }
                                             if !suggestions.get().is_empty() {
                                                 let current = selected_idx.get();

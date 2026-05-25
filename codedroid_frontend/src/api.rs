@@ -236,3 +236,31 @@ pub async fn get_error_suggestions_api(
         .map_err(|e| e.to_string())
 }
 
+#[derive(serde::Deserialize, Clone, PartialEq)]
+pub struct FormatResponse {
+    pub formatted_code: String,
+    pub error: Option<String>,
+}
+
+pub async fn format_code_api(
+    code: &str,
+    language: &str,
+    project_path: &str,
+) -> Result<FormatResponse, String> {
+    let body = json!({
+        "code": code,
+        "language": language,
+        "project_path": project_path,
+    });
+    Request::post(&format!("{}/format", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<FormatResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+

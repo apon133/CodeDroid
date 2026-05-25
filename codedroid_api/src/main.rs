@@ -9,7 +9,7 @@ mod handlers;
 mod diagnostics;
 mod error_suggestions;
 
-use handlers::{run_code, stop_process, add_package, sync_file, get_completions, delete_file, copy_file, create_dir, move_file};
+use handlers::{run_code, stop_process, add_package, sync_file, get_completions, delete_file, copy_file, create_dir, move_file, format_code};
 
 #[tokio::main]
 async fn main() {
@@ -23,6 +23,7 @@ async fn main() {
         .route("/move_file", post(move_file))
         .route("/create_dir", post(create_dir))
         .route("/complete", post(get_completions))
+        .route("/format", post(format_code))
         .route("/diagnostics", post(diagnostics::get_diagnostics_handler))
         .route("/error_suggestions", post(error_suggestions::get_error_suggestions_handler))
         .route("/ping", get(|| async { "pong" }))

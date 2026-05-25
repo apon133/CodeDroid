@@ -73,3 +73,16 @@ pub struct CreateDirRequest {
     pub path: String,
 }
 
+#[derive(Deserialize)]
+pub struct FormatRequest {
+    pub code: String,
+    pub language: String,
+    pub project_path: String,
+}
+
+#[derive(Serialize)]
+pub struct FormatResponse {
+    pub formatted_code: String,
+    pub error: Option<String>,
+}
+

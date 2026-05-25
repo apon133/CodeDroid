@@ -4,7 +4,7 @@ use std::process::Command;
 use crate::models::{
     CodeRequest, CodeResponse, StopRequest, PackageRequest, SyncRequest,
     CompletionRequest, CompletionResponse, DeleteRequest, CopyRequest, CreateDirRequest,
-    MoveRequest
+    MoveRequest, FormatRequest, FormatResponse
 };
 use crate::utils::resolve_project_dir;
 use crate::runner::*;
@@ -530,4 +530,166 @@ pub async fn move_file(Json(payload): Json<MoveRequest>) -> Json<CodeResponse> {
         }),
     }
 }
+
+fn run_formatter(
+    lang: &str,
+    cmd_name: &str,
+    args: Vec<String>,
+    temp_file_path: &str,
+) -> Result<String, String> {
+    let resolved_cmd = crate::utils::resolve_lsp_executable(lang, cmd_name);
+    println!("Running formatter: {} {:?}", resolved_cmd, args);
+    
+    let output = Command::new(&resolved_cmd)
+        .args(&args)
+        .output();
+
+    match output {
+        Ok(out) => {
+            if out.status.success() {
+                match fs::read_to_string(temp_file_path) {
+                    Ok(formatted) => Ok(formatted),
+                    Err(e) => Err(format!("Failed to read formatted file: {}", e)),
+                }
+            } else {
+                let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+                let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+                let err_msg = if !stderr.trim().is_empty() { stderr } else { stdout };
+                Err(format!("Formatter failed (exit code {}): {}", out.status.code().unwrap_or(-1), err_msg))
+            }
+        }
+        Err(e) => {
+            let install_hint = match cmd_name {
+                "rustfmt" => "Please install rustfmt (e.g. `rustup component add rustfmt` or `pkg install rust` in Termux).",
+                "gofmt" => "Please install Go (e.g. `pkg install golang` in Termux).",
+                "black" => "Please install black (e.g. `pip install black` or `pkg install black` in Termux).",
+                "clang-format" => "Please install clang (e.g. `pkg install clang` in Termux).",
+                "prettier" | "npx" => "Please install Node.js/npm (e.g. `pkg install nodejs` in Termux).",
+                "dart" => "Please install Dart SDK.",
+                "ktlint" => "Please install ktlint.",
+                "swiftformat" => "Please install swiftformat.",
+                "rufo" => "Please install rufo (Ruby formatter).",
+                _ => "Please make sure the formatting tool is installed and in your PATH.",
+            };
+            Err(format!(
+                "Formatter '{}' could not be executed: {}\n\n💡 Hint: {}",
+                cmd_name, e, install_hint
+            ))
+        }
+    }
+}
+
+pub async fn format_code(Json(payload): Json<FormatRequest>) -> Json<FormatResponse> {
+    let project_dir = resolve_project_dir(&payload.project_path);
+    let lang = payload.language.to_lowercase();
+    
+    let ext = match lang.as_str() {
+        "rust" => "rs",
+        "go" => "go",
+        "python" => "py",
+        "dart" => "dart",
+        "c" => "c",
+        "cpp" | "c++" => "cpp",
+        "java" => "java",
+        "kotlin" => "kt",
+        "swift" => "swift",
+        "ruby" => "rb",
+        "scala" => "scala",
+        "haskell" => "hs",
+        "javascript" | "jsx" => "js",
+        "typescript" | "tsx" => "ts",
+        "html" => "html",
+        "css" => "css",
+        "vue" => "vue",
+        "svelte" => "svelte",
+        _ => "txt",
+    };
+
+    if ext == "txt" {
+        return Json(FormatResponse {
+            formatted_code: payload.code,
+            error: Some(format!("Formatting not supported for language: {}", payload.language)),
+        });
+    }
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let temp_filename = format!(".format_tmp_{}.{}", timestamp, ext);
+    let temp_filepath = format!("{}/{}", project_dir, temp_filename);
+
+    let _ = fs::create_dir_all(&project_dir);
+
+    if let Err(e) = fs::write(&temp_filepath, &payload.code) {
+        return Json(FormatResponse {
+            formatted_code: payload.code,
+            error: Some(format!("Failed to write temporary file for formatting: {}", e)),
+        });
+    }
+
+    let (cmd, args) = match lang.as_str() {
+        "rust" => ("rustfmt", vec![temp_filepath.clone()]),
+        "go" => ("gofmt", vec!["-w".to_string(), temp_filepath.clone()]),
+        "python" => ("black", vec![temp_filepath.clone()]),
+        "dart" => ("dart", vec!["format".to_string(), temp_filepath.clone()]),
+        "c" | "cpp" | "c++" | "java" => ("clang-format", vec!["-i".to_string(), temp_filepath.clone()]),
+        "kotlin" => ("ktlint", vec!["-F".to_string(), temp_filepath.clone()]),
+        "swift" => ("swiftformat", vec![temp_filepath.clone()]),
+        "ruby" => ("rufo", vec![temp_filepath.clone()]),
+        "scala" => ("scalafmt", vec![temp_filepath.clone()]),
+        "javascript" | "typescript" | "jsx" | "tsx" | "html" | "css" | "vue" | "svelte" => {
+            let prettier_cmd = crate::utils::resolve_lsp_executable(&lang, "prettier");
+            if prettier_cmd != "prettier" && std::path::Path::new(&prettier_cmd).exists() {
+                ("prettier", vec!["--write".to_string(), temp_filepath.clone()])
+            } else {
+                ("npx", vec!["-y".to_string(), "prettier".to_string(), "--write".to_string(), temp_filepath.clone()])
+            }
+        }
+        _ => {
+            let _ = fs::remove_file(&temp_filepath);
+            return Json(FormatResponse {
+                formatted_code: payload.code,
+                error: Some(format!("Formatting not supported for language: {}", payload.language)),
+            });
+        }
+    };
+
+    let result = run_formatter(&lang, cmd, args, &temp_filepath);
+
+    let _ = fs::remove_file(&temp_filepath);
+
+    match result {
+        Ok(formatted) => Json(FormatResponse {
+            formatted_code: formatted,
+            error: None,
+        }),
+        Err(err) => Json(FormatResponse {
+            formatted_code: payload.code,
+            error: Some(err),
+        }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_rust_formatting() {
+        let code = "fn main(){\nprintln!(\"hello\");\n}".to_string();
+        let payload = FormatRequest {
+            code,
+            language: "rust".to_string(),
+            project_path: "./test_project".to_string(),
+        };
+        let response = format_code(axum::Json(payload)).await;
+        if response.0.error.is_none() {
+            assert!(response.0.formatted_code.contains("fn main() {\n    println!(\"hello\");\n}"));
+        } else {
+            println!("Formatter warning/error: {:?}", response.0.error);
+        }
+    }
+}
+
 

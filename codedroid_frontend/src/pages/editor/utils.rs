@@ -3,6 +3,7 @@ use syntect::highlighting::ThemeSet;
 use syntect::html::{highlighted_html_for_string, styled_line_to_highlighted_html, IncludeBackground};
 use syntect::easy::HighlightLines;
 use web_sys;
+use leptos::prelude::*;
 
 thread_local! {
     pub static SYNTAX_SET: SyntaxSet = SyntaxSet::load_defaults_newlines();
@@ -189,33 +190,190 @@ pub fn file_icon(name: &str) -> &'static str {
     }
 }
 
-pub fn kind_icon(kind: Option<u32>) -> &'static str {
+pub fn kind_icon(kind: Option<u32>) -> impl IntoView {
     match kind {
-        Some(1) => "📝", // Text
-        Some(2) | Some(3) => "𝑓", // Method/Function
-        Some(4) => "🏗", // Constructor
-        Some(5) => "🏷", // Field
-        Some(6) => "𝑥", // Variable
-        Some(7) => "📦", // Class
-        Some(8) => "📜", // Interface
-        Some(9) => "📦", // Module
-        Some(10) => "🔧", // Property
-        Some(11) => "📏", // Unit
-        Some(12) => "🔢", // Value
-        Some(13) => "🎨", // Enum
-        Some(14) => "🔑", // Keyword
-        Some(15) => "⌨", // Snippet
-        Some(16) => "🎨", // Color
-        Some(17) => "📄", // File
-        Some(18) => "🔗", // Reference
-        Some(19) => "📁", // Folder
-        Some(20) => "🎨", // EnumMember
-        Some(21) => "🧱", // Constant
-        Some(22) => "🏗", // Struct
-        Some(23) => "📅", // Event
-        Some(24) => "⚙", // Operator
-        Some(25) => "🧩", // TypeParameter
-        _ => "📄",
+        Some(1) => view! {
+            // Text
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="10" height="10" rx="1.5"/>
+                <line x1="6" y1="6" x2="10" y2="6"/>
+                <line x1="6" y1="9" x2="9" y2="9"/>
+            </svg>
+        }.into_any(),
+        Some(2) | Some(3) => view! {
+            // Method / Function
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#f1f5f9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="2" width="12" height="4" rx="1.5" />
+                <rect x="2" y="9" width="4" height="4" rx="1" />
+                <rect x="10" y="9" width="4" height="4" rx="1" />
+            </svg>
+        }.into_any(),
+        Some(4) => view! {
+            // Constructor
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="2" width="12" height="4" rx="1.5" />
+                <rect x="2" y="9" width="4" height="4" rx="1" />
+                <rect x="10" y="9" width="4" height="4" rx="1" />
+            </svg>
+        }.into_any(),
+        Some(5) => view! {
+            // Field
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 8 L8 8" />
+                <circle cx="11" cy="8" r="3" />
+            </svg>
+        }.into_any(),
+        Some(6) => view! {
+            // Variable
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 8 L8 8" />
+                <circle cx="11" cy="8" r="3" />
+            </svg>
+        }.into_any(),
+        Some(7) => view! {
+            // Class
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#a855f7" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 2 L13 5 L13 11 L8 14 L3 11 L3 5 Z" />
+                <path d="M8 8 L8 14" />
+                <path d="M8 8 L3 5" />
+                <path d="M8 8 L13 5" />
+            </svg>
+        }.into_any(),
+        Some(8) => view! {
+            // Interface
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#22d3ee" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 2 L13 5 L13 11 L8 14 L3 11 L3 5 Z" />
+                <path d="M8 8 L8 14" />
+                <path d="M8 8 L3 5" />
+                <path d="M8 8 L13 5" />
+            </svg>
+        }.into_any(),
+        Some(9) => view! {
+            // Module
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 4.5 L8 2.5 L14 4.5 L14 11.5 L8 13.5 L2 11.5 Z" />
+                <path d="M2 4.5 L8 6.5 L14 4.5" />
+                <path d="M8 6.5 L8 13.5" />
+            </svg>
+        }.into_any(),
+        Some(10) => view! {
+            // Property
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#a855f7" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="2" width="12" height="4" rx="1.5" />
+                <rect x="2" y="9" width="4" height="4" rx="1" />
+                <rect x="10" y="9" width="4" height="4" rx="1" />
+            </svg>
+        }.into_any(),
+        Some(11) => view! {
+            // Unit
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="10" height="10" rx="1.5"/>
+                <line x1="6" y1="6" x2="10" y2="6"/>
+            </svg>
+        }.into_any(),
+        Some(12) => view! {
+            // Value
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="8" cy="8" r="6" />
+                <path d="M8 5 L8 11" />
+            </svg>
+        }.into_any(),
+        Some(13) => view! {
+            // Enum
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="4" cy="4" r="2" />
+                <circle cx="12" cy="4" r="2" />
+                <circle cx="4" cy="12" r="2" />
+                <circle cx="12" cy="12" r="2" />
+                <path d="M6 4 L10 4 M6 12 L10 12 M4 6 L4 10 M12 6 L12 10" />
+            </svg>
+        }.into_any(),
+        Some(14) => view! {
+            // Keyword
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#f43f5e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="5" cy="11" r="3"/>
+                <path d="M7.5 8.5 L13 3 L14.5 4.5 M10.5 6 L12 7.5"/>
+            </svg>
+        }.into_any(),
+        Some(15) => view! {
+            // Snippet
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 3 C3.5 3 3 4 3 6 C3 8 2 8.5 2 8.5 C2 8.5 3 9 3 11 C3 13 3.5 14 5 14 M11 3 C12.5 3 13 4 13 6 C13 8 14 8.5 14 8.5 C14 8.5 13 9 13 11 C13 13 12.5 14 11 14"/>
+            </svg>
+        }.into_any(),
+        Some(16) => view! {
+            // Color
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#ec4899" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="8" cy="8" r="6" fill="#ec4899"/>
+            </svg>
+        }.into_any(),
+        Some(17) => view! {
+            // File
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 2 L10 2 L13 5 L13 14 L3 14 Z" />
+                <path d="M10 2 L10 5 L13 5" />
+            </svg>
+        }.into_any(),
+        Some(18) => view! {
+            // Reference
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 8 L8 8" />
+                <circle cx="11" cy="8" r="3" />
+            </svg>
+        }.into_any(),
+        Some(19) => view! {
+            // Folder
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 3 L6 3 L8 5 L14 5 L14 13 L2 13 Z" />
+            </svg>
+        }.into_any(),
+        Some(20) => view! {
+            // EnumMember
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="8" cy="8" r="3" fill="#fbbf24" />
+            </svg>
+        }.into_any(),
+        Some(21) => view! {
+            // Constant
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="10" height="10" rx="1.5" />
+            </svg>
+        }.into_any(),
+        Some(22) => view! {
+            // Struct
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#e2e8f0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 2 L13 5 L13 11 L8 14 L3 11 L3 5 Z" />
+                <path d="M8 8 L8 14" />
+                <path d="M8 8 L3 5" />
+                <path d="M8 8 L13 5" />
+            </svg>
+        }.into_any(),
+        Some(23) => view! {
+            // Event
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#e11d48" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 2 L3 9 L8 9 L6 14 L13 7 L8 7 Z" />
+            </svg>
+        }.into_any(),
+        Some(24) => view! {
+            // Operator
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="8" cy="8" r="6" />
+                <path d="M6 8 L10 8 M8 6 L8 10" />
+            </svg>
+        }.into_any(),
+        Some(25) => view! {
+            // TypeParameter
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 5 L6 8 L3 11 M13 5 L10 8 L13 11" />
+            </svg>
+        }.into_any(),
+        _ => view! {
+            // Default File
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 2 L10 2 L13 5 L13 14 L3 14 Z" />
+                <path d="M10 2 L10 5 L13 5" />
+            </svg>
+        }.into_any(),
     }
 }
 

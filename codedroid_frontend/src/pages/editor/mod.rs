@@ -1349,14 +1349,20 @@ pub fn EditorPage() -> impl IntoView {
                                         let selected = selected_idx.get();
                                         let current_item = items.get(selected).cloned();
                                         view! {
-                                            <div class="suggestions-floating" style=format!("left:{}px; top:{}px", coords.0, coords.1)>
+                                            <div 
+                                                class="suggestions-floating" 
+                                                on:mousedown=move |e: web_sys::MouseEvent| { e.prevent_default(); }
+                                                style=format!("left:{}px; top:{}px", coords.0, coords.1)
+                                            >
                                                 {move || suggestions.get().into_iter().enumerate().map(|(i, s)| {
                                                     let s2 = s.clone();
                                                     let s3 = s.clone();
                                                     view! {
                                                         <button 
                                                             class=move || if selected_idx.get() == i { "suggestion-item selected" } else { "suggestion-item" }
-                                                            on:mousedown=move |e: web_sys::MouseEvent| { e.prevent_default(); on_select.run(s2.clone()); }
+                                                            on:mousedown=move |e: web_sys::MouseEvent| { e.prevent_default(); }
+                                                            on:mouseup=move |e: web_sys::MouseEvent| { e.prevent_default(); on_select.run(s2.clone()); }
+                                                            on:click=move |e: web_sys::MouseEvent| { e.prevent_default(); }
                                                             on:touchstart=move |e: web_sys::TouchEvent| { e.prevent_default(); on_select.run(s3.clone()); }
                                                             on:mouseenter=move |_| selected_idx.set(i)
                                                         >

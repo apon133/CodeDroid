@@ -326,7 +326,7 @@ pub fn EditorPage() -> impl IntoView {
         }
     });
 
-    let on_select = move |item: api::CompletionItem| {
+    let on_select = Callback::new(move |item: api::CompletionItem| {
         let cpos = cursor_pos.get_untracked();
         use wasm_bindgen::JsCast;
         if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
@@ -375,7 +375,7 @@ pub fn EditorPage() -> impl IntoView {
                 }
             }
         }
-    };
+    });
 
     let copied_item: RwSignal<Option<FileEntry>> = RwSignal::new(None);
     let sidebar_open: RwSignal<bool> = RwSignal::new(false);
@@ -931,6 +931,82 @@ pub fn EditorPage() -> impl IntoView {
                                         class="code-layer code-editor"
                                         spellcheck="false"
                                         prop:value=move || code.get()
+                                        on:beforeinput=move |input_ev: web_sys::InputEvent| {
+                                            use wasm_bindgen::JsCast;
+                                            if let Some(data) = input_ev.data() {
+                                                if data.chars().count() == 1 {
+                                                    let ch = data.chars().next().unwrap();
+                                                    let key = ch.to_string();
+                                                    if key == "(" || key == "{" || key == "[" || key == "\"" || key == "'" {
+                                                        input_ev.prevent_default();
+                                                        let target = input_ev.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
+                                                        let start = target.selection_start().unwrap().unwrap_or(0);
+                                                        let end = target.selection_end().unwrap().unwrap_or(0);
+                                                        let val = js_sys::JsString::from(target.value());
+                                                        
+                                                        let close_char = match key.as_str() {
+                                                            "(" => ")",
+                                                            "{" => "}",
+                                                            "[" => "]",
+                                                            "\"" => "\"",
+                                                            "'" => "'",
+                                                            _ => "",
+                                                        };
+                                                        
+                                                        if start != end {
+                                                            let selected_text = val.substring(start, end);
+                                                            let new_val = format!(
+                                                                "{}{}{}{}{}",
+                                                                String::from(val.substring(0, start)),
+                                                                key,
+                                                                String::from(selected_text),
+                                                                close_char,
+                                                                String::from(val.substring(end, val.length()))
+                                                            );
+                                                            code.set(new_val);
+                                                            dirty.set(true);
+                                                            let new_start = start + 1;
+                                                            let new_end = end + 1;
+                                                            spawn_local(async move {
+                                                                let _ = gloo_timers::future::sleep(std::time::Duration::from_millis(10)).await;
+                                                                let _ = target.set_selection_range(new_start, new_end);
+                                                            });
+                                                        } else {
+                                                            let new_val = format!(
+                                                                "{}{}{}{}",
+                                                                String::from(val.substring(0, start)),
+                                                                key,
+                                                                close_char,
+                                                                String::from(val.substring(end, val.length()))
+                                                            );
+                                                            code.set(new_val);
+                                                            dirty.set(true);
+                                                            let new_pos = start + 1;
+                                                            spawn_local(async move {
+                                                                let _ = gloo_timers::future::sleep(std::time::Duration::from_millis(10)).await;
+                                                                let _ = target.set_selection_range(new_pos, new_pos);
+                                                            });
+                                                        }
+                                                    }
+                                                    else if key == ")" || key == "}" || key == "]" || key == "\"" || key == "'" {
+                                                        let target = input_ev.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
+                                                        let start = target.selection_start().unwrap().unwrap_or(0);
+                                                        let end = target.selection_end().unwrap().unwrap_or(0);
+                                                        if start == end {
+                                                            let val = js_sys::JsString::from(target.value());
+                                                            if start < val.length() {
+                                                                let next_char = val.substring(start, start + 1);
+                                                                if next_char == key {
+                                                                    input_ev.prevent_default();
+                                                                    let new_pos = start + 1;
+                                                                    let _ = target.set_selection_range(new_pos, new_pos);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                         on:input=move |e: web_sys::Event| {
                                             use wasm_bindgen::JsCast;
                                             let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
@@ -996,7 +1072,7 @@ pub fn EditorPage() -> impl IntoView {
                                                 match e.key().as_str() {
                                                     "ArrowDown" => { e.prevent_default(); selected_idx.set((current + 1) % total); }
                                                     "ArrowUp" => { e.prevent_default(); selected_idx.set((current + total - 1) % total); }
-                                                    "Enter" | "Tab" => { e.prevent_default(); if let Some(s) = suggestions.get().get(current) { on_select(s.clone()); } }
+                                                    "Enter" | "Tab" => { e.prevent_default(); if let Some(s) = suggestions.get().get(current) { on_select.run(s.clone()); } }
                                                     "Escape" => { suggestions.set(Vec::new()); }
                                                     _ => {}
                                                 }
@@ -1225,10 +1301,12 @@ pub fn EditorPage() -> impl IntoView {
                                             <div class="suggestions-floating" style=format!("left:{}px; top:{}px", coords.0, coords.1)>
                                                 {move || suggestions.get().into_iter().enumerate().map(|(i, s)| {
                                                     let s2 = s.clone();
+                                                    let s3 = s.clone();
                                                     view! {
                                                         <button 
                                                             class=move || if selected_idx.get() == i { "suggestion-item selected" } else { "suggestion-item" }
-                                                            on:mousedown=move |e: web_sys::MouseEvent| { e.prevent_default(); on_select(s2.clone()); }
+                                                            on:mousedown=move |e: web_sys::MouseEvent| { e.prevent_default(); on_select.run(s2.clone()); }
+                                                            on:touchstart=move |e: web_sys::TouchEvent| { e.prevent_default(); on_select.run(s3.clone()); }
                                                             on:mouseenter=move |_| selected_idx.set(i)
                                                         >
                                                             <span class="suggestion-kind">{kind_icon(s.kind)}</span>

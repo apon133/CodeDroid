@@ -632,28 +632,30 @@ body {
   font-size: 14px; 
   position: relative;
 }
-.line-numbers {
-  width: 54px; 
-  background: rgba(0,0,0,0.1); 
-  color: var(--text-muted); 
-  text-align: right;
-  padding: 12px 10px; 
-  font-size: 13px; 
-  line-height: 1.6; 
-  user-select: none;
-  border-right: 1px solid var(--border); 
-  overflow: hidden; 
-  flex-shrink: 0;
-}
 .code-container {
   flex: 1; 
   display: grid; 
   overflow: auto; 
   background: var(--bg);
+  position: relative;
+  --gutter-width: 54px;
+  --line-padding: 16px;
+  --text-padding-left: calc(var(--gutter-width) + var(--line-padding));
 }
+
+@media (max-width: 768px) {
+  .code-container {
+    --gutter-width: 40px;
+    --line-padding: 8px;
+  }
+}
+
+.code-container.hide-line-numbers {
+  --gutter-width: 0px;
+}
+
 .code-layer {
   grid-area: 1 / 1;
-  padding: 12px 16px; 
   margin: 0; 
   border: none;
   font-family: var(--font-mono); 
@@ -664,11 +666,16 @@ body {
   min-width: 100%; 
   min-height: 100%;
 }
+
 .code-highlight {
   pointer-events: none; 
   color: var(--text); 
   z-index: 1;
+  padding: 12px 0px !important;
+  display: flex;
+  flex-direction: column;
 }
+
 .code-highlight pre { 
   margin: 0; 
   background: transparent !important; 
@@ -679,6 +686,7 @@ body {
   white-space: inherit; 
   tab-size: inherit; 
 }
+
 .code-editor {
   background: transparent; 
   color: transparent; 
@@ -687,8 +695,47 @@ body {
   resize: none; 
   z-index: 2; 
   overflow: hidden;
+  padding-top: 12px !important;
+  padding-bottom: 12px !important;
+  padding-left: var(--text-padding-left) !important;
+  padding-right: var(--line-padding) !important;
 }
+
 .code-editor::selection { background: rgba(99, 102, 241, 0.35); color: transparent; }
+
+/* ── Inline Gutter Line Layout ── */
+.editor-line {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  width: 100%;
+}
+
+.line-number-gutter {
+  width: var(--gutter-width);
+  background: rgba(0,0,0,0.1); 
+  border-right: 1px solid var(--border); 
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  padding-right: 10px;
+  flex-shrink: 0;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.line-content {
+  flex: 1;
+  min-width: 0;
+  padding-left: var(--line-padding);
+  padding-right: var(--line-padding);
+  white-space: inherit;
+  word-wrap: break-word;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
 
 /* ── Bottom Panel ── */
 .bottom-panel { 

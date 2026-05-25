@@ -919,59 +919,64 @@ pub fn EditorPage() -> impl IntoView {
                         {move || {
                             let s = settings.get();
                             let content = code.get();
-                            let line_count = content.lines().count().max(1);
+                            let ext = active_tab.get().map(|n| file_extension(&n).to_string()).unwrap_or_default();
+                            let highlighted_lines = highlight_code_lines(&content, &ext);
+                            let diags = diagnostics_list.get();
+
+                            let container_class = if s.show_line_numbers {
+                                "code-container"
+                            } else {
+                                "code-container hide-line-numbers"
+                            };
 
                             view! {
-                                <>
-                                {move || s.show_line_numbers.then(|| {
-                                    let diags = diagnostics_list.get();
-                                    view! {
-                                        <div class="line-numbers" style=format!("font-size:{}px", s.font_size)>
-                                            {(1..=line_count).map(|n| {
-                                                let has_error = diags.iter().any(|d| d.range.start.line == (n - 1) as u32 && d.severity.unwrap_or(1) == 1);
-                                                let has_warning = diags.iter().any(|d| d.range.start.line == (n - 1) as u32 && d.severity.unwrap_or(1) == 2);
-                                                
-                                                let gutter_class = if has_error {
-                                                    "line-number-item has-error"
-                                                } else if has_warning {
-                                                    "line-number-item has-warning"
-                                                } else {
-                                                    "line-number-item"
-                                                };
-                                                
-                                                let gutter_marker = if has_error {
-                                                    "🔴"
-                                                } else if has_warning {
-                                                    "🟡"
-                                                } else {
-                                                    ""
-                                                };
-
-                                                view! {
-                                                    <div class=gutter_class title=move || if has_error { "Error on this line" } else if has_warning { "Warning on this line" } else { "" }>
-                                                        {if !gutter_marker.is_empty() {
-                                                            view! { <span class="gutter-error-icon">{gutter_marker}</span> }.into_any()
-                                                        } else {
-                                                            view! { "" }.into_any()
-                                                        }}
-                                                        <span class="gutter-number-text">{n}</span>
-                                                    </div>
-                                                }
-                                            }).collect_view()}
-                                        </div>
-                                    }
-                                })}
-                                <div class="code-container" style=move || format!(
+                                <div class=container_class style=move || format!(
                                         "font-size:{}px;white-space:{};tab-size:{}",
-                                        settings.get().font_size,
-                                        if settings.get().word_wrap { "pre-wrap" } else { "pre" },
-                                        settings.get().tab_size,
+                                        s.font_size,
+                                        if s.word_wrap { "pre-wrap" } else { "pre" },
+                                        s.tab_size,
                                     )>
-                                    <div class="code-layer code-highlight" inner_html=move || {
-                                        let c = code.get();
-                                        let ext = active_tab.get().map(|n| file_extension(&n).to_string()).unwrap_or_default();
-                                        highlight_code(&c, &ext)
-                                    } />
+                                    <div class="code-layer code-highlight">
+                                        {highlighted_lines.into_iter().enumerate().map(|(idx, html_line)| {
+                                            let n = idx + 1;
+                                            let has_error = diags.iter().any(|d| d.range.start.line == (n - 1) as u32 && d.severity.unwrap_or(1) == 1);
+                                            let has_warning = diags.iter().any(|d| d.range.start.line == (n - 1) as u32 && d.severity.unwrap_or(1) == 2);
+                                            
+                                            let gutter_class = if has_error {
+                                                "line-number-item has-error"
+                                            } else if has_warning {
+                                                "line-number-item has-warning"
+                                            } else {
+                                                "line-number-item"
+                                            };
+                                            
+                                            let gutter_marker = if has_error {
+                                                "🔴"
+                                            } else if has_warning {
+                                                "🟡"
+                                            } else {
+                                                ""
+                                            };
+
+                                            view! {
+                                                <div class="editor-line">
+                                                    {s.show_line_numbers.then(|| {
+                                                        view! {
+                                                            <div class="line-number-gutter">
+                                                                <div class=gutter_class title=move || if has_error { "Error on this line" } else if has_warning { "Warning on this line" } else { "" }>
+                                                                    {(!gutter_marker.is_empty()).then(|| {
+                                                                        view! { <span class="gutter-error-icon">{gutter_marker}</span> }
+                                                                    })}
+                                                                    <span class="gutter-number-text">{n}</span>
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                    })}
+                                                    <div class="line-content" inner_html=html_line></div>
+                                                </div>
+                                            }
+                                        }).collect_view()}
+                                    </div>
                                     <textarea
                                         class="code-layer code-editor"
                                         spellcheck="false"
@@ -1449,7 +1454,7 @@ pub fn EditorPage() -> impl IntoView {
                                         settings.get().tab_size
                                     ) />
                                 </div>
-                                </>
+
                             }
                         }}
                     </div>

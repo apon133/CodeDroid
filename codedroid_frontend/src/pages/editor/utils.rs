@@ -1,6 +1,7 @@
 use syntect::parsing::SyntaxSet;
 use syntect::highlighting::ThemeSet;
-use syntect::html::highlighted_html_for_string;
+use syntect::html::{highlighted_html_for_string, styled_line_to_highlighted_html, IncludeBackground};
+use syntect::easy::HighlightLines;
 use web_sys;
 
 thread_local! {
@@ -23,6 +24,35 @@ pub fn highlight_code(code: &str, ext: &str) -> String {
                 .unwrap_or_else(|| ss.find_syntax_plain_text());
             let theme = &ts.themes["base16-ocean.dark"];
             highlighted_html_for_string(code, ss, syntax, theme).unwrap_or_else(|_| code.to_string())
+        })
+    })
+}
+
+pub fn highlight_code_lines(code: &str, ext: &str) -> Vec<String> {
+    let mapped_ext = match ext {
+        "dart" | "kt" => "java",
+        "ts" | "tsx" | "jsx" => "js",
+        "swift" => "cs",
+        "vue" | "svelte" => "html",
+        _ => ext,
+    };
+
+    SYNTAX_SET.with(|ss| {
+        THEME_SET.with(|ts| {
+            let syntax = ss.find_syntax_by_extension(mapped_ext)
+                .unwrap_or_else(|| ss.find_syntax_plain_text());
+            let theme = &ts.themes["base16-ocean.dark"];
+            
+            let mut highlighter = HighlightLines::new(syntax, theme);
+            let mut lines = Vec::new();
+            
+            for line in code.split('\n') {
+                let line_with_nl = format!("{}\n", line);
+                let regions = highlighter.highlight_line(&line_with_nl, ss).unwrap_or_default();
+                let html = styled_line_to_highlighted_html(&regions, IncludeBackground::No).unwrap_or_default();
+                lines.push(html);
+            }
+            lines
         })
     })
 }

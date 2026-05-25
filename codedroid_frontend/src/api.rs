@@ -263,4 +263,44 @@ pub async fn format_code_api(
         .map_err(|e| e.to_string())
 }
 
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
+pub struct ReadDocRequest {
+    pub path: String,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct ReadDocResponse {
+    pub content: String,
+    pub error: String,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct ListDocsResponse {
+    pub files: Vec<String>,
+    pub error: String,
+}
+
+pub async fn read_doc_api(path: &str) -> Result<ReadDocResponse, String> {
+    let body = ReadDocRequest { path: path.to_string() };
+    Request::post(&format!("{}/docs/read", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<ReadDocResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn list_docs_api() -> Result<ListDocsResponse, String> {
+    Request::get(&format!("{}/docs/list", get_api_url()))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<ListDocsResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
 

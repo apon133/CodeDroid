@@ -16,7 +16,13 @@ pub fn SettingsPage() -> impl IntoView {
 
     view! {
         <div>
-            <AppBar title="Settings".to_string() back=true />
+            <AppBar title="Settings".to_string() back=true>
+                <a href="/docs" style="text-decoration:none">
+                    <button class="btn btn-icon" title="Documentation">
+                        <LucideIcon name="book" size="20" />
+                    </button>
+                </a>
+            </AppBar>
 
             <div class="settings">
                 <div class="settings-section">
@@ -191,6 +197,21 @@ pub fn SettingsPage() -> impl IntoView {
                             " (Android phone IP on same WiFi)"
                         </div>
                     </div>
+                </div>
+
+                <div class="settings-section">
+                    <div class="settings-section-title">"Documentation"</div>
+                    <a href="/docs" style="text-decoration:none;display:block;color:inherit">
+                        <div class="setting-row" style="cursor:pointer">
+                            <div>
+                                <div class="setting-label">"View Workspace Documentation"</div>
+                                <div class="setting-desc">"Preview README.md, setup guides, and project references."</div>
+                            </div>
+                            <div style="color:var(--accent);display:flex;align-items:center">
+                                <LucideIcon name="chevron-right" size="20" />
+                            </div>
+                        </div>
+                    </a>
                 </div>
 
                 <div class="settings-section">

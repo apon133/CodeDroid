@@ -11,6 +11,7 @@ mod api;
 use pages::home::HomePage;
 use pages::editor::EditorPage;
 use pages::settings::SettingsPage;
+use pages::docs::DocsPage;
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -21,6 +22,7 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/") view=HomePage />
                     <Route path=path!("/editor/:id") view=EditorPage />
                     <Route path=path!("/settings") view=SettingsPage />
+                    <Route path=path!("/docs") view=DocsPage />
                 </Routes>
             </div>
         </Router>

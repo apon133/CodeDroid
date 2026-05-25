@@ -11,28 +11,6 @@ use crate::utils::find_url_in_output;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
-pub fn handle_output(output: std::io::Result<std::process::Output>) -> Json<CodeResponse> {
-    match output {
-        Ok(out) => {
-            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-            
-            Json(CodeResponse {
-                output: stdout,
-                error: stderr,
-                pid: None,
-                url: None,
-            })
-        }
-        Err(e) => Json(CodeResponse {
-            output: "".to_string(),
-            error: format!("Execution failed: {}", e),
-            pid: None,
-            url: None,
-        }),
-    }
-}
-
 pub fn run_with_timeout(mut cmd: Command) -> Json<CodeResponse> {
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());

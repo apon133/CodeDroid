@@ -123,6 +123,10 @@ pub fn LucideIcon(
             <line x1="12" x2="12" y1="9" y2="13" />
             <line x1="12" x2="12.01" y1="17" y2="17" />
         }.into_any(),
+        "book" => view! {
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+        }.into_any(),
         _ => view! {
             <circle cx="12" cy="12" r="10" />
         }.into_any()

@@ -21,15 +21,15 @@ pub fn FileTree(
     sidebar_open: Signal<bool>,
     toggle_sidebar: Callback<()>,
 ) -> impl IntoView {
-    let (show_new_file, set_show_new_file) = create_signal(false);
-    let (show_new_folder, set_show_new_folder) = create_signal(false);
-    let (new_name, set_new_name) = create_signal(String::new());
-    let (show_rename, set_show_rename) = create_signal(Option::<FileEntry>::None);
-    let (rename_name, set_rename_name) = create_signal(String::new());
+    let (show_new_file, set_show_new_file) = signal(false);
+    let (show_new_folder, set_show_new_folder) = signal(false);
+    let (new_name, set_new_name) = signal(String::new());
+    let (show_rename, set_show_rename) = signal(Option::<FileEntry>::None);
+    let (rename_name, set_rename_name) = signal(String::new());
 
-    let (press_id, set_press_id) = create_signal(0i32);
-    let (collapsed_dirs, set_collapsed_dirs) = create_signal(std::collections::HashSet::<String>::new());
-    let (selected_path, set_selected_path) = create_signal(Option::<String>::None);
+    let (press_id, set_press_id) = signal(0i32);
+    let (collapsed_dirs, set_collapsed_dirs) = signal(std::collections::HashSet::<String>::new());
+    let (selected_path, set_selected_path) = signal(Option::<String>::None);
     let get_target_dir = move || {
         selected_path.get().map(|path| {
             let is_dir = file_tree.get().iter().any(|f| f.name == path && f.is_dir);
@@ -534,7 +534,6 @@ pub fn apply_replacement(code: &str, range: &crate::api::Range, replacement: &st
 #[component]
 pub fn BottomPanel(
     bottom_tab: RwSignal<usize>,
-    preview_url: Signal<Option<String>>,
     output: RwSignal<String>,
     is_error: Signal<bool>,
     show_snack: Callback<String>,
@@ -546,7 +545,6 @@ pub fn BottomPanel(
     let expanded_idx = RwSignal::new(Option::<usize>::None);
     let suggestions_state = RwSignal::new(Option::<Vec<crate::api::CodeSuggestion>>::None);
     let loading_suggestions = RwSignal::new(false);
-    let (refresh_key, set_refresh_key) = create_signal(0u32);
 
     view! {
         <div class="bottom-panel">

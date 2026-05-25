@@ -1461,7 +1461,6 @@ pub fn EditorPage() -> impl IntoView {
 
                     <BottomPanel 
                         bottom_tab=bottom_tab
-                        preview_url=preview_url.into()
                         output=output.into()
                         is_error=is_error.into()
                         show_snack=show_snack

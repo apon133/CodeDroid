@@ -9,6 +9,7 @@ thread_local! {
     pub static THEME_SET: ThemeSet = ThemeSet::load_defaults();
 }
 
+#[allow(dead_code)]
 pub fn highlight_code(code: &str, ext: &str) -> String {
     let mapped_ext = match ext {
         "dart" | "kt" => "java",
@@ -85,6 +86,7 @@ pub fn file_to_lsp_lang(filename: &str) -> String {
     }
 }
 
+#[allow(dead_code)]
 fn is_web_lang(lang: &str) -> bool {
     let l = lang.to_lowercase();
     l == "javascript" || l == "typescript" || l == "html" || l == "css" || l == "vue" || l == "svelte" ||

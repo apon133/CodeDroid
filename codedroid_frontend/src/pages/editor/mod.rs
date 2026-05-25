@@ -339,17 +339,31 @@ pub fn EditorPage() -> impl IntoView {
     });
 
     let add_dep = Callback::new({
+        let pid = pid.clone();
         let ppath = ppath.clone();
         let plang = project.language.clone();
+        let open_file = open_file.clone();
+        let file_tree_data = file_tree_data.clone();
         move |_: ()| {
             let pkg = dep_input.get_untracked();
             if pkg.trim().is_empty() { return; }
             let path = ppath.clone();
             let lang = plang.clone();
+            let pid_clone = pid.clone();
+            let open_file_clone = open_file.clone();
+            let file_tree_data_clone = file_tree_data.clone();
             dep_output.set(format!("Installing {}...", pkg));
             spawn_local(async move {
                 match api::add_package(&pkg, &lang, &path).await {
-                    Ok(r) => dep_output.set(if r.error.is_empty() { r.output } else { r.error }),
+                    Ok(r) => {
+                        dep_output.set(if r.error.is_empty() { r.output } else { r.error });
+                        if let (Some(filename), Some(content)) = (r.dependency_file_name, r.dependency_file_content) {
+                            let key = store::file_key(&pid_clone, &filename);
+                            store::save_file(&key, &content);
+                            file_tree_data_clone.set(build_file_tree(&pid_clone));
+                            open_file_clone.run(filename);
+                        }
+                    }
                     Err(e) => dep_output.set(format!("Error: {e}")),
                 }
             });

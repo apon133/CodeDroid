@@ -17,6 +17,14 @@ pub struct CodeResponse {
     pub url: Option<String>,
 }
 
+#[derive(Serialize)]
+pub struct PackageResponse {
+    pub output: String,
+    pub error: String,
+    pub dependency_file_name: Option<String>,
+    pub dependency_file_content: Option<String>,
+}
+
 #[derive(Deserialize)]
 pub struct StopRequest {
     pub pid: u32,

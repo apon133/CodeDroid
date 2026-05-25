@@ -26,9 +26,20 @@ fn default_files(lang: &str, framework: &str, name: &str) -> Vec<(String, String
         ],
         "dart" => vec![
             ("main.dart".into(), "void main() {\n  print(\"Hello, Dart!\");\n}".into()),
+            ("pubspec.yaml".into(), "name: project\ndescription: A new Dart project.\nversion: 1.0.0\nenvironment:\n  sdk: '>=2.17.0 <4.0.0'\ndependencies:\n".into()),
         ],
         "java" => vec![
             ("Main.java".into(), "public class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Hello, Java!\");\n    }\n}".into()),
+            ("pom.xml".into(), r#"<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.project</groupId>
+    <artifactId>project</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <dependencies>
+    </dependencies>
+</project>"#.into()),
         ],
         "c" => vec![
             ("main.c".into(), "#include <stdio.h>\n\nint main() {\n    printf(\"Hello, C!\\n\");\n    return 0;\n}".into()),
@@ -42,9 +53,20 @@ fn default_files(lang: &str, framework: &str, name: &str) -> Vec<(String, String
         ],
         "kotlin" => vec![
             ("main.kt".into(), "fun main() {\n    println(\"Hello, Kotlin!\")\n}".into()),
+            ("pom.xml".into(), r#"<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.project</groupId>
+    <artifactId>project</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <dependencies>
+    </dependencies>
+</project>"#.into()),
         ],
         "swift" => vec![
             ("main.swift".into(), "print(\"Hello, Swift!\")".into()),
+            ("Package.swift".into(), "// swift-tools-version: 5.9\nimport PackageDescription\n\nlet package = Package(\n    name: \"Project\",\n    targets: [.executableTarget(name: \"Project\")]\n)".into()),
         ],
         "ruby" => vec![
             ("main.rb".into(), "puts \"Hello, Ruby!\"".into()),
@@ -55,6 +77,7 @@ fn default_files(lang: &str, framework: &str, name: &str) -> Vec<(String, String
             match framework {
                 "none" | "" => vec![
                     (format!("main.{ext}"), format!("console.log(\"Hello, {}!\");", lang.to_uppercase())),
+                    ("package.json".into(), format!("{{\n  \"name\": \"{name}\",\n  \"version\": \"1.0.0\",\n  \"main\": \"main.{ext}\",\n  \"dependencies\": {{}}\n}}")),
                 ],
                 "vanilla" => vec![
                     ("index.html".into(), format!("<!DOCTYPE html>\n<html>\n<head><title>{name}</title><link rel=\"stylesheet\" href=\"style.css\"></head>\n<body>\n  <div id=\"app\"></div>\n  <script type=\"module\" src=\"/main.{ext}\"></script>\n</body>\n</html>")),
@@ -179,6 +202,11 @@ pub fn HomePage() -> impl IntoView {
     view! {
         <div>
             <AppBar title="CodeDroid".to_string()>
+                <a href="https://github.com/apon133/CodeDroid" target="_blank" rel="noopener noreferrer" style="text-decoration:none;margin-right:8px">
+                    <button class="btn btn-icon" title="GitHub Repository">
+                        <LucideIcon name="github" size="20" />
+                    </button>
+                </a>
                 <a href="/settings" style="text-decoration:none">
                     <button class="btn btn-icon" title="Settings">
                         <LucideIcon name="settings" size="20" />
@@ -260,29 +288,25 @@ pub fn HomePage() -> impl IntoView {
                 };
                 view! {
                     <div class="modal-overlay" on:click=close>
-                        <div class="modal" on:click=move |e: MouseEvent| e.stop_propagation()
-                            style="max-width:400px;text-align:center;padding:24px"
+                        <div class="modal modal-destructive" on:click=move |e: MouseEvent| e.stop_propagation()
+                            style="max-width:400px;text-align:center;padding:32px 24px;"
                         >
-                            <div style="font-size:36px;color:#ff453a;margin-bottom:16px">
-                                <LucideIcon name="alert-triangle" size="48" />
+                            <div class="destructive-icon-container">
+                                <LucideIcon name="alert-triangle" size="32" />
                             </div>
-                            <div class="modal-header" style="justify-content:center;border-bottom:none;padding:0;margin-bottom:12px;font-size:20px">
+                            <div class="modal-title-destructive">
                                 "Delete Project"
                             </div>
-                            <div style="color:var(--text2);font-size:14px;line-height:1.6;margin-bottom:24px">
+                            <div class="modal-desc-destructive">
                                 "Are you sure you want to delete project "
-                                <strong style="color:var(--text1)">{proj.name.clone()}</strong>
+                                <strong>{proj.name.clone()}</strong>
                                 "? This action cannot be undone."
                             </div>
-                            <div class="modal-footer" style="border-top:none;padding:0;justify-content:center;gap:12px">
-                                <button class="btn" on:click=close
-                                    style="background:transparent;color:var(--text2);border:1px solid var(--border);padding:10px 20px"
-                                >
+                            <div style="display:flex;justify-content:center;gap:12px;width:100%">
+                                <button class="btn btn-cancel-destructive" on:click=close>
                                     "Cancel"
                                 </button>
-                                <button class="btn btn-primary" on:click=delete
-                                    style="background:#ff453a;color:#ffffff;border:none;padding:10px 20px"
-                                >
+                                <button class="btn btn-delete-destructive" on:click=delete>
                                     "Delete"
                                 </button>
                             </div>

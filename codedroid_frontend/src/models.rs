@@ -141,3 +141,11 @@ pub fn project_badge_info(lang: &str, framework: &str) -> (String, &'static str,
         (name.to_string(), color, bg)
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PackageResponse {
+    pub output: String,
+    pub error: String,
+    pub dependency_file_name: Option<String>,
+    pub dependency_file_content: Option<String>,
+}

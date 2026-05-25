@@ -4,7 +4,7 @@ use std::process::Command;
 use crate::models::{
     CodeRequest, CodeResponse, StopRequest, PackageRequest, SyncRequest,
     CompletionRequest, CompletionResponse, DeleteRequest, CopyRequest, CreateDirRequest,
-    MoveRequest, FormatRequest, FormatResponse
+    MoveRequest, FormatRequest, FormatResponse, PackageResponse
 };
 use crate::utils::resolve_project_dir;
 use crate::runner::*;
@@ -103,7 +103,49 @@ pub async fn stop_process(Json(payload): Json<StopRequest>) -> Json<CodeResponse
     }
 }
 
-pub async fn add_package(Json(payload): Json<PackageRequest>) -> Json<CodeResponse> {
+fn get_dependency_file_info(dir: &str, lang: &str) -> Option<(String, String)> {
+    let filename = match lang {
+        "rust" => "Cargo.toml".to_string(),
+        "go" => "go.mod".to_string(),
+        "dart" => "pubspec.yaml".to_string(),
+        "python" => "requirements.txt".to_string(),
+        "ruby" => "Gemfile".to_string(),
+        "scala" => "build.sbt".to_string(),
+        "swift" => "Package.swift".to_string(),
+        "haskell" => {
+            if let Ok(entries) = fs::read_dir(dir) {
+                entries.flatten()
+                    .map(|e| e.file_name().to_string_lossy().into_owned())
+                    .find(|name| name.ends_with(".cabal"))
+                    .unwrap_or_else(|| "project.cabal".to_string())
+            } else {
+                "project.cabal".to_string()
+            }
+        }
+        "javascript" | "typescript" => "package.json".to_string(),
+        "java" | "kotlin" => "pom.xml".to_string(),
+        "csharp" => {
+            if let Ok(entries) = fs::read_dir(dir) {
+                entries.flatten()
+                    .map(|e| e.file_name().to_string_lossy().into_owned())
+                    .find(|name| name.ends_with(".csproj"))
+                    .unwrap_or_else(|| "Project.csproj".to_string())
+            } else {
+                "Project.csproj".to_string()
+            }
+        }
+        _ => return None,
+    };
+
+    let path = format!("{}/{}", dir, filename);
+    if let Ok(content) = fs::read_to_string(&path) {
+        Some((filename, content))
+    } else {
+        None
+    }
+}
+
+pub async fn add_package(Json(payload): Json<PackageRequest>) -> Json<PackageResponse> {
     let lang = payload.language.to_lowercase();
     let dir = resolve_project_dir(&payload.project_path);
     
@@ -172,6 +214,22 @@ pub async fn add_package(Json(payload): Json<PackageRequest>) -> Json<CodeRespon
                 let _ = fs::write(path, pkg_content); 
             }
         }
+        "java" | "kotlin" => {
+            let path = format!("{}/pom.xml", dir);
+            if !fs::metadata(&path).is_ok() {
+                let default_pom = r#"<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.project</groupId>
+    <artifactId>project</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <dependencies>
+    </dependencies>
+</project>"#;
+                let _ = fs::write(path, default_pom);
+            }
+        }
         _ => {}
     }
 
@@ -197,20 +255,97 @@ pub async fn add_package(Json(payload): Json<PackageRequest>) -> Json<CodeRespon
                 ("apt-get".to_string(), vec!["install".to_string(), "-y".to_string(), payload.package.clone()])
             }
         },
-        _ => return Json(CodeResponse {
+        _ => return Json(PackageResponse {
             output: "".to_string(),
             error: format!("Package management not supported for: {}", lang),
-            pid: None,
-            url: None,
+            dependency_file_name: None,
+            dependency_file_content: None,
         }),
     };
 
-    let output = Command::new(cmd)
+    let run_output = Command::new(cmd)
         .args(args)
-        .current_dir(dir)
+        .current_dir(&dir)
         .output();
 
-    handle_output(output)
+    let (output_str, error_str, success) = match run_output {
+        Ok(out) => (
+            String::from_utf8_lossy(&out.stdout).to_string(),
+            String::from_utf8_lossy(&out.stderr).to_string(),
+            out.status.success(),
+        ),
+        Err(e) => (
+            String::new(),
+            format!("Command execution failed: {}", e),
+            false,
+        ),
+    };
+
+    if success {
+        if lang == "python" {
+            let req_path = format!("{}/requirements.txt", dir);
+            if let Ok(mut content) = fs::read_to_string(&req_path) {
+                if !content.lines().any(|l| l.trim() == payload.package.trim()) {
+                    if !content.ends_with('\n') && !content.is_empty() {
+                        content.push('\n');
+                    }
+                    content.push_str(&format!("{}\n", payload.package.trim()));
+                    let _ = fs::write(&req_path, &content);
+                }
+            }
+        } else if lang == "ruby" {
+            let gem_path = format!("{}/Gemfile", dir);
+            if let Ok(mut content) = fs::read_to_string(&gem_path) {
+                let expected_gem = format!("gem \"{}\"", payload.package.trim());
+                if !content.lines().any(|l| l.trim().contains(&format!("gem \"{}\"", payload.package.trim())) || l.trim().contains(&format!("gem '{}'", payload.package.trim()))) {
+                    if !content.ends_with('\n') && !content.is_empty() {
+                        content.push('\n');
+                    }
+                    content.push_str(&format!("{}\n", expected_gem));
+                    let _ = fs::write(&gem_path, &content);
+                }
+            }
+        } else if lang == "java" || lang == "kotlin" {
+            let pom_path = format!("{}/pom.xml", dir);
+            if let Ok(content) = fs::read_to_string(&pom_path) {
+                let parts: Vec<&str> = payload.package.split(':').collect();
+                if parts.len() >= 2 {
+                    let group_id = parts[0];
+                    let artifact_id = parts[1];
+                    let version = if parts.len() >= 3 { parts[2] } else { "latest" };
+
+                    if !content.contains(&format!("<artifactId>{}</artifactId>", artifact_id)) {
+                        let dep_xml = format!(
+                            "        <dependency>\n            <groupId>{}</groupId>\n            <artifactId>{}</artifactId>\n            <version>{}</version>\n        </dependency>\n",
+                            group_id, artifact_id, version
+                        );
+                        let new_content = if content.contains("<dependencies>") {
+                            content.replace("<dependencies>", &format!("<dependencies>\n{}", dep_xml))
+                        } else if content.contains("</project>") {
+                            content.replace("</project>", &format!("    <dependencies>\n{}\n    </dependencies>\n</project>", dep_xml))
+                        } else {
+                            content
+                        };
+                        let _ = fs::write(&pom_path, new_content);
+                    }
+                }
+            }
+        }
+    }
+
+    let dep_info = get_dependency_file_info(&dir, &lang);
+    let (dep_name, dep_content) = if let Some((name, content)) = dep_info {
+        (Some(name), Some(content))
+    } else {
+        (None, None)
+    };
+
+    Json(PackageResponse {
+        output: output_str,
+        error: error_str,
+        dependency_file_name: dep_name,
+        dependency_file_content: dep_content,
+    })
 }
 
 pub async fn sync_file(Json(payload): Json<SyncRequest>) -> Json<CodeResponse> {

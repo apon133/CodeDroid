@@ -150,7 +150,7 @@ pub fn file_icon(name: &str) -> &'static str {
     if lower_name == "cargo.toml" || lower_name == "cargo.lock" { return "/assets/icons/cargo.svg"; }
     if lower_name == "go.mod" || lower_name == "go.sum" || lower_name == "go.work" { return "/assets/icons/gomod.svg"; }
     if lower_name == "package.json" || lower_name == "package-lock.json" || lower_name == "yarn.lock" || lower_name == "pnpm-lock.yaml" { return "/assets/icons/npm.svg"; }
-    if lower_name == "pubspec.yaml" || lower_name == "pubspec.lock" { return "/assets/icons/flutter.svg"; }
+    if lower_name == "pubspec.yaml" || lower_name == "pubspec.lock" { return "/assets/icons/yaml.svg"; }
     if lower_name == "requirements.txt" || lower_name == "pipfile" || lower_name == "pipfile.lock" || lower_name == "pyproject.toml" || lower_name == "setup.py" { return "/assets/icons/python.svg"; }
     if lower_name == "build.gradle" || lower_name == "build.gradle.kts" || lower_name == "settings.gradle" || lower_name == "settings.gradle.kts" || lower_name == "gradle.properties" { return "/assets/icons/gradle.svg"; }
     if lower_name == "pom.xml" { return "/assets/icons/maven.svg"; }

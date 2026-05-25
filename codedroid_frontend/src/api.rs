@@ -15,7 +15,7 @@ pub fn get_api_url() -> String {
 
 use gloo_net::http::Request;
 use serde_json::json;
-use crate::models::RunResponse;
+use crate::models::{RunResponse, PackageResponse};
 
 pub async fn run_code(
     code: &str,
@@ -65,7 +65,7 @@ pub async fn save_file_api(path: &str, content: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub async fn add_package(package: &str, language: &str, project_path: &str) -> Result<RunResponse, String> {
+pub async fn add_package(package: &str, language: &str, project_path: &str) -> Result<PackageResponse, String> {
     let body = json!({
         "package": package,
         "language": language,
@@ -77,7 +77,7 @@ pub async fn add_package(package: &str, language: &str, project_path: &str) -> R
         .send()
         .await
         .map_err(|e| e.to_string())?
-        .json::<RunResponse>()
+        .json::<PackageResponse>()
         .await
         .map_err(|e| e.to_string())
 }

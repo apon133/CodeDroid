@@ -48,6 +48,7 @@ pub struct CompletionRequest {
     pub code: String,
     pub language: String,
     pub project_path: String,
+    pub file_path: Option<String>,
     pub line: u32,
     pub character: u32,
 }

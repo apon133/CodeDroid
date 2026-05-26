@@ -382,26 +382,30 @@ pub async fn get_completions(Json(payload): Json<CompletionRequest>) -> Json<Com
     println!("🔍 Completion requested for {}: line {}, char {}", lang, payload.line, payload.character);
 
     let project_dir = resolve_project_dir(&payload.project_path);
-    let file_uri = match lang.as_str() {
-        "rust" => format!("file://{}/src/main.rs", project_dir),
-        "python" => format!("file://{}/main.py", project_dir),
-        "javascript" => format!("file://{}/main.js", project_dir),
-        "typescript" => format!("file://{}/main.ts", project_dir),
-        "jsx" => format!("file://{}/main.jsx", project_dir),
-        "tsx" => format!("file://{}/main.tsx", project_dir),
-        "go" => format!("file://{}/main.go", project_dir),
-        "c" => format!("file://{}/main.c", project_dir),
-        "cpp" => format!("file://{}/main.cpp", project_dir),
-        "java" => format!("file://{}/main.java", project_dir),
-        "dart" => format!("file://{}/lib/main.dart", project_dir),
-        "ruby" => format!("file://{}/main.rb", project_dir),
-        "kotlin" => format!("file://{}/main.kt", project_dir),
-        "swift" => format!("file://{}/main.swift", project_dir),
-        "html" => format!("file://{}/index.html", project_dir),
-        "css" => format!("file://{}/style.css", project_dir),
-        "vue" => format!("file://{}/Component.vue", project_dir),
-        "svelte" => format!("file://{}/Component.svelte", project_dir),
-        _ => format!("file://{}/main.txt", project_dir),
+    let file_uri = if let Some(ref rel_path) = payload.file_path {
+        format!("file://{}/{}", project_dir, rel_path)
+    } else {
+        match lang.as_str() {
+            "rust" => format!("file://{}/src/main.rs", project_dir),
+            "python" => format!("file://{}/main.py", project_dir),
+            "javascript" => format!("file://{}/main.js", project_dir),
+            "typescript" => format!("file://{}/main.ts", project_dir),
+            "jsx" => format!("file://{}/main.jsx", project_dir),
+            "tsx" => format!("file://{}/main.tsx", project_dir),
+            "go" => format!("file://{}/main.go", project_dir),
+            "c" => format!("file://{}/main.c", project_dir),
+            "cpp" => format!("file://{}/main.cpp", project_dir),
+            "java" => format!("file://{}/main.java", project_dir),
+            "dart" => format!("file://{}/lib/main.dart", project_dir),
+            "ruby" => format!("file://{}/main.rb", project_dir),
+            "kotlin" => format!("file://{}/main.kt", project_dir),
+            "swift" => format!("file://{}/main.swift", project_dir),
+            "html" => format!("file://{}/index.html", project_dir),
+            "css" => format!("file://{}/style.css", project_dir),
+            "vue" => format!("file://{}/Component.vue", project_dir),
+            "svelte" => format!("file://{}/Component.svelte", project_dir),
+            _ => format!("file://{}/main.txt", project_dir),
+        }
     };
 
     let jdtls_data = format!("{}/.jdtls_data", project_dir);
@@ -498,26 +502,34 @@ environment:
         }
         
         if let Some(client) = servers.get_mut(&lang) {
-            match lang.as_str() {
-                "rust" => { let _ = fs::write(format!("{}/src/main.rs", project_dir), &payload.code); },
-                "dart" => { let _ = fs::write(format!("{}/lib/main.dart", project_dir), &payload.code); },
-                "cpp" => { let _ = fs::write(format!("{}/main.cpp", project_dir), &payload.code); },
-                "c" => { let _ = fs::write(format!("{}/main.c", project_dir), &payload.code); },
-                "python" => { let _ = fs::write(format!("{}/main.py", project_dir), &payload.code); },
-                "go" => { let _ = fs::write(format!("{}/main.go", project_dir), &payload.code); },
-                "ruby" => { let _ = fs::write(format!("{}/main.rb", project_dir), &payload.code); },
-                "javascript" => { let _ = fs::write(format!("{}/main.js", project_dir), &payload.code); },
-                "typescript" => { let _ = fs::write(format!("{}/main.ts", project_dir), &payload.code); },
-                "jsx" => { let _ = fs::write(format!("{}/main.jsx", project_dir), &payload.code); },
-                "tsx" => { let _ = fs::write(format!("{}/main.tsx", project_dir), &payload.code); },
-                "kotlin" => { let _ = fs::write(format!("{}/main.kt", project_dir), &payload.code); },
-                "java" => { let _ = fs::write(format!("{}/main.java", project_dir), &payload.code); },
-                "swift" => { let _ = fs::write(format!("{}/main.swift", project_dir), &payload.code); },
-                "html" => { let _ = fs::write(format!("{}/index.html", project_dir), &payload.code); },
-                "css" => { let _ = fs::write(format!("{}/style.css", project_dir), &payload.code); },
-                "vue" => { let _ = fs::write(format!("{}/Component.vue", project_dir), &payload.code); },
-                "svelte" => { let _ = fs::write(format!("{}/Component.svelte", project_dir), &payload.code); },
-                _ => {}
+            if let Some(ref rel_path) = payload.file_path {
+                let dest_path = format!("{}/{}", project_dir, rel_path);
+                if let Some(parent) = std::path::Path::new(&dest_path).parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                let _ = fs::write(&dest_path, &payload.code);
+            } else {
+                match lang.as_str() {
+                    "rust" => { let _ = fs::write(format!("{}/src/main.rs", project_dir), &payload.code); },
+                    "dart" => { let _ = fs::write(format!("{}/lib/main.dart", project_dir), &payload.code); },
+                    "cpp" => { let _ = fs::write(format!("{}/main.cpp", project_dir), &payload.code); },
+                    "c" => { let _ = fs::write(format!("{}/main.c", project_dir), &payload.code); },
+                    "python" => { let _ = fs::write(format!("{}/main.py", project_dir), &payload.code); },
+                    "go" => { let _ = fs::write(format!("{}/main.go", project_dir), &payload.code); },
+                    "ruby" => { let _ = fs::write(format!("{}/main.rb", project_dir), &payload.code); },
+                    "javascript" => { let _ = fs::write(format!("{}/main.js", project_dir), &payload.code); },
+                    "typescript" => { let _ = fs::write(format!("{}/main.ts", project_dir), &payload.code); },
+                    "jsx" => { let _ = fs::write(format!("{}/main.jsx", project_dir), &payload.code); },
+                    "tsx" => { let _ = fs::write(format!("{}/main.tsx", project_dir), &payload.code); },
+                    "kotlin" => { let _ = fs::write(format!("{}/main.kt", project_dir), &payload.code); },
+                    "java" => { let _ = fs::write(format!("{}/main.java", project_dir), &payload.code); },
+                    "swift" => { let _ = fs::write(format!("{}/main.swift", project_dir), &payload.code); },
+                    "html" => { let _ = fs::write(format!("{}/index.html", project_dir), &payload.code); },
+                    "css" => { let _ = fs::write(format!("{}/style.css", project_dir), &payload.code); },
+                    "vue" => { let _ = fs::write(format!("{}/Component.vue", project_dir), &payload.code); },
+                    "svelte" => { let _ = fs::write(format!("{}/Component.svelte", project_dir), &payload.code); },
+                    _ => {}
+                }
             }
             
             match client.get_completions(&file_uri, &payload.code, payload.line, payload.character, &lang) {

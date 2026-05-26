@@ -99,10 +99,11 @@ pub fn EditorPage() -> impl IntoView {
             let ppath = ppath.clone();
             let req_id = last_diag_req.get_untracked() + 1;
             last_diag_req.set(req_id);
+            let rel_file = filename.clone();
             spawn_local(async move {
                 gloo_timers::future::TimeoutFuture::new(800).await;
                 if last_diag_req.get_untracked() == req_id {
-                    if let Ok(resp) = api::get_diagnostics_api(&code_val, &file_lang, &ppath).await {
+                    if let Ok(resp) = api::get_diagnostics_api(&code_val, &file_lang, &ppath, &rel_file).await {
                         if last_diag_req.get_untracked() == req_id {
                             diagnostics_list.set(resp.diagnostics);
                         }
@@ -1152,10 +1153,11 @@ pub fn EditorPage() -> impl IntoView {
                                                     let path = project_path_str.get_value();
                                                     let req_id = last_request_id.get_untracked() + 1;
                                                     last_request_id.set(req_id);
+                                                    let rel_file = active_file.clone();
                                                     spawn_local(async move {
                                                         gloo_timers::future::TimeoutFuture::new(150).await;
                                                         if last_request_id.get_untracked() == req_id {
-                                                            if let Ok(resp) = api::get_completions_api(&val, &lang, &path, line, character).await {
+                                                            if let Ok(resp) = api::get_completions_api(&val, &lang, &path, &rel_file, line, character).await {
                                                                 if last_request_id.get_untracked() == req_id { suggestions.set(resp.suggestions); }
                                                             }
                                                         }
@@ -1200,8 +1202,9 @@ pub fn EditorPage() -> impl IntoView {
                                                 let lines: Vec<&str> = before_cursor.split('\n').collect();
                                                 let line = lines.len().saturating_sub(1) as u32;
                                                 let character = lines.last().map(|l| l.chars().count()).unwrap_or(0) as u32;
+                                                let rel_file = active_file.clone();
                                                 spawn_local(async move {
-                                                    if let Ok(resp) = api::get_completions_api(&val, &lang, &path, line, character).await {
+                                                    if let Ok(resp) = api::get_completions_api(&val, &lang, &path, &rel_file, line, character).await {
                                                         suggestions.set(resp.suggestions);
                                                     }
                                                 });

@@ -96,11 +96,12 @@ pub struct CompletionResponse {
     pub suggestions: Vec<CompletionItem>,
 }
 
-pub async fn get_completions_api(code: &str, language: &str, project_path: &str, line: u32, character: u32) -> Result<CompletionResponse, String> {
+pub async fn get_completions_api(code: &str, language: &str, project_path: &str, file_path: &str, line: u32, character: u32) -> Result<CompletionResponse, String> {
     let body = json!({
         "code": code,
         "language": language,
         "project_path": project_path,
+        "file_path": file_path,
         "line": line,
         "character": character
     });
@@ -185,11 +186,12 @@ pub struct DiagnosticsResponse {
     pub diagnostics: Vec<Diagnostic>,
 }
 
-pub async fn get_diagnostics_api(code: &str, language: &str, project_path: &str) -> Result<DiagnosticsResponse, String> {
+pub async fn get_diagnostics_api(code: &str, language: &str, project_path: &str, file_path: &str) -> Result<DiagnosticsResponse, String> {
     let body = json!({
         "code": code,
         "language": language,
         "project_path": project_path,
+        "file_path": file_path,
     });
     Request::post(&format!("{}/diagnostics", get_api_url()))
         .json(&body)

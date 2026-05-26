@@ -501,3 +501,68 @@ pub fn pos_to_index(code: &str, line: u32, character: u32) -> u32 {
     }
     current_idx
 }
+
+pub fn resolve_completion(item: &crate::api::CompletionItem) -> (String, Option<usize>) {
+    if let Some(ref raw_snippet) = item.insert_text {
+        let mut result = String::new();
+        let mut cursor_offset = None;
+        let chars: Vec<char> = raw_snippet.chars().collect();
+        let mut i = 0;
+        
+        while i < chars.len() {
+            if chars[i] == '$' && i + 1 < chars.len() {
+                let next = chars[i + 1];
+                if next.is_ascii_digit() {
+                    let is_primary = next == '0' || next == '1';
+                    if is_primary && cursor_offset.is_none() {
+                        cursor_offset = Some(result.encode_utf16().count());
+                    }
+                    i += 2;
+                } else if next == '{' {
+                    let mut j = i + 2;
+                    let mut content = String::new();
+                    while j < chars.len() && chars[j] != '}' {
+                        content.push(chars[j]);
+                        j += 1;
+                    }
+                    if j < chars.len() {
+                        let placeholder = if let Some(colon_pos) = content.find(':') {
+                            &content[colon_pos + 1..]
+                        } else {
+                            ""
+                        };
+                        if cursor_offset.is_none() {
+                            cursor_offset = Some(result.encode_utf16().count());
+                        }
+                        result.push_str(placeholder);
+                        i = j + 1;
+                    } else {
+                        result.push('$');
+                        i += 1;
+                    }
+                } else {
+                    result.push('$');
+                    i += 1;
+                }
+            } else {
+                result.push(chars[i]);
+                i += 1;
+            }
+        }
+        (result, cursor_offset)
+    } else {
+        let label = &item.label;
+        if let Some(pos) = label.find("(...)") {
+            let cleaned = label.replace("(...)", "()");
+            (cleaned, Some(pos + 1))
+        } else if let Some(pos) = label.find("{...}") {
+            let cleaned = label.replace("{...}", "{}");
+            (cleaned, Some(pos + 1))
+        } else if let Some(pos) = label.find("[...]") {
+            let cleaned = label.replace("[...]", "[]");
+            (cleaned, Some(pos + 1))
+        } else {
+            (label.clone(), None)
+        }
+    }
+}

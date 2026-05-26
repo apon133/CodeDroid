@@ -18,7 +18,26 @@
 
 > **Free, open-source mobile IDE and code execution engine** — write and run Python, Rust, Go, JavaScript, Java, C++, and 13+ languages directly on your Android or iOS device. No laptop needed.
 
-**[🌐 Live Demo](https://codedroid.netlify.app)** · **[📖 Termux Setup](./TERMUX_SETUP.md)** · **[🤝 Contributing](./CONTRIBUTING.md)**
+<p align="center">
+  <a href="https://codedroid.netlify.app" target="_blank">
+    <img src="https://img.shields.io/badge/Live%20Demo-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Live Demo">
+  </a>
+  <a href="./TERMUX_SETUP.md">
+    <img src="https://img.shields.io/badge/Termux%20Setup-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Termux Setup">
+  </a>
+  <a href="./CONTRIBUTING.md">
+    <img src="https://img.shields.io/badge/Contributing-000000?style=for-the-badge&logo=github&logoColor=white" alt="Contributing">
+  </a>
+  <a href="https://discord.gg/5srCEqsht" target="_blank">
+    <img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord">
+  </a>
+  <a href="https://t.me/codedroid133" target="_blank">
+    <img src="https://img.shields.io/badge/Telegram-24A1DE?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram">
+  </a>
+  <a href="https://www.youtube.com/@CodeDroidYT" target="_blank">
+    <img src="https://img.shields.io/badge/YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="YouTube">
+  </a>
+</p>
 
 ---
 
@@ -165,6 +184,16 @@ Contributions are welcome. Please read **[CONTRIBUTING.md](./CONTRIBUTING.md)** 
 ## 📄 License
 
 GNU General Public License v3.0 — see [LICENSE](LICENSE) for full terms.
+
+---
+
+## 💬 Community & Support
+
+Join our community to chat with other developers, get help, and stay updated:
+
+- **Discord**: [Join our Discord Server](https://discord.gg/5srCEqsht) to chat, get support, and share feedback.
+- **Telegram**: [Subscribe to our Telegram Channel](https://t.me/codedroid133) for the latest news and updates.
+- **YouTube**: [Subscribe to our YouTube Channel](https://www.youtube.com/@CodeDroidYT) to watch video tutorials and feature previews.
 
 ---
 

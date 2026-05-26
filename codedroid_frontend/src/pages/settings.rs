@@ -215,6 +215,61 @@ pub fn SettingsPage() -> impl IntoView {
                 </div>
 
                 <div class="settings-section">
+                    <div class="settings-section-title">"Community"</div>
+                    
+                    <a href="https://discord.gg/5srCEqsht" target="_blank" rel="noopener noreferrer" style="text-decoration:none;display:block;color:inherit">
+                        <div class="setting-row" style="cursor:pointer">
+                            <div style="display:flex;align-items:center;gap:12px">
+                                <div style="color:#5865F2;display:flex;align-items:center">
+                                    <LucideIcon name="discord" size="20" />
+                                </div>
+                                <div>
+                                    <div class="setting-label">"Discord Server"</div>
+                                    <div class="setting-desc">"Join our Discord to chat, get support, and share feedback."</div>
+                                </div>
+                            </div>
+                            <div style="color:var(--accent);display:flex;align-items:center">
+                                <LucideIcon name="chevron-right" size="20" />
+                            </div>
+                        </div>
+                    </a>
+
+                    <a href="https://t.me/codedroid133" target="_blank" rel="noopener noreferrer" style="text-decoration:none;display:block;color:inherit">
+                        <div class="setting-row" style="cursor:pointer">
+                            <div style="display:flex;align-items:center;gap:12px">
+                                <div style="color:#24A1DE;display:flex;align-items:center">
+                                    <LucideIcon name="telegram" size="20" />
+                                </div>
+                                <div>
+                                    <div class="setting-label">"Telegram Channel"</div>
+                                    <div class="setting-desc">"Subscribe to our Telegram channel for the latest news and updates."</div>
+                                </div>
+                            </div>
+                            <div style="color:var(--accent);display:flex;align-items:center">
+                                <LucideIcon name="chevron-right" size="20" />
+                            </div>
+                        </div>
+                    </a>
+
+                    <a href="https://www.youtube.com/@CodeDroidYT" target="_blank" rel="noopener noreferrer" style="text-decoration:none;display:block;color:inherit">
+                        <div class="setting-row" style="cursor:pointer">
+                            <div style="display:flex;align-items:center;gap:12px">
+                                <div style="color:#FF0000;display:flex;align-items:center">
+                                    <LucideIcon name="youtube" size="20" />
+                                </div>
+                                <div>
+                                    <div class="setting-label">"YouTube Channel"</div>
+                                    <div class="setting-desc">"Watch video tutorials, setup guides, and features overview."</div>
+                                </div>
+                            </div>
+                            <div style="color:var(--accent);display:flex;align-items:center">
+                                <LucideIcon name="chevron-right" size="20" />
+                            </div>
+                        </div>
+                    </a>
+                </div>
+
+                <div class="settings-section">
                     <div class="settings-section-title">"About"</div>
                     <div style="color:var(--text2);font-size:13px;line-height:1.8">
                         <p>"🦀 "<strong>"CodeDroid IDE"</strong>" — Built with Rust + Leptos"</p>

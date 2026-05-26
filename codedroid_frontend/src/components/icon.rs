@@ -127,6 +127,11 @@ pub fn LucideIcon(
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
         }.into_any(),
+        "more-vertical" => view! {
+            <circle cx="12" cy="12" r="1" fill="currentColor" />
+            <circle cx="12" cy="5" r="1" fill="currentColor" />
+            <circle cx="12" cy="19" r="1" fill="currentColor" />
+        }.into_any(),
         _ => view! {
             <circle cx="12" cy="12" r="10" />
         }.into_any()

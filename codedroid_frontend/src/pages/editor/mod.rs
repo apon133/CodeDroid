@@ -55,6 +55,7 @@ pub fn EditorPage() -> impl IntoView {
     let snack_msg: RwSignal<Option<String>> = RwSignal::new(None);
     let file_tree_data: RwSignal<Vec<FileEntry>> = RwSignal::new(build_file_tree(&project.id));
     let show_deps: RwSignal<bool> = RwSignal::new(false);
+    let show_more_menu: RwSignal<bool> = RwSignal::new(false);
     let dep_input: RwSignal<String> = RwSignal::new(String::new());
     let dep_output: RwSignal<String> = RwSignal::new(String::new());
     let suggestions = RwSignal::new(Vec::<api::CompletionItem>::new());
@@ -850,14 +851,49 @@ pub fn EditorPage() -> impl IntoView {
                     on:click=move |_| show_search.update(|v| *v = !*v)>
                     <LucideIcon name="search" size="20" />
                 </button>
-                <button class="btn btn-icon" title="Dependencies"
+                <button class="btn btn-icon desktop-only" title="Dependencies"
                     on:click=move |_| show_deps.update(|v| *v = !*v)>
                     <LucideIcon name="package" size="20" />
                 </button>
-                <button class="btn btn-icon" title="Format Code (Shift+Alt+F)"
+                <button class="btn btn-icon desktop-only" title="Format Code (Shift+Alt+F)"
                     on:click=move |_| format_code.run(())>
                     <LucideIcon name="code" size="20" />
                 </button>
+                <div class="more-menu-container mobile-only">
+                    <button class="btn btn-icon" title="More Options"
+                        on:click=move |e: web_sys::MouseEvent| {
+                            e.stop_propagation();
+                            show_more_menu.update(|v| *v = !*v);
+                        }>
+                        <LucideIcon name="more-vertical" size="20" />
+                    </button>
+                    {move || show_more_menu.get().then(|| view! {
+                        <>
+                        <div class="more-menu-backdrop" on:click=move |e: web_sys::MouseEvent| {
+                            e.stop_propagation();
+                            show_more_menu.set(false);
+                        } />
+                        <div class="more-menu-dropdown" on:click=move |e: web_sys::MouseEvent| e.stop_propagation()>
+                            <button class="more-menu-item"
+                                on:click=move |_| {
+                                    show_deps.update(|v| *v = !*v);
+                                    show_more_menu.set(false);
+                                }>
+                                <LucideIcon name="package" size="18" />
+                                <span>"Dependencies"</span>
+                            </button>
+                            <button class="more-menu-item"
+                                on:click=move |_| {
+                                    format_code.run(());
+                                    show_more_menu.set(false);
+                                }>
+                                <LucideIcon name="code" size="18" />
+                                <span>"Format Code"</span>
+                            </button>
+                        </div>
+                        </>
+                    })}
+                </div>
                 {move || dirty.get().then(|| view! {
                     <button class="btn btn-icon" title="Save (Ctrl+S)"
                         on:click=move |_| save_current.run(())

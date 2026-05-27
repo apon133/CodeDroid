@@ -422,6 +422,7 @@ impl LspClient {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn get_diagnostics(&self, file_uri: &str) -> Vec<Diagnostic> {
         self.diagnostics
             .lock()

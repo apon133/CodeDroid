@@ -26,12 +26,7 @@ Once Termux is installed, run the following commands to set up the base environm
 
 2. **Install core dependencies**:
    ```bash
-   pkg install rust clang build-essential git nodejs-lts python
-   ```
-
-3. **Install build tools for the Web IDE**:
-   ```bash
-   rustup target add wasm32-unknown-unknown
+   pkg install rust clang build-essential git
    ```
 
 ---

@@ -66,6 +66,32 @@ pub fn LucideIcon(
         "chevron-down" => view! {
             <path d="m6 9 6 6 6-6" />
         }.into_any(),
+        "chevron-up" => view! {
+            <path d="m18 15-6-6-6 6" />
+        }.into_any(),
+        "replace" => view! {
+            <path d="M14 4a1 1 0 0 1 1-1" />
+            <path d="M15 10a1 1 0 0 1-1-1" />
+            <path d="M21 4a1 1 0 0 0-1-1" />
+            <path d="M21 9a1 1 0 0 1-1 1" />
+            <path d="m3 7 3 3 3-3" />
+            <path d="M6 10V5a2 2 0 0 1 2-2h2" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+        }.into_any(),
+        "replace-all" => view! {
+            <path d="M14 14a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1" />
+            <path d="M14 4a1 1 0 0 1 1-1" />
+            <path d="M15 10a1 1 0 0 1-1-1" />
+            <path d="M19 14a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1" />
+            <path d="M21 4a1 1 0 0 0-1-1" />
+            <path d="M21 9a1 1 0 0 1-1 1" />
+            <path d="m3 7 3 3 3-3" />
+            <path d="M6 10V5a2 2 0 0 1 2-2h2" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+        }.into_any(),
+        "square" => view! {
+            <rect width="18" height="18" x="3" y="3" rx="2" />
+        }.into_any(),
         "plus" => view! {
             <path d="M5 12h14" />
             <path d="M12 5v14" />

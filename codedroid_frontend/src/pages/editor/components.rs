@@ -20,6 +20,7 @@ pub fn FileTree(
     move_entry: Callback<(FileEntry, String)>,
     sidebar_open: Signal<bool>,
     toggle_sidebar: Callback<()>,
+    sidebar_mode: RwSignal<usize>,
 ) -> impl IntoView {
     let (show_new_file, set_show_new_file) = signal(false);
     let (show_new_folder, set_show_new_folder) = signal(false);
@@ -88,6 +89,23 @@ pub fn FileTree(
             on:touchend=move |_| cancel_long_press.run(())
             on:touchcancel=move |_| cancel_long_press.run(())
         >
+            <div class="sidebar-tabs">
+                <button 
+                    class=move || if sidebar_mode.get() == 0 { "sidebar-tab active" } else { "sidebar-tab" }
+                    on:click=move |_| sidebar_mode.set(0)
+                >
+                    <LucideIcon name="folder" size="14" />
+                    <span>"Files"</span>
+                </button>
+                <button 
+                    class=move || if sidebar_mode.get() == 1 { "sidebar-tab active" } else { "sidebar-tab" }
+                    on:click=move |_| sidebar_mode.set(1)
+                >
+                    <LucideIcon name="search" size="14" />
+                    <span>"Search"</span>
+                </button>
+            </div>
+
             <div class="file-tree-header" style="display:flex; justify-content:space-between; align-items:center;">
                 <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; display:flex; align-items:center; gap:6px;">
                     <img src=lang_icon class="lang-icon-header" alt="lang icon" style="width:16px; height:16px; object-fit:contain;" />

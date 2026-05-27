@@ -60,6 +60,9 @@ pub fn EditorPage() -> impl IntoView {
     let refresh_key: RwSignal<u32> = RwSignal::new(0);
     let show_search: RwSignal<bool> = RwSignal::new(false);
     let find_text: RwSignal<String> = RwSignal::new(String::new());
+    let find_index: RwSignal<usize> = RwSignal::new(0);
+    let project_search_text: RwSignal<String> = RwSignal::new(String::new());
+    let project_replace_text: RwSignal<String> = RwSignal::new(String::new());
     let snack_msg: RwSignal<Option<String>> = RwSignal::new(None);
     let file_tree_data: RwSignal<Vec<FileEntry>> = RwSignal::new(build_file_tree(&project.id));
     let show_deps: RwSignal<bool> = RwSignal::new(false);
@@ -444,6 +447,7 @@ pub fn EditorPage() -> impl IntoView {
 
     let copied_item: RwSignal<Option<FileEntry>> = RwSignal::new(None);
     let sidebar_open: RwSignal<bool> = RwSignal::new(false);
+    let sidebar_mode: RwSignal<usize> = RwSignal::new(0); // 0=files, 1=search
 
     let create_file = Callback::new({
         let pid = pid.clone();
@@ -852,13 +856,46 @@ pub fn EditorPage() -> impl IntoView {
         <div class="editor-page-root">
             <AppBar title=project.name.clone() back=true>
                 <button class="btn btn-icon btn-menu" title="Toggle Files"
-                    style="margin-right: 6px;"
-                    on:click=move |_| sidebar_open.update(|v| *v = !*v)>
+                    style=move || {
+                        let is_active = sidebar_open.get() && sidebar_mode.get() == 0;
+                        if is_active {
+                            "margin-right: 6px; background: rgba(99, 102, 241, 0.2); color: var(--accent); border-color: var(--accent);"
+                        } else {
+                            "margin-right: 6px;"
+                        }
+                    }
+                    on:click=move |_| {
+                        if sidebar_open.get() && sidebar_mode.get() == 0 {
+                            sidebar_open.set(false);
+                        } else {
+                            sidebar_mode.set(0);
+                            sidebar_open.set(true);
+                        }
+                    }>
                     <LucideIcon name="folder" size="20" />
                 </button>
-                <button class="btn btn-icon" title="Search (Ctrl+F)"
+                <button class="btn btn-icon" title="Find in Current File (Ctrl+F)"
                     on:click=move |_| show_search.update(|v| *v = !*v)>
                     <LucideIcon name="search" size="20" />
+                </button>
+                <button class="btn btn-icon" title="Search and Replace Project"
+                    style=move || {
+                        let is_active = sidebar_open.get() && sidebar_mode.get() == 1;
+                        if is_active {
+                            "background: rgba(99, 102, 241, 0.2); color: var(--accent); border-color: var(--accent);"
+                        } else {
+                            ""
+                        }
+                    }
+                    on:click=move |_| {
+                        if sidebar_open.get() && sidebar_mode.get() == 1 {
+                            sidebar_open.set(false);
+                        } else {
+                            sidebar_mode.set(1);
+                            sidebar_open.set(true);
+                        }
+                    }>
+                    <LucideIcon name="replace" size="20" />
                 </button>
                 <button class="btn btn-icon desktop-only" title="Dependencies"
                     on:click=move |_| show_deps.update(|v| *v = !*v)>
@@ -883,6 +920,15 @@ pub fn EditorPage() -> impl IntoView {
                             show_more_menu.set(false);
                         } />
                         <div class="more-menu-dropdown" on:click=move |e: web_sys::MouseEvent| e.stop_propagation()>
+                            <button class="more-menu-item"
+                                on:click=move |_| {
+                                    sidebar_mode.set(1);
+                                    sidebar_open.set(true);
+                                    show_more_menu.set(false);
+                                }>
+                                <LucideIcon name="replace" size="18" />
+                                <span>"Search / Replace"</span>
+                            </button>
                             <button class="more-menu-item"
                                 on:click=move |_| {
                                     show_deps.update(|v| *v = !*v);
@@ -935,22 +981,49 @@ pub fn EditorPage() -> impl IntoView {
             </AppBar>
 
             <div class="editor-layout">
-                <FileTree 
-                    file_tree=file_tree_data.into()
-                    active_tab=active_tab.into()
-                    open_file=open_file
-                    lang_icon=lang_icon(&project_lang_str.get_value()).to_string()
-                    project_name=project.name.clone()
-                    create_file=create_file
-                    create_folder=create_folder
-                    delete_entry=delete_entry
-                    copy_entry=copy_entry
-                    copied_item=copied_item.into()
-                    paste_entry=paste_entry
-                    move_entry=move_entry
-                    sidebar_open=sidebar_open.into()
-                    toggle_sidebar=Callback::new(move |_: ()| sidebar_open.set(false))
-                />
+                {move || {
+                    if sidebar_mode.get() == 0 {
+                        view! {
+                            <FileTree 
+                                file_tree=file_tree_data.into()
+                                active_tab=active_tab.into()
+                                open_file=open_file
+                                lang_icon=lang_icon(&project_lang_str.get_value()).to_string()
+                                project_name=project.name.clone()
+                                create_file=create_file
+                                create_folder=create_folder
+                                delete_entry=delete_entry
+                                copy_entry=copy_entry
+                                copied_item=copied_item.into()
+                                paste_entry=paste_entry
+                                move_entry=move_entry
+                                sidebar_open=sidebar_open.into()
+                                toggle_sidebar=Callback::new(move |_: ()| sidebar_open.set(false))
+                                sidebar_mode=sidebar_mode
+                            />
+                        }.into_any()
+                    } else {
+                        view! {
+                            <ProjectSearchReplacePanel
+                                project_id=pid.clone()
+                                project_path=ppath.clone()
+                                file_tree=file_tree_data.into()
+                                file_tree_data=file_tree_data
+                                active_tab=active_tab
+                                code=code
+                                dirty=dirty
+                                project_query=project_search_text
+                                replace_text=project_replace_text
+                                open_file=open_file
+                                trigger_diagnostics=trigger_diagnostics
+                                show_snack=show_snack
+                                sidebar_open=sidebar_open.into()
+                                close_sidebar=Callback::new(move |_: ()| sidebar_open.set(false))
+                                sidebar_mode=sidebar_mode
+                            />
+                        }.into_any()
+                    }
+                }}
 
                 <div class="editor-main">
                     <TabStrip 
@@ -964,6 +1037,8 @@ pub fn EditorPage() -> impl IntoView {
                     <SearchBar 
                         show_search=show_search
                         find_text=find_text
+                        find_index=find_index
+                        code=code
                     />
 
                     <EditorCodeArea
@@ -1031,5 +1106,3 @@ pub fn EditorPage() -> impl IntoView {
         </div>
     }.into_any()
 }
-
-

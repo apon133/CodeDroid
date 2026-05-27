@@ -29,6 +29,7 @@ wasm-bindgen-futures = "0.4"
 console_error_panic_hook = "0.1"
 syntect = { version = "5.3.0", default-features = false, features = ["default-fancy"] }
 pulldown-cmark = "0.11.0"
+regex = "1"
 
 [profile.release]
 opt-level = 'z'

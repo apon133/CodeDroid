@@ -179,6 +179,8 @@ pub struct Diagnostic {
     pub code: Option<serde_json::Value>,
     pub source: Option<String>,
     pub message: String,
+    #[serde(default)]
+    pub file: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Debug)]

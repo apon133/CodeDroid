@@ -556,7 +556,7 @@ pub fn BottomPanel(
     is_error: Signal<bool>,
     show_snack: Callback<String>,
     diagnostics_list: Signal<Vec<crate::api::Diagnostic>>,
-    on_click_problem: Callback<(u32, u32)>,
+    on_click_problem: Callback<(Option<String>, u32, u32)>,
     code: RwSignal<String>,
     language: Signal<String>,
 ) -> impl IntoView {
@@ -634,6 +634,7 @@ pub fn BottomPanel(
                                     4 => "⚪",
                                     _ => "🔴",
                                 };
+                                let file_name = diag.file.clone();
                                 let line = diag.range.start.line;
                                 let col = diag.range.start.character;
                                 let msg = diag.message.clone();
@@ -649,10 +650,11 @@ pub fn BottomPanel(
                                 let diag_clone = diag.clone();
                                 let on_click_problem_cb = on_click_problem;
                                 let show_snack_cb = show_snack;
+                                let file_name_clone = file_name.clone();
                                 view! {
                                     <div class="problem-wrapper">
                                         <div class=severity_class on:click=move |_| {
-                                            on_click_problem_cb.run((line, col));
+                                            on_click_problem_cb.run((file_name_clone.clone(), line, col));
                                             let current_idx = expanded_idx.get_untracked();
                                             if current_idx == Some(idx) {
                                                 expanded_idx.set(None);
@@ -677,7 +679,13 @@ pub fn BottomPanel(
                                             <span class="problem-icon">{severity_icon}</span>
                                             <span class="problem-message">{msg}{code_val}</span>
                                             {if !source.is_empty() { view! { <span class="problem-source">"["{source}"]"</span> }.into_any() } else { view! { "" }.into_any() }}
-                                            <span class="problem-location">"Ln "{line + 1}", Col "{col + 1}</span>
+                                            <span class="problem-location">
+                                                {if let Some(ref f) = file_name {
+                                                    format!("{}: Ln {}, Col {}", f, line + 1, col + 1)
+                                                } else {
+                                                    format!("Ln {}, Col {}", line + 1, col + 1)
+                                                }}
+                                            </span>
                                         </div>
                                         {move || {
                                             if expanded_idx.get() == Some(idx) {

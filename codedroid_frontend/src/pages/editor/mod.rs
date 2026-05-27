@@ -129,9 +129,13 @@ pub fn EditorPage() -> impl IntoView {
         let diagnostics_list = diagnostics_list.clone();
         let project_lang_str = project_lang_str.clone();
         let active_error = active_error.clone();
+        let active_tab = active_tab.clone();
         move |(line, _col): (u32, u32)| {
             let diags = diagnostics_list.get_untracked();
-            let diag_opt = diags.iter().find(|d| d.range.start.line == line).cloned();
+            let current_tab = active_tab.get_untracked();
+            let diag_opt = diags.iter().find(|d| {
+                d.range.start.line == line && (d.file.is_none() || d.file == current_tab)
+            }).cloned();
             
             if let Some(diag) = diag_opt {
                 let current = active_error.get_untracked();
@@ -159,38 +163,6 @@ pub fn EditorPage() -> impl IntoView {
         }
     });
 
-    let on_click_problem = Callback::new({
-        let code_signal = code;
-        let check_error = check_error_at_cursor.clone();
-        let cursor_coords = cursor_coords.clone();
-        move |(line, character): (u32, u32)| {
-            use wasm_bindgen::JsCast;
-            if let Some(target) = web_sys::window()
-                .and_then(|w| w.document())
-                .and_then(|d| d.query_selector(".code-editor").ok().flatten())
-            {
-                if let Ok(target) = target.dyn_into::<web_sys::HtmlTextAreaElement>() {
-                    let text = code_signal.get_untracked();
-                    let index = pos_to_index(&text, line, character);
-                    let _ = target.focus();
-                    let _ = target.set_selection_range(index, index);
-                    
-                    if let Some(mirror) = web_sys::window().unwrap().document().unwrap().get_element_by_id("cursor-mirror") {
-                        let text_before = &text[..index as usize];
-                        mirror.set_text_content(Some(text_before));
-                        let span = web_sys::window().unwrap().document().unwrap().create_element("span").unwrap();
-                        span.set_text_content(Some("|"));
-                        let _ = mirror.append_child(&span);
-                        let span_el = span.dyn_into::<web_sys::HtmlElement>().unwrap();
-                        cursor_coords.set((span_el.offset_left() as f64, span_el.offset_top() as f64 + 20.0));
-                    }
-                    
-                    check_error.run((line, character));
-                }
-            }
-        }
-    });
-
     let pid = project.id.clone();
     let open_file = Callback::new({
         let pid = pid.clone();
@@ -203,6 +175,56 @@ pub fn EditorPage() -> impl IntoView {
             code.set(content.clone());
             dirty.set(false);
             trigger_diag.run(content);
+        }
+    });
+
+    let on_click_problem = Callback::new({
+        let open_file = open_file.clone();
+        let active_tab = active_tab.clone();
+        let code_signal = code;
+        let check_error = check_error_at_cursor.clone();
+        let cursor_coords = cursor_coords.clone();
+        move |(file_opt, line, character): (Option<String>, u32, u32)| {
+            let open_file_clone = open_file.clone();
+            let check_error_clone = check_error.clone();
+            let cursor_coords_clone = cursor_coords.clone();
+            let code_sig_clone = code_signal.clone();
+            let active_tab_clone = active_tab.clone();
+            
+            spawn_local(async move {
+                if let Some(ref filename) = file_opt {
+                    let current = active_tab_clone.get_untracked();
+                    if current.as_ref() != Some(filename) {
+                        open_file_clone.run(filename.clone());
+                        gloo_timers::future::TimeoutFuture::new(50).await;
+                    }
+                }
+                
+                use wasm_bindgen::JsCast;
+                if let Some(target) = web_sys::window()
+                    .and_then(|w| w.document())
+                    .and_then(|d| d.query_selector(".code-editor").ok().flatten())
+                {
+                    if let Ok(target) = target.dyn_into::<web_sys::HtmlTextAreaElement>() {
+                        let text = code_sig_clone.get_untracked();
+                        let index = pos_to_index(&text, line, character);
+                        let _ = target.focus();
+                        let _ = target.set_selection_range(index, index);
+                        
+                        if let Some(mirror) = web_sys::window().unwrap().document().unwrap().get_element_by_id("cursor-mirror") {
+                            let text_before = &text[..index as usize];
+                            mirror.set_text_content(Some(text_before));
+                            let span = web_sys::window().unwrap().document().unwrap().create_element("span").unwrap();
+                            span.set_text_content(Some("|"));
+                            let _ = mirror.append_child(&span);
+                            let span_el = span.dyn_into::<web_sys::HtmlElement>().unwrap();
+                            cursor_coords_clone.set((span_el.offset_left() as f64, span_el.offset_top() as f64 + 20.0));
+                        }
+                        
+                        check_error_clone.run((line, character));
+                    }
+                }
+            });
         }
     });
 

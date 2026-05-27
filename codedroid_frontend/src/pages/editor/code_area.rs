@@ -35,7 +35,11 @@ pub fn EditorCodeArea(
                 let content = code.get();
                 let ext = active_tab.get().map(|n| file_extension(&n).to_string()).unwrap_or_default();
                 let highlighted_lines = highlight_code_lines(&content, &ext);
+                let active = active_tab.get();
                 let diags = diagnostics_list.get();
+                let active_diags: Vec<api::Diagnostic> = diags.into_iter()
+                    .filter(|d| d.file.is_none() || d.file.as_ref() == active.as_ref())
+                    .collect();
 
                 let container_class = if s.show_line_numbers {
                     "code-container"
@@ -53,8 +57,8 @@ pub fn EditorCodeArea(
                         <div class="code-layer code-highlight">
                             {highlighted_lines.into_iter().enumerate().map(|(idx, html_line)| {
                                 let n = idx + 1;
-                                let has_error = diags.iter().any(|d| d.range.start.line == (n - 1) as u32 && d.severity.unwrap_or(1) == 1);
-                                let has_warning = diags.iter().any(|d| d.range.start.line == (n - 1) as u32 && d.severity.unwrap_or(1) == 2);
+                                let has_error = active_diags.iter().any(|d| d.range.start.line == (n - 1) as u32 && d.severity.unwrap_or(1) == 1);
+                                let has_warning = active_diags.iter().any(|d| d.range.start.line == (n - 1) as u32 && d.severity.unwrap_or(1) == 2);
                                 
                                 let gutter_class = if has_error {
                                     "line-number-item has-error"

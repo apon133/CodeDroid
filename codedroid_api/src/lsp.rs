@@ -26,6 +26,8 @@ pub struct Diagnostic {
     pub code: Option<serde_json::Value>,
     pub source: Option<String>,
     pub message: String,
+    #[serde(default)]
+    pub file: Option<String>,
 }
 
 pub fn get_servers() -> Arc<Mutex<HashMap<String, LspClient>>> {
@@ -427,6 +429,40 @@ impl LspClient {
             .get(file_uri)
             .cloned()
             .unwrap_or_default()
+    }
+
+    pub fn get_all_diagnostics(&self, project_dir: &str) -> Vec<Diagnostic> {
+        let diags_lock = self.diagnostics.lock().unwrap();
+        let mut all = Vec::new();
+        let project_dir_clean = project_dir.replace('\\', "/");
+        let prefix = format!("file://{}/", project_dir_clean);
+        let prefix_alt = format!("file://{}", project_dir_clean);
+        for (uri, file_diags) in diags_lock.iter() {
+            let uri_clean = uri.replace('\\', "/");
+            let mut rel_path = if uri_clean.starts_with(&prefix) {
+                uri_clean.strip_prefix(&prefix).unwrap_or(&uri_clean).to_string()
+            } else if uri_clean.starts_with(&prefix_alt) {
+                uri_clean.strip_prefix(&prefix_alt).unwrap_or(&uri_clean).to_string()
+            } else {
+                let p_with_file = "file://";
+                if uri_clean.starts_with(p_with_file) {
+                    uri_clean.strip_prefix(p_with_file).unwrap_or(&uri_clean).to_string()
+                } else {
+                    uri_clean.clone()
+                }
+            };
+            
+            if rel_path.starts_with('/') {
+                rel_path = rel_path.trim_start_matches('/').to_string();
+            }
+            
+            for d in file_diags {
+                let mut d_clone = d.clone();
+                d_clone.file = Some(rel_path.clone());
+                all.push(d_clone);
+            }
+        }
+        all
     }
 
     pub fn get_diagnostics_version(&self, file_uri: &str) -> usize {

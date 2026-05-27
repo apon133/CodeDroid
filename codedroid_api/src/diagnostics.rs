@@ -194,7 +194,7 @@ environment:
         {
             let mut servers = servers_arc.lock().unwrap();
             if let Some(client) = servers.get_mut(&lang) {
-                diagnostics = client.get_diagnostics(&file_uri);
+                diagnostics = client.get_all_diagnostics(&project_dir);
             }
         }
     }

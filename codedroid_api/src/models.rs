@@ -136,4 +136,20 @@ pub struct ReadFileResponse {
     pub error: String,
 }
 
+#[derive(Deserialize)]
+pub struct HoverRequest {
+    pub project_path: String,
+    pub file_path: String,
+    pub code: String,
+    pub line: u32,
+    pub character: u32,
+    pub language: String,
+}
+
+#[derive(Serialize)]
+pub struct HoverResponse {
+    pub contents: Option<String>,
+    pub error: String,
+}
+
 

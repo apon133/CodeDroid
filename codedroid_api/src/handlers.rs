@@ -6,7 +6,7 @@ use crate::models::{
     CompletionRequest, CompletionResponse, DeleteRequest, CopyRequest, CreateDirRequest,
     MoveRequest, FormatRequest, FormatResponse, PackageResponse,
     DefinitionRequest, DefinitionResponse, ReferencesRequest, ReferencesResponse,
-    ReadFileRequest, ReadFileResponse
+    ReadFileRequest, ReadFileResponse, HoverRequest, HoverResponse
 };
 use crate::utils::resolve_project_dir;
 use crate::runner::*;
@@ -1088,6 +1088,117 @@ pub async fn read_file(Json(payload): Json<ReadFileRequest>) -> Json<ReadFileRes
             error: format!("Failed to read file: {}", e),
         }),
     }
+}
+
+pub async fn get_hover(Json(payload): Json<HoverRequest>) -> Json<HoverResponse> {
+    let lang = payload.language.to_lowercase();
+    println!("💡 Hover requested for {}: line {}, char {}", lang, payload.line, payload.character);
+
+    let project_dir = resolve_project_dir(&payload.project_path);
+    let is_absolute = payload.file_path.starts_with('/') 
+        || payload.file_path.starts_with("Users/") 
+        || payload.file_path.starts_with("home/") 
+        || payload.file_path.starts_with("data/");
+        
+    let file_uri = if is_absolute {
+        let clean_path = if payload.file_path.starts_with('/') {
+            payload.file_path.clone()
+        } else {
+            format!("/{}", payload.file_path)
+        };
+        format!("file://{}", clean_path)
+    } else {
+        format!("file://{}/{}", project_dir, payload.file_path)
+    };
+
+    let jdtls_data = format!("{}/.jdtls_data", project_dir);
+    let lsp_cmd = match lang.as_str() {
+        "rust" => Some(("rust-analyzer", vec![])),
+        "python" => Some(("pylsp", vec![])),
+        "javascript" | "typescript" | "jsx" | "tsx" => Some(("typescript-language-server", vec!["--stdio"])),
+        "go" => Some(("gopls", vec![])),
+        "c" | "cpp" => Some(("clangd", vec![])),
+        "java" => Some(("jdtls", vec![
+            "-data", &jdtls_data,
+            "--jvm-arg=-XX:+UseG1GC",
+            "--jvm-arg=-XX:+UseStringDeduplication"
+        ])),
+        "dart" => Some(("dart", vec!["language-server"])),
+        "ruby" => Some(("solargraph", vec!["stdio"])),
+        "kotlin" => Some(("kotlin-language-server", vec![])),
+        "swift" => Some(("sourcekit-lsp", vec![])),
+        "html" => Some(("vscode-html-language-server", vec!["--stdio"])),
+        "css" => Some(("vscode-css-language-server", vec!["--stdio"])),
+        "vue" => Some(("vtsls", vec!["--stdio"])),
+        "svelte" => Some(("svelteserver", vec!["--stdio"])),
+        _ => None,
+    };
+
+    let mut contents = None;
+    let mut error = String::new();
+
+    if let Some((cmd, args)) = lsp_cmd {
+        let servers_arc = lsp::get_servers();
+        let mut servers = servers_arc.lock().unwrap();
+
+        if !servers.contains_key(&lang) {
+            if lang == "dart" {
+                let analysis_options_path = format!("{}/analysis_options.yaml", project_dir);
+                if !std::path::Path::new(&analysis_options_path).exists() {
+                    let default_config = "analyzer:\n  strong-mode:\n    implicit-casts: true\n    implicit-dynamic: true\n";
+                    let _ = fs::write(analysis_options_path, default_config);
+                }
+            } else if lang == "jsx" || lang == "tsx" || lang == "javascript" || lang == "typescript" {
+                let jsconfig_path = format!("{}/jsconfig.json", project_dir);
+                let tsconfig_path = format!("{}/tsconfig.json", project_dir);
+                if !std::path::Path::new(&jsconfig_path).exists() && !std::path::Path::new(&tsconfig_path).exists() {
+                    let default_config = "{\n  \"compilerOptions\": {\n    \"jsx\": \"react-jsx\",\n    \"target\": \"ESNext\",\n    \"module\": \"ESNext\",\n    \"moduleResolution\": \"node\",\n    \"allowJs\": true,\n    \"checkJs\": false\n  }\n}";
+                    let _ = fs::write(jsconfig_path, default_config);
+                }
+            }
+
+            let root_uri = format!("file://{}", project_dir);
+            let final_cmd = crate::utils::resolve_lsp_executable(&lang, cmd);
+
+            println!("🚀 Starting LSP server for hover: {} (root: {})", final_cmd, root_uri);
+            match lsp::LspClient::new(&final_cmd, &args, Some(&root_uri)) {
+                Ok(client) => {
+                    servers.insert(lang.clone(), client);
+                }
+                Err(e) => {
+                    println!("❌ Failed to start LSP server for {}: {}", lang, e);
+                    error = e.to_string();
+                }
+            }
+        }
+
+        if let Some(client) = servers.get_mut(&lang) {
+            if !is_absolute {
+                let dest_path = format!("{}/{}", project_dir, payload.file_path);
+                if let Some(parent) = std::path::Path::new(&dest_path).parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                let _ = fs::write(&dest_path, &payload.code);
+            }
+            
+            match client.get_hover(&file_uri, &payload.code, payload.line, payload.character, &lang) {
+                Ok(res) => {
+                    contents = res;
+                }
+                Err(e) => {
+                    println!("❌ LSP get_hover failed for {}: {}", lang, e);
+                    error = e.to_string();
+                    if e.to_string().contains("Broken pipe") {
+                        servers.remove(&lang);
+                    }
+                }
+            }
+        }
+    } else {
+        error = format!("No LSP configured for language: {}", lang);
+    }
+
+    Json(HoverResponse { contents, error })
 }
 
 #[cfg(test)]

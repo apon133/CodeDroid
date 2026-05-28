@@ -458,6 +458,76 @@ impl LspClient {
         Ok(locations)
     }
 
+    pub fn get_hover(
+        &mut self,
+        file_uri: &str,
+        code: &str,
+        line: u32,
+        character: u32,
+        lang: &str,
+    ) -> std::io::Result<Option<String>> {
+        self.notify_file_changed(file_uri, code, lang)?;
+
+        let req_id = self.req_id;
+        let req = json!({
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "method": "textDocument/hover",
+            "params": {
+                "textDocument": {
+                    "uri": file_uri
+                },
+                "position": {
+                    "line": line,
+                    "character": character
+                }
+            }
+        });
+        self.send_request(&req)?;
+        self.req_id += 1;
+
+        if let Some(resp) = self.wait_for_response(req_id) {
+            let result = &resp["result"];
+            if !result.is_null() {
+                let contents = &result["contents"];
+                let mut hover_text = String::new();
+
+                fn extract_content_value(val: &Value, out: &mut String) {
+                    if let Some(s) = val.as_str() {
+                        if !out.is_empty() {
+                            out.push_str("\n\n");
+                        }
+                        out.push_str(s);
+                    } else if let Some(obj) = val.as_object() {
+                        if let Some(value) = obj.get("value").and_then(|v| v.as_str()) {
+                            if !out.is_empty() {
+                                out.push_str("\n\n");
+                            }
+                            if let Some(language) = obj.get("language").and_then(|l| l.as_str()) {
+                                out.push_str(&format!("```{}\n{}\n```", language, value));
+                            } else {
+                                out.push_str(value);
+                            }
+                        }
+                    }
+                }
+
+                if let Some(arr) = contents.as_array() {
+                    for item in arr {
+                        extract_content_value(item, &mut hover_text);
+                    }
+                } else {
+                    extract_content_value(contents, &mut hover_text);
+                }
+
+                if !hover_text.is_empty() {
+                    return Ok(Some(hover_text));
+                }
+            }
+        }
+        Ok(None)
+    }
+
     pub fn notify_file_changed(
         &mut self,
         file_uri: &str,

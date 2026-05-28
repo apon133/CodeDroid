@@ -12,9 +12,19 @@ thread_local! {
 
 #[allow(dead_code)]
 pub fn highlight_code(code: &str, ext: &str) -> String {
-    let mapped_ext = match ext {
-        "dart" | "kt" => "java",
-        "ts" | "tsx" | "jsx" => "js",
+    let normalized = ext.to_lowercase();
+    let mapped_ext = match normalized.as_str() {
+        "rust" => "rs",
+        "python" => "py",
+        "javascript" | "js" => "js",
+        "typescript" | "ts" => "ts",
+        "golang" | "go" => "go",
+        "c" => "c",
+        "cpp" | "c++" => "cpp",
+        "ruby" | "rb" => "rb",
+        "java" => "java",
+        "dart" | "kt" | "kotlin" => "java",
+        "tsx" | "jsx" => "js",
         "swift" => "cs",
         "vue" | "svelte" => "html",
         _ => ext,

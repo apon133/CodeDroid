@@ -2282,3 +2282,333 @@ body.dragging-preview iframe {
   color: var(--accent2);
   border-color: rgba(99, 102, 241, 0.4);
 }
+
+/* ── Hover Tooltip & Bottom Sheet ── */
+.hover-floating {
+  position: absolute;
+  background: rgba(13, 17, 30, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg), 0 10px 30px rgba(0, 0, 0, 0.5);
+  z-index: 1010;
+  max-width: 420px;
+  min-width: 280px;
+  padding: 14px 18px;
+  font-size: 13px;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  pointer-events: auto;
+  border-left: 4px solid var(--accent);
+}
+
+.hover-bottom-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(13, 17, 30, 0.98);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  border-top-left-radius: var(--radius);
+  border-top-right-radius: var(--radius);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.6);
+  z-index: 2000;
+  max-height: 45vh;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px 24px;
+  overflow-y: auto;
+  pointer-events: auto;
+  animation: hover-slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  border-left: 4px solid var(--accent);
+}
+
+@keyframes hover-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.hover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 8px;
+  margin-bottom: 6px;
+  flex-shrink: 0;
+}
+
+.hover-header-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--accent2);
+}
+
+.hover-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text2);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+}
+
+.hover-close-btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.hover-content {
+  font-family: var(--font-ui);
+  line-height: 1.6;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.hover-content p {
+  margin: 0 0 10px 0;
+}
+
+.hover-content p:last-child {
+  margin-bottom: 0;
+}
+
+.hover-content code {
+  font-family: var(--font-mono);
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  color: var(--accent2);
+}
+
+.hover-content pre {
+  margin: 10px 0;
+  padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+.hover-content pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.hover-content h1, .hover-content h2, .hover-content h3 {
+  color: #fff;
+  font-weight: 600;
+  margin: 12px 0 6px 0;
+  font-size: 14px;
+}
+
+.hover-content h1:first-child, .hover-content h2:first-child, .hover-content h3:first-child {
+  margin-top: 0;
+}
+
+.hover-content ul, .hover-content ol {
+  margin: 0 0 10px 18px;
+  padding: 0;
+}
+
+.hover-content li {
+  margin-bottom: 4px;
+}
+
+.hover-loading-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text2);
+}
+
+.hover-error-wrap {
+  color: var(--red);
+  font-weight: 500;
+}
+
+/* ── Hover Footer & Action Buttons ── */
+.hover-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 10px;
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+
+.hover-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.hover-action-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.hover-action-btn .btn-icon {
+  font-size: 12px;
+}
+
+/* ── Hover Code Highlighting Styles ── */
+.hover-code-block {
+  margin: 10px 0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.hover-code-block pre {
+  margin: 0 !important;
+  padding: 12px 14px !important;
+  background: rgba(0, 0, 0, 0.4) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 6px !important;
+  overflow-x: auto !important;
+  font-family: var(--font-mono) !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+}
+
+.hover-code-block pre code {
+  font-family: var(--font-mono) !important;
+  background: transparent !important;
+  padding: 0 !important;
+  color: var(--text) !important;
+}
+
+/* ── Hover Markdown Formatting Improvements ── */
+.hover-content a {
+  color: var(--accent2) !important;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.hover-content a:hover {
+  text-decoration: underline !important;
+}
+
+.hover-content blockquote {
+  margin: 10px 0;
+  padding-left: 10px;
+  border-left: 3px solid var(--accent);
+  color: var(--text2);
+  font-style: italic;
+}
+
+/* ── Hover Diagnostics Styles ── */
+.hover-diagnostics-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.hover-diagnostic-item {
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  border-left: 3px solid;
+}
+
+.hover-diagnostic-item.diag-error {
+  border-left-color: var(--red);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.hover-diagnostic-item.diag-warning {
+  border-left-color: var(--orange);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.hover-diagnostic-item.diag-info {
+  border-left-color: var(--accent);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.hover-diagnostic-item.diag-hint {
+  border-left-color: var(--green);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.hover-diagnostic-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.diag-error .hover-diagnostic-badge {
+  color: #f87171;
+}
+
+.diag-warning .hover-diagnostic-badge {
+  color: #fbbf24;
+}
+
+.diag-info .hover-diagnostic-badge {
+  color: #818cf8;
+}
+
+.diag-hint .hover-diagnostic-badge {
+  color: #34d399;
+}
+
+.hover-diagnostic-badge {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.hover-diagnostic-source {
+  color: var(--text2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.hover-diagnostic-message {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+
+.hover-divider {
+  margin: 12px 0;
+  border: none;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}

@@ -401,5 +401,48 @@ pub async fn read_file_api(path: &str) -> Result<ReadFileResponse, String> {
         .map_err(|e| e.to_string())
 }
 
+#[derive(serde::Serialize)]
+pub struct HoverRequest {
+    pub project_path: String,
+    pub file_path: String,
+    pub code: String,
+    pub line: u32,
+    pub character: u32,
+    pub language: String,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct HoverResponse {
+    pub contents: Option<String>,
+    pub error: String,
+}
+
+pub async fn hover_api(
+    project_path: &str,
+    file_path: &str,
+    code: &str,
+    line: u32,
+    character: u32,
+    language: &str,
+) -> Result<HoverResponse, String> {
+    let body = HoverRequest {
+        project_path: project_path.to_string(),
+        file_path: file_path.to_string(),
+        code: code.to_string(),
+        line,
+        character,
+        language: language.to_string(),
+    };
+    Request::post(&format!("{}/hover", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<HoverResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
 
 

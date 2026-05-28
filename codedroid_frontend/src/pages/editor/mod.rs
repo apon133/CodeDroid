@@ -18,6 +18,7 @@ use search_bar::*;
 use crate::models::{Project, Settings, lang_icon};
 use crate::store;
 use crate::api;
+use gloo_storage::Storage;
 use crate::components::app_bar::AppBar;
 use crate::components::snackbar::Snackbar;
 use crate::components::icon::LucideIcon;
@@ -75,6 +76,7 @@ pub fn EditorPage() -> impl IntoView {
     let cursor_coords = RwSignal::new((0.0, 0.0));
     let last_request_id = RwSignal::new(0u64);
     let diagnostics_list = RwSignal::new(Vec::<api::Diagnostic>::new());
+    let references_list = RwSignal::new(Vec::<crate::api::Location>::new());
     let last_diag_req = RwSignal::new(0u64);
     let active_error = RwSignal::new(Option::<(api::Diagnostic, Vec<api::CodeSuggestion>, bool)>::None);
 
@@ -164,17 +166,54 @@ pub fn EditorPage() -> impl IntoView {
     });
 
     let pid = project.id.clone();
+    let ppath_val = project.path.clone();
     let open_file = Callback::new({
         let pid = pid.clone();
+        let ppath_val = ppath_val.clone();
+        let code = code.clone();
+        let active_tab = active_tab.clone();
+        let open_tabs = open_tabs.clone();
+        let dirty = dirty.clone();
         let trigger_diag = trigger_diagnostics.clone();
         move |name: String| {
             let key = store::file_key(&pid, &name);
             let content = store::load_file(&key);
             open_tabs.update(|t| { if !t.contains(&name) { t.push(name.clone()); }});
-            active_tab.set(Some(name));
+            active_tab.set(Some(name.clone()));
             code.set(content.clone());
             dirty.set(false);
-            trigger_diag.run(content);
+            trigger_diag.run(content.clone());
+
+            let key_exists = gloo_storage::LocalStorage::get::<String>(&key).is_ok();
+            let is_absolute = name.starts_with('/') || name.starts_with("Users/") || name.starts_with("home/") || name.starts_with("data/");
+            if !key_exists || is_absolute || content.is_empty() {
+                let name_clone = name.clone();
+                let key_clone = key.clone();
+                let ppath_clone = ppath_val.clone();
+                let code_clone = code.clone();
+                let active_tab_clone = active_tab.clone();
+                let trigger_diag_clone = trigger_diag.clone();
+                
+                spawn_local(async move {
+                    let file_path = if name_clone.starts_with('/') {
+                        name_clone.clone()
+                    } else if name_clone.starts_with("Users/") || name_clone.starts_with("home/") || name_clone.starts_with("data/") {
+                        format!("/{}", name_clone)
+                    } else {
+                        format!("{}/{}", ppath_clone, name_clone)
+                    };
+                    
+                    if let Ok(resp) = api::read_file_api(&file_path).await {
+                        if resp.error.is_empty() {
+                            store::save_file(&key_clone, &resp.content);
+                            if active_tab_clone.get_untracked().as_ref() == Some(&name_clone) {
+                                code_clone.set(resp.content.clone());
+                                trigger_diag_clone.run(resp.content);
+                            }
+                        }
+                    }
+                });
+            }
         }
     });
 
@@ -268,6 +307,256 @@ pub fn EditorPage() -> impl IntoView {
                     code.set(String::new());
                 }
             }
+        }
+    });
+
+    let trigger_definition = Callback::new({
+        let pid = pid.clone();
+        let code = code.clone();
+        let cursor_pos = cursor_pos.clone();
+        let project_path_str = project_path_str.clone();
+        let active_tab = active_tab.clone();
+        let open_file = open_file.clone();
+        let references_list = references_list.clone();
+        let bottom_tab = bottom_tab.clone();
+        let show_snack = show_snack.clone();
+        let cursor_coords = cursor_coords.clone();
+        let check_error = check_error_at_cursor.clone();
+        move |_: ()| {
+            let active_file = match active_tab.get_untracked() {
+                Some(f) => f,
+                None => return,
+            };
+            let text = code.get_untracked();
+            let pos = cursor_pos.get_untracked();
+            
+            let pos_usize = pos as usize;
+            let text_len = text.len();
+            let safe_pos = if pos_usize > text_len { text_len } else { pos_usize };
+            let text_before = &text[..safe_pos];
+            let lines: Vec<&str> = text_before.split('\n').collect();
+            let line = lines.len().saturating_sub(1) as u32;
+            let character = lines.last().map(|l| l.chars().count()).unwrap_or(0) as u32;
+            
+            let lang = file_to_lsp_lang(&active_file);
+            let path = project_path_str.get_value();
+            
+            let pid_clone = pid.clone();
+            let open_file_cb = open_file.clone();
+            let code_sig = code.clone();
+            let check_error_cb = check_error.clone();
+            let cursor_coords_cb = cursor_coords.clone();
+            let show_snack_cb = show_snack.clone();
+            let ref_list_cb = references_list.clone();
+            let b_tab_cb = bottom_tab.clone();
+            let active_tab_cb = active_tab.clone();
+            let proj_path = path.clone();
+            
+            spawn_local(async move {
+                show_snack_cb.run("Looking up definition...".to_string());
+                match api::get_definition_api(&text, &lang, &path, &active_file, line, character).await {
+                    Ok(resp) => {
+                        let locations = resp.locations;
+                        if locations.is_empty() {
+                            show_snack_cb.run("No definition found".to_string());
+                        } else if locations.len() == 1 {
+                            let loc = &locations[0];
+                            let rel_path = uri_to_relative(&loc.uri, &proj_path);
+                            let target_line = loc.range.start.line;
+                            let target_char = loc.range.start.character;
+                            
+                            // Pre-fetch file from backend if not cached in LocalStorage
+                            let key = store::file_key(&pid_clone, &rel_path);
+                            let key_exists = gloo_storage::LocalStorage::get::<String>(&key).is_ok();
+                            let is_absolute = rel_path.starts_with('/') || rel_path.starts_with("Users/") || rel_path.starts_with("home/") || rel_path.starts_with("data/");
+                            let content_is_empty = store::load_file(&key).is_empty();
+                            
+                            if !key_exists || is_absolute || content_is_empty {
+                                let file_path = if rel_path.starts_with('/') {
+                                    rel_path.clone()
+                                } else if rel_path.starts_with("Users/") || rel_path.starts_with("home/") || rel_path.starts_with("data/") {
+                                    format!("/{}", rel_path)
+                                } else {
+                                    format!("{}/{}", proj_path, rel_path)
+                                };
+                                
+                                if let Ok(resp) = api::read_file_api(&file_path).await {
+                                    if resp.error.is_empty() {
+                                        store::save_file(&key, &resp.content);
+                                    }
+                                }
+                            }
+                            
+                            let current = active_tab_cb.get_untracked();
+                            if current.as_ref() != Some(&rel_path) {
+                                open_file_cb.run(rel_path.clone());
+                                gloo_timers::future::TimeoutFuture::new(50).await;
+                            }
+                            
+                            use wasm_bindgen::JsCast;
+                            if let Some(target) = web_sys::window()
+                                .and_then(|w| w.document())
+                                .and_then(|d| d.query_selector(".code-editor").ok().flatten())
+                            {
+                                if let Ok(target) = target.dyn_into::<web_sys::HtmlTextAreaElement>() {
+                                    let current_code = code_sig.get_untracked();
+                                    let index = pos_to_index(&current_code, target_line, target_char);
+                                    let _ = target.focus();
+                                    let _ = target.set_selection_range(index, index);
+                                    
+                                    if let Some(mirror) = web_sys::window().unwrap().document().unwrap().get_element_by_id("cursor-mirror") {
+                                        let text_before = &current_code[..index as usize];
+                                        mirror.set_text_content(Some(text_before));
+                                        let span = web_sys::window().unwrap().document().unwrap().create_element("span").unwrap();
+                                        span.set_text_content(Some("|"));
+                                        let _ = mirror.append_child(&span);
+                                        let span_el = span.dyn_into::<web_sys::HtmlElement>().unwrap();
+                                        cursor_coords_cb.set((span_el.offset_left() as f64, span_el.offset_top() as f64 + 20.0));
+                                    }
+                                    check_error_cb.run((target_line, target_char));
+                                }
+                            }
+                            show_snack_cb.run(format!("Jumped to definition in {}", rel_path));
+                        } else {
+                            ref_list_cb.set(locations);
+                            b_tab_cb.set(2);
+                            show_snack_cb.run("Multiple definitions found".to_string());
+                        }
+                    }
+                    Err(e) => {
+                        show_snack_cb.run(format!("Error: {}", e));
+                    }
+                }
+            });
+        }
+    });
+
+    let trigger_references = Callback::new({
+        let code = code.clone();
+        let cursor_pos = cursor_pos.clone();
+        let project_path_str = project_path_str.clone();
+        let active_tab = active_tab.clone();
+        let references_list = references_list.clone();
+        let bottom_tab = bottom_tab.clone();
+        let show_snack = show_snack.clone();
+        move |_: ()| {
+            let active_file = match active_tab.get_untracked() {
+                Some(f) => f,
+                None => return,
+            };
+            let text = code.get_untracked();
+            let pos = cursor_pos.get_untracked();
+            
+            let pos_usize = pos as usize;
+            let text_len = text.len();
+            let safe_pos = if pos_usize > text_len { text_len } else { pos_usize };
+            let text_before = &text[..safe_pos];
+            let lines: Vec<&str> = text_before.split('\n').collect();
+            let line = lines.len().saturating_sub(1) as u32;
+            let character = lines.last().map(|l| l.chars().count()).unwrap_or(0) as u32;
+            
+            let lang = file_to_lsp_lang(&active_file);
+            let path = project_path_str.get_value();
+            
+            let show_snack_cb = show_snack.clone();
+            let ref_list_cb = references_list.clone();
+            let b_tab_cb = bottom_tab.clone();
+            
+            spawn_local(async move {
+                show_snack_cb.run("Finding references...".to_string());
+                match api::get_references_api(&text, &lang, &path, &active_file, line, character).await {
+                    Ok(resp) => {
+                        let locations = resp.locations;
+                        if locations.is_empty() {
+                            show_snack_cb.run("No references found".to_string());
+                        } else {
+                            ref_list_cb.set(locations.clone());
+                            b_tab_cb.set(2);
+                            show_snack_cb.run(format!("Found {} references", locations.len()));
+                        }
+                    }
+                    Err(e) => {
+                        show_snack_cb.run(format!("Error: {}", e));
+                    }
+                }
+            });
+        }
+    });
+
+    let on_click_reference = Callback::new({
+        let pid = pid.clone();
+        let open_file = open_file.clone();
+        let active_tab = active_tab.clone();
+        let code_signal = code;
+        let check_error = check_error_at_cursor.clone();
+        let cursor_coords = cursor_coords.clone();
+        let project_path_str = project_path_str.clone();
+        move |loc: crate::api::Location| {
+            let pid_clone = pid.clone();
+            let open_file_clone = open_file.clone();
+            let check_error_clone = check_error.clone();
+            let cursor_coords_clone = cursor_coords.clone();
+            let code_sig_clone = code_signal.clone();
+            let active_tab_clone = active_tab.clone();
+            let proj_path = project_path_str.get_value();
+            
+            spawn_local(async move {
+                let rel_path = uri_to_relative(&loc.uri, &proj_path);
+                let line = loc.range.start.line;
+                let character = loc.range.start.character;
+                
+                // Pre-fetch file from backend if not cached in LocalStorage
+                let key = store::file_key(&pid_clone, &rel_path);
+                let key_exists = gloo_storage::LocalStorage::get::<String>(&key).is_ok();
+                let is_absolute = rel_path.starts_with('/') || rel_path.starts_with("Users/") || rel_path.starts_with("home/") || rel_path.starts_with("data/");
+                let content_is_empty = store::load_file(&key).is_empty();
+                
+                if !key_exists || is_absolute || content_is_empty {
+                    let file_path = if rel_path.starts_with('/') {
+                        rel_path.clone()
+                    } else if rel_path.starts_with("Users/") || rel_path.starts_with("home/") || rel_path.starts_with("data/") {
+                        format!("/{}", rel_path)
+                    } else {
+                        format!("{}/{}", proj_path, rel_path)
+                    };
+                    
+                    if let Ok(resp) = api::read_file_api(&file_path).await {
+                        if resp.error.is_empty() {
+                            store::save_file(&key, &resp.content);
+                        }
+                    }
+                }
+                
+                let current = active_tab_clone.get_untracked();
+                if current.as_ref() != Some(&rel_path) {
+                    open_file_clone.run(rel_path.clone());
+                    gloo_timers::future::TimeoutFuture::new(50).await;
+                }
+                
+                use wasm_bindgen::JsCast;
+                if let Some(target) = web_sys::window()
+                    .and_then(|w| w.document())
+                    .and_then(|d| d.query_selector(".code-editor").ok().flatten())
+                {
+                    if let Ok(target) = target.dyn_into::<web_sys::HtmlTextAreaElement>() {
+                        let text = code_sig_clone.get_untracked();
+                        let index = pos_to_index(&text, line, character);
+                        let _ = target.focus();
+                        let _ = target.set_selection_range(index, index);
+                        
+                        if let Some(mirror) = web_sys::window().unwrap().document().unwrap().get_element_by_id("cursor-mirror") {
+                            let text_before = &text[..index as usize];
+                            mirror.set_text_content(Some(text_before));
+                            let span = web_sys::window().unwrap().document().unwrap().create_element("span").unwrap();
+                            span.set_text_content(Some("|"));
+                            let _ = mirror.append_child(&span);
+                            let span_el = span.dyn_into::<web_sys::HtmlElement>().unwrap();
+                            cursor_coords_clone.set((span_el.offset_left() as f64, span_el.offset_top() as f64 + 20.0));
+                        }
+                        check_error_clone.run((line, character));
+                    }
+                }
+            });
         }
     });
 
@@ -927,6 +1216,14 @@ pub fn EditorPage() -> impl IntoView {
                     on:click=move |_| format_code.run(())>
                     <LucideIcon name="code" size="20" />
                 </button>
+                <button class="btn btn-icon desktop-only" title="Go to Definition (F12)"
+                    on:click=move |_| trigger_definition.run(())>
+                    <LucideIcon name="arrow-up-right" size="20" />
+                </button>
+                <button class="btn btn-icon desktop-only" title="Find References (Shift+F12)"
+                    on:click=move |_| trigger_references.run(())>
+                    <LucideIcon name="compass" size="20" />
+                </button>
                 <div class="more-menu-container mobile-only">
                     <button class="btn btn-icon" title="More Options"
                         on:click=move |e: web_sys::MouseEvent| {
@@ -966,6 +1263,22 @@ pub fn EditorPage() -> impl IntoView {
                                 }>
                                 <LucideIcon name="code" size="18" />
                                 <span>"Format Code"</span>
+                            </button>
+                            <button class="more-menu-item"
+                                on:click=move |_| {
+                                    trigger_definition.run(());
+                                    show_more_menu.set(false);
+                                }>
+                                <LucideIcon name="arrow-up-right" size="18" />
+                                <span>"Go to Definition"</span>
+                            </button>
+                            <button class="more-menu-item"
+                                on:click=move |_| {
+                                    trigger_references.run(());
+                                    show_more_menu.set(false);
+                                }>
+                                <LucideIcon name="compass" size="18" />
+                                <span>"Find References"</span>
                             </button>
                         </div>
                         </>
@@ -1084,6 +1397,8 @@ pub fn EditorPage() -> impl IntoView {
                         check_error_at_cursor=check_error_at_cursor
                         on_select=on_select
                         show_snack=show_snack
+                        trigger_definition=trigger_definition
+                        trigger_references=trigger_references
                     />
 
                     <BottomPanel 
@@ -1095,6 +1410,8 @@ pub fn EditorPage() -> impl IntoView {
                         on_click_problem=on_click_problem
                         code=code
                         language=Signal::derive(move || project_lang_str.get_value())
+                        references_list=references_list
+                        on_click_reference=on_click_reference
                     />
 
                     <EditorFooter
@@ -1127,4 +1444,50 @@ pub fn EditorPage() -> impl IntoView {
             <Snackbar message=snack_msg.read_only() />
         </div>
     }.into_any()
+}
+
+fn uri_to_relative(uri: &str, project_path: &str) -> String {
+    let uri_clean = uri.replace('\\', "/");
+    let proj_clean = project_path.replace('\\', "/");
+    
+    let prefix = format!("file://{}/", proj_clean);
+    let prefix_triple = format!("file:///{}", proj_clean);
+    let prefix_triple_alt = format!("file://{}", proj_clean);
+    
+    if uri_clean.starts_with(&prefix) {
+        let mut rel = uri_clean.strip_prefix(&prefix).unwrap_or(&uri_clean).to_string();
+        if rel.starts_with('/') {
+            rel = rel.trim_start_matches('/').to_string();
+        }
+        rel
+    } else if uri_clean.starts_with(&prefix_triple) {
+        let mut rel = uri_clean.strip_prefix(&prefix_triple).unwrap_or(&uri_clean).to_string();
+        if rel.starts_with('/') {
+            rel = rel.trim_start_matches('/').to_string();
+        }
+        rel
+    } else if uri_clean.starts_with(&prefix_triple_alt) {
+        let mut rel = uri_clean.strip_prefix(&prefix_triple_alt).unwrap_or(&uri_clean).to_string();
+        if rel.starts_with('/') {
+            rel = rel.trim_start_matches('/').to_string();
+        }
+        rel
+    } else {
+        let needle = format!("/{}", proj_clean.trim_start_matches('/'));
+        if let Some(pos) = uri_clean.find(&needle) {
+            let mut rel = uri_clean[pos + needle.len() + 1..].to_string();
+            if rel.starts_with('/') {
+                rel = rel.trim_start_matches('/').to_string();
+            }
+            rel
+        } else {
+            // Absolute path outside the project. Ensure it starts with '/'
+            let path_without_scheme = uri_clean.strip_prefix("file://").unwrap_or(&uri_clean).to_string();
+            if !path_without_scheme.starts_with('/') {
+                format!("/{}", path_without_scheme)
+            } else {
+                path_without_scheme
+            }
+        }
+    }
 }

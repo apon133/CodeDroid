@@ -27,6 +27,8 @@ pub fn EditorCodeArea(
     check_error_at_cursor: Callback<(u32, u32)>,
     on_select: Callback<api::CompletionItem>,
     show_snack: Callback<String>,
+    trigger_definition: Callback<()>,
+    trigger_references: Callback<()>,
 ) -> impl IntoView {
     view! {
         <div class="code-area" style="flex:2">
@@ -236,6 +238,8 @@ pub fn EditorCodeArea(
                                 if (e.ctrl_key() || e.meta_key()) && e.key() == "s" { e.prevent_default(); save_current.run(()); }
                                 if e.shift_key() && e.alt_key() && (e.key() == "f" || e.key() == "F") { e.prevent_default(); format_code.run(()); }
                                 if (e.ctrl_key() || e.meta_key()) && e.key() == "f" { e.prevent_default(); show_search.update(|v| *v = !*v); }
+                                if e.key() == "F12" { e.prevent_default(); trigger_definition.run(()); }
+                                if e.shift_key() && e.key() == "F12" { e.prevent_default(); trigger_references.run(()); }
                                 if !suggestions.get().is_empty() {
                                     let current = selected_idx.get();
                                     let total = suggestions.get().len();

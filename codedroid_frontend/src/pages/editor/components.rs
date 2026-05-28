@@ -559,6 +559,8 @@ pub fn BottomPanel(
     on_click_problem: Callback<(Option<String>, u32, u32)>,
     code: RwSignal<String>,
     language: Signal<String>,
+    references_list: RwSignal<Vec<crate::api::Location>>,
+    on_click_reference: Callback<crate::api::Location>,
 ) -> impl IntoView {
     let expanded_idx = RwSignal::new(Option::<usize>::None);
     let suggestions_state = RwSignal::new(Option::<Vec<crate::api::CodeSuggestion>>::None);
@@ -585,6 +587,20 @@ pub fn BottomPanel(
                         }
                     }}
                 </button>
+                <button
+                    class=move || if bottom_tab.get() == 2 { "bottom-tab active" } else { "bottom-tab" }
+                    on:click=move |_| bottom_tab.set(2)
+                >
+                    "REFERENCES"
+                    {move || {
+                        let count = references_list.get().len();
+                        if count > 0 {
+                            view! { <span class="problem-badge" style="background:var(--primary)">{count}</span> }.into_any()
+                        } else {
+                            view! { "" }.into_any()
+                        }
+                    }}
+                </button>
                 <div style="flex:1"/>
                 {move || (bottom_tab.get() == 0).then(|| view! {
                     <>
@@ -605,6 +621,15 @@ pub fn BottomPanel(
                         <LucideIcon name="trash" size="16" />
                     </button>
                     </>
+                })}
+                {move || (bottom_tab.get() == 2).then(|| view! {
+                    <button class="btn btn-icon" style="font-size:12px" title="Clear references"
+                        on:click=move |_| {
+                            references_list.set(Vec::new());
+                        }
+                    >
+                        <LucideIcon name="trash" size="16" />
+                    </button>
                 })}
             </div>
             {move || {
@@ -752,15 +777,65 @@ pub fn BottomPanel(
                                 }
                             }).collect_view()}
                         </div>
-                    }.into_any();
+                    }.into_any()
+                } else if bottom_tab.get() == 2 {
+                    let refs = references_list.get();
+                    if refs.is_empty() {
+                        view! {
+                            <div class="problems-container empty">
+                                "No references or definition locations have been resolved yet."
+                            </div>
+                        }.into_any()
+                    } else {
+                        view! {
+                            <div class="problems-container">
+                                {refs.into_iter().map(|loc| {
+                                    let loc_clone = loc.clone();
+                                    let display_name = if let Some(last_slash) = loc.uri.rfind('/') {
+                                        loc.uri[last_slash + 1..].to_string()
+                                    } else {
+                                        loc.uri.clone()
+                                    };
+                                    let display_path = if loc.uri.starts_with("file://") {
+                                        loc.uri.strip_prefix("file://").unwrap_or(&loc.uri).to_string()
+                                    } else {
+                                        loc.uri.clone()
+                                    };
+                                    let line = loc.range.start.line;
+                                    let col = loc.range.start.character;
+                                    
+                                    let click_cb = on_click_reference;
+                                    view! {
+                                        <div class="problem-item info" on:click=move |_| click_cb.run(loc_clone.clone()) style="cursor:pointer">
+                                            <div style="display:flex; align-items:center; gap:8px;">
+                                                <span class="problem-severity">"🔍"</span>
+                                                <div style="flex:1">
+                                                    <div style="font-weight:600; color:var(--text); font-size:13px;">
+                                                        {display_name}
+                                                        <span style="color:var(--text2); font-weight:normal; font-size:11px; margin-left:8px;">
+                                                            {format!("(Line {}, Col {})", line + 1, col + 1)}
+                                                        </span>
+                                                    </div>
+                                                    <div style="font-size:11px; color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px;">
+                                                        {display_path}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                }).collect_view()}
+                            </div>
+                        }.into_any()
+                    }
+                } else {
+                    view! {
+                        <div
+                            class=move || if is_error.get() { "terminal error" } else { "terminal" }
+                        >
+                            {move || output.get()}
+                        </div>
+                    }.into_any()
                 }
-                view! {
-                    <div
-                        class=move || if is_error.get() { "terminal error" } else { "terminal" }
-                    >
-                        {move || output.get()}
-                    </div>
-                }.into_any()
             }}
         </div>
     }

@@ -20,6 +20,12 @@ pub struct Range {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct Location {
+    pub uri: String,
+    pub range: Range,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Diagnostic {
     pub range: Range,
     pub severity: Option<u32>,
@@ -191,7 +197,8 @@ impl LspClient {
                         },
                         "hover": { "dynamicRegistration": true },
                         "signatureHelp": { "dynamicRegistration": true },
-                        "definition": { "dynamicRegistration": true }
+                        "definition": { "dynamicRegistration": true },
+                        "references": { "dynamicRegistration": true }
                     },
                     "workspace": {
                         "workspaceEdit": { "documentChanges": true },
@@ -350,6 +357,105 @@ impl LspClient {
         }
 
         Ok(suggestions)
+    }
+
+    pub fn get_definition(
+        &mut self,
+        file_uri: &str,
+        code: &str,
+        line: u32,
+        character: u32,
+        lang: &str,
+    ) -> std::io::Result<Vec<Location>> {
+        self.notify_file_changed(file_uri, code, lang)?;
+
+        let req_id = self.req_id;
+        let req = json!({
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "method": "textDocument/definition",
+            "params": {
+                "textDocument": {
+                    "uri": file_uri
+                },
+                "position": {
+                    "line": line,
+                    "character": character
+                }
+            }
+        });
+        self.send_request(&req)?;
+        self.req_id += 1;
+
+        let mut locations = Vec::new();
+        if let Some(resp) = self.wait_for_response(req_id) {
+            let result = &resp["result"];
+            if !result.is_null() {
+                if let Some(arr) = result.as_array() {
+                    for item in arr {
+                        if let Some(loc) = parse_location(item) {
+                            locations.push(loc);
+                        }
+                    }
+                } else if let Some(loc) = parse_location(result) {
+                    locations.push(loc);
+                }
+            }
+        } else {
+            println!("   ⚠️ LSP timed out for definition request {}", req_id);
+        }
+        Ok(locations)
+    }
+
+    pub fn get_references(
+        &mut self,
+        file_uri: &str,
+        code: &str,
+        line: u32,
+        character: u32,
+        lang: &str,
+    ) -> std::io::Result<Vec<Location>> {
+        self.notify_file_changed(file_uri, code, lang)?;
+
+        let req_id = self.req_id;
+        let req = json!({
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "method": "textDocument/references",
+            "params": {
+                "textDocument": {
+                    "uri": file_uri
+                },
+                "position": {
+                    "line": line,
+                    "character": character
+                },
+                "context": {
+                    "includeDeclaration": true
+                }
+            }
+        });
+        self.send_request(&req)?;
+        self.req_id += 1;
+
+        let mut locations = Vec::new();
+        if let Some(resp) = self.wait_for_response(req_id) {
+            let result = &resp["result"];
+            if !result.is_null() {
+                if let Some(arr) = result.as_array() {
+                    for item in arr {
+                        if let Some(loc) = parse_location(item) {
+                            locations.push(loc);
+                        }
+                    }
+                } else if let Some(loc) = parse_location(result) {
+                    locations.push(loc);
+                }
+            }
+        } else {
+            println!("   ⚠️ LSP timed out for references request {}", req_id);
+        }
+        Ok(locations)
     }
 
     pub fn notify_file_changed(
@@ -522,4 +628,19 @@ pub fn fallback_completions(code: &str, prefix: &str) -> Vec<CompletionItem> {
         .collect();
     res.sort();
     res
+}
+
+fn parse_location(val: &Value) -> Option<Location> {
+    if let (Some(uri), Some(range_val)) = (
+        val.get("uri").and_then(|u| u.as_str()).or_else(|| val.get("targetUri").and_then(|u| u.as_str())),
+        val.get("range").or_else(|| val.get("targetRange")),
+    ) {
+        if let Ok(range) = serde_json::from_value::<Range>(range_val.clone()) {
+            return Some(Location {
+                uri: uri.to_string(),
+                range,
+            });
+        }
+    }
+    None
 }

@@ -95,3 +95,45 @@ pub struct FormatResponse {
     pub error: Option<String>,
 }
 
+#[derive(Deserialize)]
+pub struct DefinitionRequest {
+    pub code: String,
+    pub language: String,
+    pub project_path: String,
+    pub file_path: Option<String>,
+    pub line: u32,
+    pub character: u32,
+}
+
+#[derive(Serialize)]
+pub struct DefinitionResponse {
+    pub locations: Vec<lsp::Location>,
+}
+
+#[derive(Deserialize)]
+pub struct ReferencesRequest {
+    pub code: String,
+    pub language: String,
+    pub project_path: String,
+    pub file_path: Option<String>,
+    pub line: u32,
+    pub character: u32,
+}
+
+#[derive(Serialize)]
+pub struct ReferencesResponse {
+    pub locations: Vec<lsp::Location>,
+}
+
+#[derive(Deserialize)]
+pub struct ReadFileRequest {
+    pub path: String,
+}
+
+#[derive(Serialize)]
+pub struct ReadFileResponse {
+    pub content: String,
+    pub error: String,
+}
+
+

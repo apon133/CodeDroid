@@ -116,6 +116,88 @@ pub async fn get_completions_api(code: &str, language: &str, project_path: &str,
         .map_err(|e| e.to_string())
 }
 
+#[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default, PartialEq)]
+pub struct Position {
+    pub line: u32,
+    pub character: u32,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default, PartialEq)]
+pub struct Range {
+    pub start: Position,
+    pub end: Position,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Clone, Debug, Default, PartialEq)]
+pub struct Location {
+    pub uri: String,
+    pub range: Range,
+}
+
+#[derive(serde::Deserialize)]
+pub struct DefinitionResponse {
+    pub locations: Vec<Location>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct ReferencesResponse {
+    pub locations: Vec<Location>,
+}
+
+pub async fn get_definition_api(
+    code: &str,
+    language: &str,
+    project_path: &str,
+    file_path: &str,
+    line: u32,
+    character: u32,
+) -> Result<DefinitionResponse, String> {
+    let body = json!({
+        "code": code,
+        "language": language,
+        "project_path": project_path,
+        "file_path": file_path,
+        "line": line,
+        "character": character
+    });
+    Request::post(&format!("{}/definition", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<DefinitionResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn get_references_api(
+    code: &str,
+    language: &str,
+    project_path: &str,
+    file_path: &str,
+    line: u32,
+    character: u32,
+) -> Result<ReferencesResponse, String> {
+    let body = json!({
+        "code": code,
+        "language": language,
+        "project_path": project_path,
+        "file_path": file_path,
+        "line": line,
+        "character": character
+    });
+    Request::post(&format!("{}/references", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<ReferencesResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
 pub async fn delete_file_api(path: &str, is_dir: bool) -> Result<(), String> {
     let body = json!({ "path": path, "is_dir": is_dir });
     Request::post(&format!("{}/delete_file", get_api_url()))
@@ -158,18 +240,6 @@ pub async fn create_dir_api(path: &str) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
     Ok(())
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Debug)]
-pub struct Position {
-    pub line: u32,
-    pub character: u32,
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Debug)]
-pub struct Range {
-    pub start: Position,
-    pub end: Position,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Debug)]
@@ -306,5 +376,30 @@ pub async fn list_docs_api() -> Result<ListDocsResponse, String> {
         .await
         .map_err(|e| e.to_string())
 }
+
+#[derive(serde::Serialize)]
+pub struct ReadFileRequest {
+    pub path: String,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct ReadFileResponse {
+    pub content: String,
+    pub error: String,
+}
+
+pub async fn read_file_api(path: &str) -> Result<ReadFileResponse, String> {
+    let body = ReadFileRequest { path: path.to_string() };
+    Request::post(&format!("{}/read_file", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<ReadFileResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
 
 

@@ -4,7 +4,9 @@ use std::process::Command;
 use crate::models::{
     CodeRequest, CodeResponse, StopRequest, PackageRequest, SyncRequest,
     CompletionRequest, CompletionResponse, DeleteRequest, CopyRequest, CreateDirRequest,
-    MoveRequest, FormatRequest, FormatResponse, PackageResponse
+    MoveRequest, FormatRequest, FormatResponse, PackageResponse,
+    DefinitionRequest, DefinitionResponse, ReferencesRequest, ReferencesResponse,
+    ReadFileRequest, ReadFileResponse
 };
 use crate::utils::resolve_project_dir;
 use crate::runner::*;
@@ -814,6 +816,276 @@ pub async fn format_code(Json(payload): Json<FormatRequest>) -> Json<FormatRespo
         Err(err) => Json(FormatResponse {
             formatted_code: payload.code,
             error: Some(err),
+        }),
+    }
+}
+
+pub async fn get_definition(Json(payload): Json<DefinitionRequest>) -> Json<DefinitionResponse> {
+    let lang = payload.language.to_lowercase();
+    println!("🔍 Definition requested for {}: line {}, char {}", lang, payload.line, payload.character);
+
+    let project_dir = resolve_project_dir(&payload.project_path);
+    let file_uri = if let Some(ref rel_path) = payload.file_path {
+        format!("file://{}/{}", project_dir, rel_path)
+    } else {
+        match lang.as_str() {
+            "rust" => format!("file://{}/src/main.rs", project_dir),
+            "python" => format!("file://{}/main.py", project_dir),
+            "javascript" => format!("file://{}/main.js", project_dir),
+            "typescript" => format!("file://{}/main.ts", project_dir),
+            "jsx" => format!("file://{}/main.jsx", project_dir),
+            "tsx" => format!("file://{}/main.tsx", project_dir),
+            "go" => format!("file://{}/main.go", project_dir),
+            "c" => format!("file://{}/main.c", project_dir),
+            "cpp" => format!("file://{}/main.cpp", project_dir),
+            "java" => format!("file://{}/main.java", project_dir),
+            "dart" => format!("file://{}/lib/main.dart", project_dir),
+            "ruby" => format!("file://{}/main.rb", project_dir),
+            "kotlin" => format!("file://{}/main.kt", project_dir),
+            "swift" => format!("file://{}/main.swift", project_dir),
+            "html" => format!("file://{}/index.html", project_dir),
+            "css" => format!("file://{}/style.css", project_dir),
+            "vue" => format!("file://{}/Component.vue", project_dir),
+            "svelte" => format!("file://{}/Component.svelte", project_dir),
+            _ => format!("file://{}/main.txt", project_dir),
+        }
+    };
+
+    let jdtls_data = format!("{}/.jdtls_data", project_dir);
+    let lsp_cmd = match lang.as_str() {
+        "rust" => Some(("rust-analyzer", vec![])),
+        "python" => Some(("pylsp", vec![])),
+        "javascript" | "typescript" | "jsx" | "tsx" => Some(("typescript-language-server", vec!["--stdio"])),
+        "go" => Some(("gopls", vec![])),
+        "c" | "cpp" => Some(("clangd", vec![])),
+        "dart" => Some(("dart", vec!["language-server"])),
+        "ruby" => Some(("solargraph", vec!["stdio"])),
+        "kotlin" => Some(("kotlin-language-server", vec![])),
+        "java" => Some(("jdtls", vec!["-data", &jdtls_data])),
+        "swift" => Some(("sourcekit-lsp", vec![])),
+        "html" => Some(("vscode-html-language-server", vec!["--stdio"])),
+        "css" => Some(("vscode-css-language-server", vec!["--stdio"])),
+        "vue" => Some(("vue-language-server", vec!["--stdio"])),
+        "svelte" => Some(("svelteserver", vec!["--stdio"])),
+        _ => None,
+    };
+
+    let mut locations = vec![];
+
+    if let Some((cmd, args)) = lsp_cmd {
+        let servers_arc = lsp::get_servers();
+        let mut servers = servers_arc.lock().unwrap();
+        if !servers.contains_key(&lang) {
+            // Setup boilerplate files for LSP if needed
+            if lang == "rust" {
+                let _ = fs::create_dir_all(format!("{}/src", project_dir));
+                let cargo_path = format!("{}/Cargo.toml", project_dir);
+                if !std::path::Path::new(&cargo_path).exists() {
+                    let default_cargo = "[package]\nname = \"codedroid_project\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n";
+                    let _ = fs::write(cargo_path, default_cargo);
+                }
+            } else if lang == "go" {
+                let _ = fs::create_dir_all(&project_dir);
+                let mod_path = format!("{}/go.mod", project_dir);
+                if !std::path::Path::new(&mod_path).exists() {
+                    let default_mod = "module codedroid_project\n\ngo 1.25\n";
+                    let _ = fs::write(mod_path, default_mod);
+                }
+            } else if lang == "dart" {
+                let _ = fs::create_dir_all(format!("{}/lib", project_dir));
+                let pubspec_path = format!("{}/pubspec.yaml", project_dir);
+                if !std::path::Path::new(&pubspec_path).exists() {
+                    let default_pubspec = "name: codedroid_project\ndescription: A new Dart project.\nversion: 1.0.0\nenvironment:\n  sdk: '>=3.0.0 <4.0.0'\n";
+                    let _ = fs::write(pubspec_path, default_pubspec);
+                }
+            } else if lang == "jsx" || lang == "tsx" || lang == "javascript" || lang == "typescript" {
+                let jsconfig_path = format!("{}/jsconfig.json", project_dir);
+                let tsconfig_path = format!("{}/tsconfig.json", project_dir);
+                if !std::path::Path::new(&jsconfig_path).exists() && !std::path::Path::new(&tsconfig_path).exists() {
+                    let default_config = "{\n  \"compilerOptions\": {\n    \"jsx\": \"react-jsx\",\n    \"target\": \"ESNext\",\n    \"module\": \"ESNext\",\n    \"moduleResolution\": \"node\",\n    \"allowJs\": true,\n    \"checkJs\": false\n  }\n}";
+                    let _ = fs::write(jsconfig_path, default_config);
+                }
+            }
+
+            let root_uri = format!("file://{}", project_dir);
+            let final_cmd = crate::utils::resolve_lsp_executable(&lang, cmd);
+
+            println!("🚀 Starting LSP server for definition: {} (root: {})", final_cmd, root_uri);
+            match lsp::LspClient::new(&final_cmd, &args, Some(&root_uri)) {
+                Ok(client) => {
+                    servers.insert(lang.clone(), client);
+                }
+                Err(e) => {
+                    println!("❌ Failed to start LSP server for {}: {}", lang, e);
+                }
+            }
+        }
+
+        if let Some(client) = servers.get_mut(&lang) {
+            // Write the current code to disk so LSP picks it up
+            if let Some(ref rel_path) = payload.file_path {
+                let dest_path = format!("{}/{}", project_dir, rel_path);
+                if let Some(parent) = std::path::Path::new(&dest_path).parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                let _ = fs::write(&dest_path, &payload.code);
+            }
+            
+            match client.get_definition(&file_uri, &payload.code, payload.line, payload.character, &lang) {
+                Ok(locs) => {
+                    locations = locs;
+                }
+                Err(e) => {
+                    println!("❌ LSP get_definition failed for {}: {}", lang, e);
+                    if e.to_string().contains("Broken pipe") {
+                        servers.remove(&lang);
+                    }
+                }
+            }
+        }
+    }
+
+    Json(DefinitionResponse { locations })
+}
+
+pub async fn get_references(Json(payload): Json<ReferencesRequest>) -> Json<ReferencesResponse> {
+    let lang = payload.language.to_lowercase();
+    println!("🔍 References requested for {}: line {}, char {}", lang, payload.line, payload.character);
+
+    let project_dir = resolve_project_dir(&payload.project_path);
+    let file_uri = if let Some(ref rel_path) = payload.file_path {
+        format!("file://{}/{}", project_dir, rel_path)
+    } else {
+        match lang.as_str() {
+            "rust" => format!("file://{}/src/main.rs", project_dir),
+            "python" => format!("file://{}/main.py", project_dir),
+            "javascript" => format!("file://{}/main.js", project_dir),
+            "typescript" => format!("file://{}/main.ts", project_dir),
+            "jsx" => format!("file://{}/main.jsx", project_dir),
+            "tsx" => format!("file://{}/main.tsx", project_dir),
+            "go" => format!("file://{}/main.go", project_dir),
+            "c" => format!("file://{}/main.c", project_dir),
+            "cpp" => format!("file://{}/main.cpp", project_dir),
+            "java" => format!("file://{}/main.java", project_dir),
+            "dart" => format!("file://{}/lib/main.dart", project_dir),
+            "ruby" => format!("file://{}/main.rb", project_dir),
+            "kotlin" => format!("file://{}/main.kt", project_dir),
+            "swift" => format!("file://{}/main.swift", project_dir),
+            "html" => format!("file://{}/index.html", project_dir),
+            "css" => format!("file://{}/style.css", project_dir),
+            "vue" => format!("file://{}/Component.vue", project_dir),
+            "svelte" => format!("file://{}/Component.svelte", project_dir),
+            _ => format!("file://{}/main.txt", project_dir),
+        }
+    };
+
+    let jdtls_data = format!("{}/.jdtls_data", project_dir);
+    let lsp_cmd = match lang.as_str() {
+        "rust" => Some(("rust-analyzer", vec![])),
+        "python" => Some(("pylsp", vec![])),
+        "javascript" | "typescript" | "jsx" | "tsx" => Some(("typescript-language-server", vec!["--stdio"])),
+        "go" => Some(("gopls", vec![])),
+        "c" | "cpp" => Some(("clangd", vec![])),
+        "dart" => Some(("dart", vec!["language-server"])),
+        "ruby" => Some(("solargraph", vec!["stdio"])),
+        "kotlin" => Some(("kotlin-language-server", vec![])),
+        "java" => Some(("jdtls", vec!["-data", &jdtls_data])),
+        "swift" => Some(("sourcekit-lsp", vec![])),
+        "html" => Some(("vscode-html-language-server", vec!["--stdio"])),
+        "css" => Some(("vscode-css-language-server", vec!["--stdio"])),
+        "vue" => Some(("vue-language-server", vec!["--stdio"])),
+        "svelte" => Some(("svelteserver", vec!["--stdio"])),
+        _ => None,
+    };
+
+    let mut locations = vec![];
+
+    if let Some((cmd, args)) = lsp_cmd {
+        let servers_arc = lsp::get_servers();
+        let mut servers = servers_arc.lock().unwrap();
+        if !servers.contains_key(&lang) {
+            // Setup boilerplate files for LSP if needed
+            if lang == "rust" {
+                let _ = fs::create_dir_all(format!("{}/src", project_dir));
+                let cargo_path = format!("{}/Cargo.toml", project_dir);
+                if !std::path::Path::new(&cargo_path).exists() {
+                    let default_cargo = "[package]\nname = \"codedroid_project\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n";
+                    let _ = fs::write(cargo_path, default_cargo);
+                }
+            } else if lang == "go" {
+                let _ = fs::create_dir_all(&project_dir);
+                let mod_path = format!("{}/go.mod", project_dir);
+                if !std::path::Path::new(&mod_path).exists() {
+                    let default_mod = "module codedroid_project\n\ngo 1.25\n";
+                    let _ = fs::write(mod_path, default_mod);
+                }
+            } else if lang == "dart" {
+                let _ = fs::create_dir_all(format!("{}/lib", project_dir));
+                let pubspec_path = format!("{}/pubspec.yaml", project_dir);
+                if !std::path::Path::new(&pubspec_path).exists() {
+                    let default_pubspec = "name: codedroid_project\ndescription: A new Dart project.\nversion: 1.0.0\nenvironment:\n  sdk: '>=3.0.0 <4.0.0'\n";
+                    let _ = fs::write(pubspec_path, default_pubspec);
+                }
+            } else if lang == "jsx" || lang == "tsx" || lang == "javascript" || lang == "typescript" {
+                let jsconfig_path = format!("{}/jsconfig.json", project_dir);
+                let tsconfig_path = format!("{}/tsconfig.json", project_dir);
+                if !std::path::Path::new(&jsconfig_path).exists() && !std::path::Path::new(&tsconfig_path).exists() {
+                    let default_config = "{\n  \"compilerOptions\": {\n    \"jsx\": \"react-jsx\",\n    \"target\": \"ESNext\",\n    \"module\": \"ESNext\",\n    \"moduleResolution\": \"node\",\n    \"allowJs\": true,\n    \"checkJs\": false\n  }\n}";
+                    let _ = fs::write(jsconfig_path, default_config);
+                }
+            }
+
+            let root_uri = format!("file://{}", project_dir);
+            let final_cmd = crate::utils::resolve_lsp_executable(&lang, cmd);
+
+            println!("🚀 Starting LSP server for references: {} (root: {})", final_cmd, root_uri);
+            match lsp::LspClient::new(&final_cmd, &args, Some(&root_uri)) {
+                Ok(client) => {
+                    servers.insert(lang.clone(), client);
+                }
+                Err(e) => {
+                    println!("❌ Failed to start LSP server for {}: {}", lang, e);
+                }
+            }
+        }
+
+        if let Some(client) = servers.get_mut(&lang) {
+            // Write the current code to disk so LSP picks it up
+            if let Some(ref rel_path) = payload.file_path {
+                let dest_path = format!("{}/{}", project_dir, rel_path);
+                if let Some(parent) = std::path::Path::new(&dest_path).parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                let _ = fs::write(&dest_path, &payload.code);
+            }
+            
+            match client.get_references(&file_uri, &payload.code, payload.line, payload.character, &lang) {
+                Ok(locs) => {
+                    locations = locs;
+                }
+                Err(e) => {
+                    println!("❌ LSP get_references failed for {}: {}", lang, e);
+                    if e.to_string().contains("Broken pipe") {
+                        servers.remove(&lang);
+                    }
+                }
+            }
+        }
+    }
+
+    Json(ReferencesResponse { locations })
+}
+
+pub async fn read_file(Json(payload): Json<ReadFileRequest>) -> Json<ReadFileResponse> {
+    let target_path = resolve_project_dir(&payload.path);
+    match fs::read_to_string(&target_path) {
+        Ok(content) => Json(ReadFileResponse {
+            content,
+            error: "".to_string(),
+        }),
+        Err(e) => Json(ReadFileResponse {
+            content: "".to_string(),
+            error: format!("Failed to read file: {}", e),
         }),
     }
 }

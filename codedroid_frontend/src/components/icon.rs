@@ -7,6 +7,14 @@ pub fn LucideIcon(
     #[prop(optional, default = "16")] size: &'static str,
 ) -> impl IntoView {
     let svg_content = match name {
+        "compass" => view! {
+            <circle cx="12" cy="12" r="10" />
+            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 8.88 9.88 16.24 7.76" />
+        }.into_any(),
+        "arrow-up-right" => view! {
+            <line x1="7" x2="17" y1="17" y2="7" />
+            <polyline points="7 7 17 7 17 17" />
+        }.into_any(),
         "folder" => view! {
             <path d="M20 20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2 3h6a2 2 0 0 1 2 2z" />
         }.into_any(),

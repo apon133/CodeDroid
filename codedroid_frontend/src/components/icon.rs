@@ -11,6 +11,20 @@ pub fn LucideIcon(
             <circle cx="12" cy="12" r="10" />
             <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 8.88 9.88 16.24 7.76" />
         }.into_any(),
+        "locate-fixed" => view! {
+            <line x1="2" x2="5" y1="12" y2="12" />
+            <line x1="19" x2="22" y1="12" y2="12" />
+            <line x1="12" x2="12" y1="2" y2="5" />
+            <line x1="12" x2="12" y1="19" y2="22" />
+            <circle cx="12" cy="12" r="7" />
+            <circle cx="12" cy="12" r="3" />
+        }.into_any(),
+        "search-code" => view! {
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.3-4.3" />
+            <polyline points="9 8 7 11 9 14" />
+            <polyline points="13 8 15 11 13 14" />
+        }.into_any(),
         "arrow-up-right" => view! {
             <line x1="7" x2="17" y1="17" y2="7" />
             <polyline points="7 7 17 7 17 17" />

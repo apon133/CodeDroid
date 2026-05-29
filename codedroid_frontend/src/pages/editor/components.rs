@@ -561,6 +561,7 @@ pub fn BottomPanel(
     language: Signal<String>,
     references_list: RwSignal<Vec<crate::api::Location>>,
     on_click_reference: Callback<crate::api::Location>,
+    active_tab: Signal<Option<String>>,
 ) -> impl IntoView {
     let expanded_idx = RwSignal::new(Option::<usize>::None);
     let suggestions_state = RwSignal::new(Option::<Vec<crate::api::CodeSuggestion>>::None);
@@ -787,8 +788,12 @@ pub fn BottomPanel(
                             </div>
                         }.into_any()
                     } else {
+                        let active = active_tab.get();
+                        let current_code = code.get();
+                        let lines: Vec<String> = current_code.lines().map(|s| s.to_string()).collect();
+                        
                         view! {
-                            <div class="problems-container">
+                            <div class="references-list-container">
                                 {refs.into_iter().map(|loc| {
                                     let loc_clone = loc.clone();
                                     let display_name = if let Some(last_slash) = loc.uri.rfind('/') {
@@ -804,22 +809,40 @@ pub fn BottomPanel(
                                     let line = loc.range.start.line;
                                     let col = loc.range.start.character;
                                     
+                                    // Check if the reference's uri points to the current active file
+                                    let is_active_file = active.as_ref().map(|act| {
+                                        let suffix = format!("/{}", act);
+                                        loc.uri.ends_with(&suffix)
+                                    }).unwrap_or(false);
+                                    
+                                    let line_preview = if is_active_file && (line as usize) < lines.len() {
+                                        let content = lines[line as usize].trim().to_string();
+                                        if !content.is_empty() {
+                                            Some(content)
+                                        } else {
+                                            None
+                                        }
+                                    } else {
+                                        None
+                                    };
+                                    
                                     let click_cb = on_click_reference;
                                     view! {
-                                        <div class="problem-item info" on:click=move |_| click_cb.run(loc_clone.clone()) style="cursor:pointer">
-                                            <div style="display:flex; align-items:center; gap:8px;">
-                                                <span class="problem-severity">"🔍"</span>
-                                                <div style="flex:1">
-                                                    <div style="font-weight:600; color:var(--text); font-size:13px;">
-                                                        {display_name}
-                                                        <span style="color:var(--text2); font-weight:normal; font-size:11px; margin-left:8px;">
-                                                            {format!("(Line {}, Col {})", line + 1, col + 1)}
-                                                        </span>
-                                                    </div>
-                                                    <div style="font-size:11px; color:var(--text2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:2px;">
-                                                        {display_path}
-                                                    </div>
+                                        <div class="reference-item" on:click=move |_| click_cb.run(loc_clone.clone())>
+                                            <div class="reference-icon-wrap">
+                                                <LucideIcon name="locate-fixed" size="14" />
+                                            </div>
+                                            <div class="reference-details">
+                                                <div class="reference-meta">
+                                                    <span class="reference-filename">{display_name}</span>
+                                                    <span class="reference-badge">{format!("Line {}, Col {}", line + 1, col + 1)}</span>
                                                 </div>
+                                                <div class="reference-path">{display_path}</div>
+                                                {line_preview.map(|snippet| view! {
+                                                    <div class="reference-code-snippet">
+                                                        {snippet}
+                                                    </div>
+                                                })}
                                             </div>
                                         </div>
                                     }

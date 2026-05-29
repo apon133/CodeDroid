@@ -1218,11 +1218,11 @@ pub fn EditorPage() -> impl IntoView {
                 </button>
                 <button class="btn btn-icon desktop-only" title="Go to Definition (F12)"
                     on:click=move |_| trigger_definition.run(())>
-                    <LucideIcon name="arrow-up-right" size="20" />
+                    <LucideIcon name="locate-fixed" size="20" />
                 </button>
                 <button class="btn btn-icon desktop-only" title="Find References (Shift+F12)"
                     on:click=move |_| trigger_references.run(())>
-                    <LucideIcon name="compass" size="20" />
+                    <LucideIcon name="search-code" size="20" />
                 </button>
                 <div class="more-menu-container mobile-only">
                     <button class="btn btn-icon" title="More Options"
@@ -1269,7 +1269,7 @@ pub fn EditorPage() -> impl IntoView {
                                     trigger_definition.run(());
                                     show_more_menu.set(false);
                                 }>
-                                <LucideIcon name="arrow-up-right" size="18" />
+                                <LucideIcon name="locate-fixed" size="18" />
                                 <span>"Go to Definition"</span>
                             </button>
                             <button class="more-menu-item"
@@ -1277,7 +1277,7 @@ pub fn EditorPage() -> impl IntoView {
                                     trigger_references.run(());
                                     show_more_menu.set(false);
                                 }>
-                                <LucideIcon name="compass" size="18" />
+                                <LucideIcon name="search-code" size="18" />
                                 <span>"Find References"</span>
                             </button>
                         </div>
@@ -1412,6 +1412,7 @@ pub fn EditorPage() -> impl IntoView {
                         language=Signal::derive(move || project_lang_str.get_value())
                         references_list=references_list
                         on_click_reference=on_click_reference
+                        active_tab=active_tab.into()
                     />
 
                     <EditorFooter

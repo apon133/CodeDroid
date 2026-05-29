@@ -3,6 +3,7 @@ use crate::models::Settings;
 use crate::pages::editor::utils::*;
 use crate::pages::editor::components::apply_replacement;
 use crate::api;
+use crate::components::icon::LucideIcon;
 use wasm_bindgen_futures::spawn_local;
 use pulldown_cmark::{Parser, Options, html};
 
@@ -1181,11 +1182,11 @@ pub fn EditorCodeArea(
                                     </div>
                                     <div class="hover-footer">
                                         <button class="hover-action-btn" on:click=on_def_click>
-                                            <span class="btn-icon">"🔍"</span>
+                                            <LucideIcon name="locate-fixed" size="14" class="btn-icon" />
                                             "Go to Definition"
                                         </button>
                                         <button class="hover-action-btn" on:click=on_refs_click>
-                                            <span class="btn-icon">"📚"</span>
+                                            <LucideIcon name="search-code" size="14" class="btn-icon" />
                                             "Find References"
                                         </button>
                                     </div>

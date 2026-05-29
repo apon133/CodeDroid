@@ -412,6 +412,7 @@ pub struct HoverRequest {
 }
 
 #[derive(serde::Deserialize, Clone)]
+#[allow(dead_code)]
 pub struct HoverResponse {
     pub contents: Option<String>,
     pub error: String,

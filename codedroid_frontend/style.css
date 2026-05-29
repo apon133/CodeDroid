@@ -671,7 +671,7 @@ body {
 .code-container {
   flex: 1; 
   display: grid; 
-  overflow: auto; 
+  overflow: hidden; 
   background: var(--bg);
   position: relative;
   --gutter-width: 54px;
@@ -710,6 +710,8 @@ body {
   padding: 12px 0px !important;
   display: flex;
   flex-direction: column;
+  will-change: transform;
+  overflow: hidden;
 }
 
 .code-highlight pre { 
@@ -730,7 +732,7 @@ body {
   outline: none; 
   resize: none; 
   z-index: 2; 
-  overflow: hidden;
+  overflow: auto;
   padding-top: 12px !important;
   padding-bottom: 12px !important;
   padding-left: var(--text-padding-left) !important;

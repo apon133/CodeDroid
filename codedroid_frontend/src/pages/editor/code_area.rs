@@ -956,6 +956,18 @@ pub fn EditorCodeArea(
                                     check_error_at_cursor.run((line, character));
                                 }
                             }
+                            on:scroll=move |e: web_sys::Event| {
+                                use wasm_bindgen::JsCast;
+                                let textarea = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
+                                let scroll_top = textarea.scroll_top();
+                                let scroll_left = textarea.scroll_left();
+                                if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
+                                    if let Some(highlight) = doc.query_selector(".code-highlight").ok().flatten() {
+                                        let _ = highlight.unchecked_ref::<web_sys::HtmlElement>().style()
+                                            .set_property("transform", &format!("translate({}px, {}px)", -scroll_left, -scroll_top));
+                                    }
+                                }
+                            }
                         />
                         {move || (!suggestions.get().is_empty()).then(|| {
                             let coords = cursor_coords.get();

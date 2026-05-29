@@ -49,6 +49,22 @@ It pairs with an integrated **Leptos-based Web IDE** (compiled to WASM) that del
 
 ---
 
+## 📱 Application Preview
+
+| Create a New Project | Add Dependencies |
+| :---: | :---: |
+| ![Create Project](./assets/create_project.jpg) | ![Add Dependency](./assets/dependency_add.jpg) |
+
+| Auto Completion & Suggestions | Error Diagnostics | Hover Documentation |
+| :---: | :---: | :---: |
+| ![Code Suggestion](./assets/code_suggetion.jpg) | ![Error Suggestion](./assets/error_suggetion.jpg) | ![Code Documentation](./assets/code_documention.jpg) |
+
+| In-File Search | Global Project Search |
+| :---: | :---: |
+| ![In-File Search](./assets/in_file_search.jpg) | ![Global Search](./assets/globel_search.jpg) |
+
+---
+
 ## ✨ Features
 
 - **Mobile-First Responsive Layout** — Optimized interface for touch devices, viewport overlays, and smaller screen form factors (320px–768px). Features a slide-out file explorer overlay drawer, auto-collapsing sidebar upon opening files, persistent touch targets for closing tabs/deleting projects, and layouts utilizing CSS `100dvh` to handle virtual keyboards elegantly.

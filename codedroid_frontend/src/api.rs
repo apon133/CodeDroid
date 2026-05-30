@@ -13,9 +13,9 @@ pub fn get_api_url() -> String {
     DEFAULT_API_URL.to_string()
 }
 
+use crate::models::{CommandResponse, PackageResponse, RunResponse};
 use gloo_net::http::Request;
 use serde_json::json;
-use crate::models::{RunResponse, PackageResponse, CommandResponse};
 
 pub async fn run_code(
     code: &str,
@@ -65,7 +65,11 @@ pub async fn save_file_api(path: &str, content: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub async fn add_package(package: &str, language: &str, project_path: &str) -> Result<PackageResponse, String> {
+pub async fn add_package(
+    package: &str,
+    language: &str,
+    project_path: &str,
+) -> Result<PackageResponse, String> {
     let body = json!({
         "package": package,
         "language": language,
@@ -96,7 +100,14 @@ pub struct CompletionResponse {
     pub suggestions: Vec<CompletionItem>,
 }
 
-pub async fn get_completions_api(code: &str, language: &str, project_path: &str, file_path: &str, line: u32, character: u32) -> Result<CompletionResponse, String> {
+pub async fn get_completions_api(
+    code: &str,
+    language: &str,
+    project_path: &str,
+    file_path: &str,
+    line: u32,
+    character: u32,
+) -> Result<CompletionResponse, String> {
     let body = json!({
         "code": code,
         "language": language,
@@ -258,7 +269,12 @@ pub struct DiagnosticsResponse {
     pub diagnostics: Vec<Diagnostic>,
 }
 
-pub async fn get_diagnostics_api(code: &str, language: &str, project_path: &str, file_path: &str) -> Result<DiagnosticsResponse, String> {
+pub async fn get_diagnostics_api(
+    code: &str,
+    language: &str,
+    project_path: &str,
+    file_path: &str,
+) -> Result<DiagnosticsResponse, String> {
     let body = json!({
         "code": code,
         "language": language,
@@ -355,7 +371,9 @@ pub struct ListDocsResponse {
 }
 
 pub async fn read_doc_api(path: &str) -> Result<ReadDocResponse, String> {
-    let body = ReadDocRequest { path: path.to_string() };
+    let body = ReadDocRequest {
+        path: path.to_string(),
+    };
     Request::post(&format!("{}/docs/read", get_api_url()))
         .json(&body)
         .map_err(|e| e.to_string())?
@@ -389,7 +407,9 @@ pub struct ReadFileResponse {
 }
 
 pub async fn read_file_api(path: &str) -> Result<ReadFileResponse, String> {
-    let body = ReadFileRequest { path: path.to_string() };
+    let body = ReadFileRequest {
+        path: path.to_string(),
+    };
     Request::post(&format!("{}/read_file", get_api_url()))
         .json(&body)
         .map_err(|e| e.to_string())?
@@ -445,10 +465,7 @@ pub async fn hover_api(
         .map_err(|e| e.to_string())
 }
 
-pub async fn run_command_api(
-    command: &str,
-    project_path: &str,
-) -> Result<CommandResponse, String> {
+pub async fn run_command_api(command: &str, project_path: &str) -> Result<CommandResponse, String> {
     let body = json!({
         "command": command,
         "project_path": project_path,
@@ -464,5 +481,34 @@ pub async fn run_command_api(
         .map_err(|e| e.to_string())
 }
 
+#[derive(serde::Serialize)]
+pub struct ScanProjectRequest {
+    pub project_path: String,
+}
 
+#[derive(serde::Deserialize, Clone)]
+pub struct FileInfo {
+    pub rel_path: String,
+    pub is_dir: bool,
+}
 
+#[derive(serde::Deserialize, Clone)]
+pub struct ScanProjectResponse {
+    pub files: Vec<FileInfo>,
+    pub error: String,
+}
+
+pub async fn scan_project_api(project_path: &str) -> Result<ScanProjectResponse, String> {
+    let body = ScanProjectRequest {
+        project_path: project_path.to_string(),
+    };
+    Request::post(&format!("{}/scan_project", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<ScanProjectResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}

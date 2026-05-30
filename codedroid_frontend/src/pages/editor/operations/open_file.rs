@@ -1,9 +1,9 @@
+use crate::api;
+use crate::pages::editor::utils::is_absolute_path;
+use crate::store;
+use gloo_storage::Storage;
 use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use gloo_storage::Storage;
-use crate::api;
-use crate::store;
-use crate::pages::editor::utils::is_absolute_path;
 
 pub fn make_open_file(
     pid: String,
@@ -17,7 +17,11 @@ pub fn make_open_file(
     Callback::new(move |name: String| {
         let key = store::file_key(&pid, &name);
         let content = store::load_file(&key);
-        open_tabs.update(|t| { if !t.contains(&name) { t.push(name.clone()); }});
+        open_tabs.update(|t| {
+            if !t.contains(&name) {
+                t.push(name.clone());
+            }
+        });
         active_tab.set(Some(name.clone()));
         code.set(content.clone());
         dirty.set(false);
@@ -36,7 +40,10 @@ pub fn make_open_file(
             spawn_local(async move {
                 let file_path = if name_clone.starts_with('/') {
                     name_clone.clone()
-                } else if name_clone.starts_with("Users/") || name_clone.starts_with("home/") || name_clone.starts_with("data/") {
+                } else if name_clone.starts_with("Users/")
+                    || name_clone.starts_with("home/")
+                    || name_clone.starts_with("data/")
+                {
                     format!("/{}", name_clone)
                 } else if is_absolute_path(&name_clone) {
                     name_clone.clone()

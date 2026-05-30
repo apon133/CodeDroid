@@ -1,9 +1,9 @@
+use crate::api;
+use crate::pages::editor::utils::{file_to_lsp_lang, is_absolute_path, pos_to_index};
+use crate::store;
+use gloo_storage::Storage;
 use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use gloo_storage::Storage;
-use crate::api;
-use crate::store;
-use crate::pages::editor::utils::{file_to_lsp_lang, is_absolute_path, pos_to_index};
 
 pub fn make_trigger_definition(
     pid: String,
@@ -49,7 +49,8 @@ pub fn make_trigger_definition(
 
         spawn_local(async move {
             show_snack_cb.run("Looking up definition...".to_string());
-            match api::get_definition_api(&text, &lang, &path, &active_file, line, character).await {
+            match api::get_definition_api(&text, &lang, &path, &active_file, line, character).await
+            {
                 Ok(resp) => {
                     let locations = resp.locations;
                     if locations.is_empty() {
@@ -68,7 +69,10 @@ pub fn make_trigger_definition(
                         if !key_exists || is_absolute || content_is_empty {
                             let file_path = if rel_path.starts_with('/') {
                                 rel_path.clone()
-                            } else if rel_path.starts_with("Users/") || rel_path.starts_with("home/") || rel_path.starts_with("data/") {
+                            } else if rel_path.starts_with("Users/")
+                                || rel_path.starts_with("home/")
+                                || rel_path.starts_with("data/")
+                            {
                                 format!("/{}", rel_path)
                             } else if is_absolute_path(&rel_path) {
                                 rel_path.clone()
@@ -100,14 +104,27 @@ pub fn make_trigger_definition(
                                 let _ = target.focus();
                                 let _ = target.set_selection_range(index, index);
 
-                                if let Some(mirror) = web_sys::window().unwrap().document().unwrap().get_element_by_id("cursor-mirror") {
+                                if let Some(mirror) = web_sys::window()
+                                    .unwrap()
+                                    .document()
+                                    .unwrap()
+                                    .get_element_by_id("cursor-mirror")
+                                {
                                     let text_before = &current_code[..index as usize];
                                     mirror.set_text_content(Some(text_before));
-                                    let span = web_sys::window().unwrap().document().unwrap().create_element("span").unwrap();
+                                    let span = web_sys::window()
+                                        .unwrap()
+                                        .document()
+                                        .unwrap()
+                                        .create_element("span")
+                                        .unwrap();
                                     span.set_text_content(Some("|"));
                                     let _ = mirror.append_child(&span);
                                     let span_el = span.dyn_into::<web_sys::HtmlElement>().unwrap();
-                                    cursor_coords_cb.set((span_el.offset_left() as f64, span_el.offset_top() as f64 + 20.0));
+                                    cursor_coords_cb.set((
+                                        span_el.offset_left() as f64,
+                                        span_el.offset_top() as f64 + 20.0,
+                                    ));
                                 }
                                 check_error_cb.run((target_line, target_char));
                             }

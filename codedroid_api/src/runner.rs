@@ -1,12 +1,12 @@
-use std::process::{Command, Stdio};
-use std::fs;
-use std::io::Read;
-use std::thread;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use axum::Json;
 use crate::models::{CodeRequest, CodeResponse};
 use crate::utils::find_url_in_output;
+use axum::Json;
+use std::fs;
+use std::io::Read;
+use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
@@ -20,12 +20,14 @@ pub fn run_with_timeout(mut cmd: Command) -> Json<CodeResponse> {
 
     let mut child = match cmd.spawn() {
         Ok(c) => c,
-        Err(e) => return Json(CodeResponse {
-            output: "".to_string(),
-            error: format!("Failed to spawn process: {}", e),
-            pid: None,
-            url: None,
-        }),
+        Err(e) => {
+            return Json(CodeResponse {
+                output: "".to_string(),
+                error: format!("Failed to spawn process: {}", e),
+                pid: None,
+                url: None,
+            })
+        }
     };
 
     let mut stdout = child.stdout.take().unwrap();
@@ -38,7 +40,9 @@ pub fn run_with_timeout(mut cmd: Command) -> Json<CodeResponse> {
     thread::spawn(move || {
         let mut buffer = [0; 1024];
         while let Ok(n) = stdout.read(&mut buffer) {
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             let mut buf = s_out.lock().unwrap();
             buf.push_str(&String::from_utf8_lossy(&buffer[..n]));
         }
@@ -48,7 +52,9 @@ pub fn run_with_timeout(mut cmd: Command) -> Json<CodeResponse> {
     thread::spawn(move || {
         let mut buffer = [0; 1024];
         while let Ok(n) = stderr.read(&mut buffer) {
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             let mut buf = s_err.lock().unwrap();
             buf.push_str(&String::from_utf8_lossy(&buffer[..n]));
         }
@@ -96,12 +102,14 @@ pub fn run_with_timeout_web(mut cmd: Command) -> Json<CodeResponse> {
 
     let mut child = match cmd.spawn() {
         Ok(c) => c,
-        Err(e) => return Json(CodeResponse {
-            output: "".to_string(),
-            error: format!("Failed to spawn process: {}", e),
-            pid: None,
-            url: None,
-        }),
+        Err(e) => {
+            return Json(CodeResponse {
+                output: "".to_string(),
+                error: format!("Failed to spawn process: {}", e),
+                pid: None,
+                url: None,
+            })
+        }
     };
 
     let mut stdout = child.stdout.take().unwrap();
@@ -114,7 +122,9 @@ pub fn run_with_timeout_web(mut cmd: Command) -> Json<CodeResponse> {
     thread::spawn(move || {
         let mut buffer = [0; 1024];
         while let Ok(n) = stdout.read(&mut buffer) {
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             let mut buf = s_out.lock().unwrap();
             buf.push_str(&String::from_utf8_lossy(&buffer[..n]));
         }
@@ -124,7 +134,9 @@ pub fn run_with_timeout_web(mut cmd: Command) -> Json<CodeResponse> {
     thread::spawn(move || {
         let mut buffer = [0; 1024];
         while let Ok(n) = stderr.read(&mut buffer) {
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             let mut buf = s_err.lock().unwrap();
             buf.push_str(&String::from_utf8_lossy(&buffer[..n]));
         }
@@ -151,7 +163,7 @@ pub fn run_with_timeout_web(mut cmd: Command) -> Json<CodeResponse> {
             detected_url = Some(url);
             break;
         }
-        
+
         thread::sleep(Duration::from_millis(200));
     }
 
@@ -179,7 +191,8 @@ fn get_port_from_package_json(project_dir: &str) -> Option<u16> {
     let pkg_path = format!("{}/package.json", project_dir);
     if let Ok(content) = fs::read_to_string(pkg_path) {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(dev_script) = json.get("scripts")
+            if let Some(dev_script) = json
+                .get("scripts")
                 .and_then(|s| s.get("dev"))
                 .and_then(|d| d.as_str())
             {
@@ -225,7 +238,7 @@ pub fn run_javascript_framework(_payload: CodeRequest, project_dir: &str) -> Jso
             .current_dir(project_dir)
             .env("NG_CLI_ANALYTICS", "false")
             .output();
-            
+
         match install_output {
             Ok(out) => {
                 if !out.status.success() {
@@ -240,7 +253,7 @@ pub fn run_javascript_framework(_payload: CodeRequest, project_dir: &str) -> Jso
                 } else {
                     println!("npm install completed successfully.");
                 }
-            },
+            }
             Err(e) => {
                 println!("Failed to run npm install: {}", e);
                 return Json(CodeResponse {
@@ -259,7 +272,7 @@ pub fn run_javascript_framework(_payload: CodeRequest, project_dir: &str) -> Jso
     cmd.args(["run", "dev"])
         .current_dir(project_dir)
         .env("NG_CLI_ANALYTICS", "false");
-    
+
     let mut response = run_with_timeout_web(cmd);
     if response.url.is_none() {
         if let Some(port) = fallback_port {
@@ -272,7 +285,16 @@ pub fn run_javascript_framework(_payload: CodeRequest, project_dir: &str) -> Jso
 pub fn run_vanilla_js(_payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
     let mut cmd = Command::new("npx");
     // Use live-server for auto-reload support
-    cmd.args(["-y", "live-server", ".", "--port=0", "--no-browser", "--host=0.0.0.0", "--wait=50"]).current_dir(project_dir);
+    cmd.args([
+        "-y",
+        "live-server",
+        ".",
+        "--port=0",
+        "--no-browser",
+        "--host=0.0.0.0",
+        "--wait=50",
+    ])
+    .current_dir(project_dir);
     run_with_timeout_web(cmd)
 }
 
@@ -308,8 +330,8 @@ pub fn run_python(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse>
 
     let mut cmd = Command::new("python3");
     cmd.arg("main.py")
-       .env("PYTHONUNBUFFERED", "1")
-       .current_dir(project_dir);
+        .env("PYTHONUNBUFFERED", "1")
+        .current_dir(project_dir);
     run_with_timeout(cmd)
 }
 
@@ -414,7 +436,7 @@ pub fn run_pascal(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse>
     let file_path = format!("{}/main.pas", project_dir);
     let _ = fs::write(&file_path, payload.code);
     let exec_path = format!("{}/main", project_dir);
-    
+
     let compile = Command::new("fpc")
         .arg("main.pas")
         .current_dir(project_dir)

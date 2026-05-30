@@ -1,17 +1,17 @@
 use leptos::prelude::*;
-use leptos_router::components::{Router, Route, Routes};
+use leptos_router::components::{Route, Router, Routes};
 use leptos_router::path;
 
-mod models;
-mod store;
-mod pages;
-mod components;
 mod api;
+mod components;
+mod models;
+mod pages;
+mod store;
 
-use pages::home::HomePage;
-use pages::editor::EditorPage;
-use pages::settings::SettingsPage;
 use pages::docs::DocsPage;
+use pages::editor::EditorPage;
+use pages::home::HomePage;
+use pages::settings::SettingsPage;
 
 #[component]
 pub fn App() -> impl IntoView {

@@ -1,7 +1,7 @@
-use leptos::prelude::*;
-use wasm_bindgen_futures::spawn_local;
 use crate::api;
 use crate::pages::editor::utils::file_to_lsp_lang;
+use leptos::prelude::*;
+use wasm_bindgen_futures::spawn_local;
 
 pub fn make_trigger_references(
     code: RwSignal<String>,
@@ -36,7 +36,8 @@ pub fn make_trigger_references(
 
         spawn_local(async move {
             show_snack_cb.run("Finding references...".to_string());
-            match api::get_references_api(&text, &lang, &path, &active_file, line, character).await {
+            match api::get_references_api(&text, &lang, &path, &active_file, line, character).await
+            {
                 Ok(resp) => {
                     let locations = resp.locations;
                     if locations.is_empty() {

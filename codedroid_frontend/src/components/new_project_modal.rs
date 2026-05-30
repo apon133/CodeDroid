@@ -3,20 +3,29 @@ use web_sys::{Event, MouseEvent};
 
 // ─── Language & Framework data ────────────────────────────────────────────
 pub const LANGUAGES: &[(&str, &str)] = &[
-    ("rust", "Rust"), ("go", "Go"), ("dart", "Dart"), ("c", "C"),
-    ("cpp", "C++"), ("csharp", "C#"), ("java", "Java"), ("python", "Python"),
-    ("kotlin", "Kotlin"), ("swift", "Swift"), ("ruby", "Ruby"),
-    ("javascript", "JavaScript"), ("typescript", "TypeScript"),
+    ("rust", "Rust"),
+    ("go", "Go"),
+    ("dart", "Dart"),
+    ("c", "C"),
+    ("cpp", "C++"),
+    ("csharp", "C#"),
+    ("java", "Java"),
+    ("python", "Python"),
+    ("kotlin", "Kotlin"),
+    ("swift", "Swift"),
+    ("ruby", "Ruby"),
+    ("javascript", "JavaScript"),
+    ("typescript", "TypeScript"),
 ];
 
 pub const FRAMEWORKS: &[(&str, &str, &str)] = &[
-    ("vanilla", "Vanilla JS",  "Pure JavaScript"),
-    ("react",   "React",       "Vite + React"),
-    ("vue",     "Vue",         "Vite + Vue"),
-    ("svelte",  "Svelte",      "Vite + Svelte"),
-    ("angular", "Angular",     "Angular CLI"),
-    ("nextjs",  "Next.js",     "Full-stack React"),
-    ("remix",   "Remix",       "Web Standards"),
+    ("vanilla", "Vanilla JS", "Pure JavaScript"),
+    ("react", "React", "Vite + React"),
+    ("vue", "Vue", "Vite + Vue"),
+    ("svelte", "Svelte", "Vite + Svelte"),
+    ("angular", "Angular", "Angular CLI"),
+    ("nextjs", "Next.js", "Full-stack React"),
+    ("remix", "Remix", "Web Standards"),
 ];
 
 // ─── Props ────────────────────────────────────────────────────────────────
@@ -32,9 +41,9 @@ pub fn NewProjectModal(
     on_create: Callback<NewProjectResult>,
     on_cancel: Callback<()>,
 ) -> impl IntoView {
-    let name       = RwSignal::new(String::new());
-    let lang       = RwSignal::new("rust".to_string());
-    let framework  = RwSignal::new("vanilla".to_string());
+    let name = RwSignal::new(String::new());
+    let lang = RwSignal::new("rust".to_string());
+    let framework = RwSignal::new("vanilla".to_string());
     let active_tab = RwSignal::new(0usize); // 0 = Language, 1 = Web Framework
 
     // When switching to Web Framework tab, force JS
@@ -50,18 +59,26 @@ pub fn NewProjectModal(
 
     let create = move |_: MouseEvent| {
         let n = name.get_untracked();
-        if n.trim().is_empty() { return; }
+        if n.trim().is_empty() {
+            return;
+        }
         let fw = if active_tab.get_untracked() == 1 {
             framework.get_untracked()
         } else {
             "none".to_string()
         };
-        on_create.run(NewProjectResult { name: n.trim().to_string(), lang: lang.get_untracked(), framework: fw });
+        on_create.run(NewProjectResult {
+            name: n.trim().to_string(),
+            lang: lang.get_untracked(),
+            framework: fw,
+        });
     };
 
     let cancel = move |_: MouseEvent| on_cancel.run(());
 
-    let stop_prop = move |e: MouseEvent| { e.stop_propagation(); };
+    let stop_prop = move |e: MouseEvent| {
+        e.stop_propagation();
+    };
 
     view! {
         <div class="modal-overlay" on:click=cancel>

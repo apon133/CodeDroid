@@ -1,4 +1,4 @@
-pub mod home;
-pub mod editor;
-pub mod settings;
 pub mod docs;
+pub mod editor;
+pub mod home;
+pub mod settings;

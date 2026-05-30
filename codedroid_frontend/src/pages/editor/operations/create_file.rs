@@ -1,8 +1,8 @@
+use crate::api;
+use crate::pages::editor::utils::build_file_tree;
+use crate::store;
 use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use crate::api;
-use crate::store;
-use crate::pages::editor::utils::build_file_tree;
 
 pub fn make_create_file(
     pid: String,
@@ -14,7 +14,7 @@ pub fn make_create_file(
     Callback::new(move |name: String| {
         let key = store::file_key(&pid, &name);
         store::save_file(&key, "// Start coding here...\n");
-        
+
         // Sync to backend
         let full_path = format!("{}/{}", ppath, name);
         spawn_local(async move {

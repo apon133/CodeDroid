@@ -1,8 +1,8 @@
+use crate::api;
+use crate::pages::editor::utils::build_file_tree;
+use crate::store;
 use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use crate::api;
-use crate::store;
-use crate::pages::editor::utils::build_file_tree;
 
 pub fn make_add_dep(
     pid: String,
@@ -15,7 +15,9 @@ pub fn make_add_dep(
 ) -> Callback<()> {
     Callback::new(move |_: ()| {
         let pkg = dep_input.get_untracked();
-        if pkg.trim().is_empty() { return; }
+        if pkg.trim().is_empty() {
+            return;
+        }
         let path = ppath.clone();
         let lang = plang.clone();
         let pid_clone = pid.clone();
@@ -25,8 +27,14 @@ pub fn make_add_dep(
         spawn_local(async move {
             match api::add_package(&pkg, &lang, &path).await {
                 Ok(r) => {
-                    dep_output.set(if r.error.is_empty() { r.output } else { r.error });
-                    if let (Some(filename), Some(content)) = (r.dependency_file_name, r.dependency_file_content) {
+                    dep_output.set(if r.error.is_empty() {
+                        r.output
+                    } else {
+                        r.error
+                    });
+                    if let (Some(filename), Some(content)) =
+                        (r.dependency_file_name, r.dependency_file_content)
+                    {
                         let key = store::file_key(&pid_clone, &filename);
                         store::save_file(&key, &content);
                         file_tree_data_clone.set(build_file_tree(&pid_clone));

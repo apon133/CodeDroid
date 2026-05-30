@@ -1,8 +1,8 @@
+use crate::api;
+use crate::pages::editor::utils::{build_file_tree, FileEntry};
+use crate::store;
 use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use crate::api;
-use crate::store;
-use crate::pages::editor::utils::{build_file_tree, FileEntry};
 
 pub fn make_move_entry(
     pid: String,
@@ -16,7 +16,9 @@ pub fn make_move_entry(
         let storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
         let old_name = entry.name.clone();
 
-        if old_name == new_name || new_name.trim().is_empty() { return; }
+        if old_name == new_name || new_name.trim().is_empty() {
+            return;
+        }
 
         if entry.is_dir {
             // Moving a directory: rename all keys in localStorage with matching prefix

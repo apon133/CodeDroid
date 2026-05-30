@@ -1,5 +1,5 @@
-use leptos::prelude::*;
 use crate::store;
+use leptos::prelude::*;
 
 pub fn make_close_tab(
     pid: String,

@@ -2,29 +2,29 @@ use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_params_map};
 use wasm_bindgen_futures::spawn_local;
 
-pub mod utils;
-pub mod components;
-pub mod preview;
-pub mod search_bar;
 pub mod code_area;
+pub mod components;
+pub mod context_menu;
 pub mod error_popover;
 pub mod hover;
-pub mod suggestions;
 pub mod operations;
-pub mod context_menu;
+pub mod preview;
+pub mod search_bar;
+pub mod suggestions;
+pub mod utils;
 
-use utils::*;
-use components::*;
-use code_area::EditorCodeArea;
-use preview::*;
-use search_bar::*;
-use operations::*;
-use crate::models::{Project, Settings, lang_icon};
-use crate::store;
 use crate::api;
 use crate::components::app_bar::AppBar;
-use crate::components::snackbar::Snackbar;
 use crate::components::icon::LucideIcon;
+use crate::components::snackbar::Snackbar;
+use crate::models::{lang_icon, Project, Settings};
+use crate::store;
+use code_area::EditorCodeArea;
+use components::*;
+use operations::*;
+use preview::*;
+use search_bar::*;
+use utils::*;
 
 #[component]
 pub fn EditorPage() -> impl IntoView {
@@ -54,7 +54,10 @@ pub fn EditorPage() -> impl IntoView {
     let active_tab: RwSignal<Option<String>> = RwSignal::new(None);
     let code: RwSignal<String> = RwSignal::new(String::new());
     let dirty: RwSignal<bool> = RwSignal::new(false);
-    let output: RwSignal<String> = RwSignal::new("Welcome to CodeDroid Terminal\nType commands below (e.g. ls, cargo test, git status)\n\n".to_string());
+    let output: RwSignal<String> = RwSignal::new(
+        "Welcome to CodeDroid Terminal\nType commands below (e.g. ls, cargo test, git status)\n\n"
+            .to_string(),
+    );
     let is_error: RwSignal<bool> = RwSignal::new(false);
     let is_running: RwSignal<bool> = RwSignal::new(false);
     let current_pid: RwSignal<Option<u32>> = RwSignal::new(None);
@@ -80,7 +83,8 @@ pub fn EditorPage() -> impl IntoView {
     let diagnostics_list = RwSignal::new(Vec::<api::Diagnostic>::new());
     let references_list = RwSignal::new(Vec::<crate::api::Location>::new());
     let last_diag_req = RwSignal::new(0u64);
-    let active_error = RwSignal::new(Option::<(api::Diagnostic, Vec<api::CodeSuggestion>, bool)>::None);
+    let active_error =
+        RwSignal::new(Option::<(api::Diagnostic, Vec<api::CodeSuggestion>, bool)>::None);
 
     // Callbacks
     let show_snack = Callback::new({
@@ -120,8 +124,6 @@ pub fn EditorPage() -> impl IntoView {
         trigger_diagnostics.clone(),
     );
 
-
-
     let on_click_problem = make_on_click_problem(
         open_file.clone(),
         active_tab,
@@ -140,12 +142,7 @@ pub fn EditorPage() -> impl IntoView {
         trigger_diagnostics.clone(),
     );
 
-    let close_tab = make_close_tab(
-        pid.clone(),
-        code,
-        active_tab,
-        open_tabs,
-    );
+    let close_tab = make_close_tab(pid.clone(), code, active_tab, open_tabs);
 
     let trigger_definition = make_trigger_definition(
         pid.clone(),
@@ -194,12 +191,7 @@ pub fn EditorPage() -> impl IntoView {
         save_current.clone(),
     );
 
-    let stop_code = make_stop_code(
-        current_pid,
-        output,
-        preview_url,
-        bottom_tab,
-    );
+    let stop_code = make_stop_code(current_pid, output, preview_url, bottom_tab);
 
     let format_code = make_format_code(
         ppath.clone(),
@@ -223,7 +215,6 @@ pub fn EditorPage() -> impl IntoView {
         open_file.clone(),
         file_tree_data.clone(),
     );
-
 
     let on_select = make_on_select(code, dirty, suggestions, cursor_pos);
 
@@ -258,7 +249,10 @@ pub fn EditorPage() -> impl IntoView {
         let show_snack = show_snack.clone();
         move |entry: FileEntry| {
             copied_item.set(Some(entry.clone()));
-            show_snack.run(format!("Copied {}! Long-press folder/explorer to paste.", entry.name));
+            show_snack.run(format!(
+                "Copied {}! Long-press folder/explorer to paste.",
+                entry.name
+            ));
         }
     });
 
@@ -280,9 +274,14 @@ pub fn EditorPage() -> impl IntoView {
         open_tabs,
     );
 
-
-    // Sync all files from localStorage to backend filesystem on mount
-    sync_project(project.id.clone(), project.path.clone());
+    // Sync all files from localStorage to backend filesystem on mount, then update from disk sequentially
+    let pid_clone = project.id.clone();
+    let ppath_clone = project.path.clone();
+    let file_tree_data_clone = file_tree_data.clone();
+    spawn_local(async move {
+        crate::pages::editor::operations::sync_project_async(&pid_clone, &ppath_clone).await;
+        crate::pages::editor::operations::sync_from_disk_async(&pid_clone, &ppath_clone, file_tree_data_clone).await;
+    });
 
     // Open default file on mount
     Effect::new(move |_| {
@@ -290,32 +289,61 @@ pub fn EditorPage() -> impl IntoView {
         if !tree.is_empty() && active_tab.get_untracked().is_none() {
             let language = project_lang_str.get_value().to_lowercase();
             let mut best_match = None;
-            
+
             // Priority 1: Match standard entry point for the project language
             for e in tree.iter() {
                 let n = e.name.to_lowercase();
                 match language.as_str() {
-                    "rust" if n == "src/main.rs" || n == "main.rs" => best_match = Some(e.name.clone()),
+                    "rust" if n == "src/main.rs" || n == "main.rs" => {
+                        best_match = Some(e.name.clone())
+                    }
                     "go" if n == "main.go" => best_match = Some(e.name.clone()),
                     "dart" if n == "main.dart" => best_match = Some(e.name.clone()),
                     "python" if n == "main.py" => best_match = Some(e.name.clone()),
-                    "java" if n == "main.java" || n == "src/main.java" => best_match = Some(e.name.clone()),
+                    "java" if n == "main.java" || n == "src/main.java" => {
+                        best_match = Some(e.name.clone())
+                    }
                     "c" if n == "main.c" => best_match = Some(e.name.clone()),
                     "cpp" if n == "main.cpp" => best_match = Some(e.name.clone()),
-                    "javascript" | "typescript" if n == "main.js" || n == "main.ts" || n == "index.js" || n == "index.ts" => best_match = Some(e.name.clone()),
+                    "javascript" | "typescript"
+                        if n == "main.js"
+                            || n == "main.ts"
+                            || n == "index.js"
+                            || n == "index.ts" =>
+                    {
+                        best_match = Some(e.name.clone())
+                    }
                     _ => {}
                 }
-                if best_match.is_some() { break; }
+                if best_match.is_some() {
+                    break;
+                }
             }
 
             // Priority 2: Match any entry point from the general list
             if best_match.is_none() {
                 let main_files = [
-                    "src/main.rs", "main.rs", "main.dart", "main.go", "main.py",
-                    "main.js", "main.ts", "src/main.js", "src/main.ts",
-                    "src/main.jsx", "src/main.tsx", "index.js", "index.ts",
-                    "index.html", "Main.java", "main.c", "main.cpp",
-                    "Program.cs", "main.kt", "main.swift", "main.rb",
+                    "src/main.rs",
+                    "main.rs",
+                    "main.dart",
+                    "main.go",
+                    "main.py",
+                    "main.js",
+                    "main.ts",
+                    "src/main.js",
+                    "src/main.ts",
+                    "src/main.jsx",
+                    "src/main.tsx",
+                    "index.js",
+                    "index.ts",
+                    "index.html",
+                    "Main.java",
+                    "main.c",
+                    "main.cpp",
+                    "Program.cs",
+                    "main.kt",
+                    "main.swift",
+                    "main.rb",
                 ];
                 for e in tree.iter() {
                     let n = e.name.to_lowercase();
@@ -511,6 +539,8 @@ pub fn EditorPage() -> impl IntoView {
                         on_click_reference=on_click_reference
                         active_tab=active_tab.into()
                         project_path=Signal::derive(move || project_path_str.get_value())
+                        project_id=project.id.clone()
+                        file_tree_data=file_tree_data
                     />
 
                 </div>
@@ -542,25 +572,34 @@ pub fn EditorPage() -> impl IntoView {
 fn uri_to_relative(uri: &str, project_path: &str) -> String {
     let uri_clean = uri.replace('\\', "/");
     let proj_clean = project_path.replace('\\', "/");
-    
+
     let prefix = format!("file://{}/", proj_clean);
     let prefix_triple = format!("file:///{}", proj_clean);
     let prefix_triple_alt = format!("file://{}", proj_clean);
-    
+
     if uri_clean.starts_with(&prefix) {
-        let mut rel = uri_clean.strip_prefix(&prefix).unwrap_or(&uri_clean).to_string();
+        let mut rel = uri_clean
+            .strip_prefix(&prefix)
+            .unwrap_or(&uri_clean)
+            .to_string();
         if rel.starts_with('/') {
             rel = rel.trim_start_matches('/').to_string();
         }
         rel
     } else if uri_clean.starts_with(&prefix_triple) {
-        let mut rel = uri_clean.strip_prefix(&prefix_triple).unwrap_or(&uri_clean).to_string();
+        let mut rel = uri_clean
+            .strip_prefix(&prefix_triple)
+            .unwrap_or(&uri_clean)
+            .to_string();
         if rel.starts_with('/') {
             rel = rel.trim_start_matches('/').to_string();
         }
         rel
     } else if uri_clean.starts_with(&prefix_triple_alt) {
-        let mut rel = uri_clean.strip_prefix(&prefix_triple_alt).unwrap_or(&uri_clean).to_string();
+        let mut rel = uri_clean
+            .strip_prefix(&prefix_triple_alt)
+            .unwrap_or(&uri_clean)
+            .to_string();
         if rel.starts_with('/') {
             rel = rel.trim_start_matches('/').to_string();
         }
@@ -575,7 +614,10 @@ fn uri_to_relative(uri: &str, project_path: &str) -> String {
             rel
         } else {
             // Absolute path outside the project. Ensure it starts with '/'
-            let path_without_scheme = uri_clean.strip_prefix("file://").unwrap_or(&uri_clean).to_string();
+            let path_without_scheme = uri_clean
+                .strip_prefix("file://")
+                .unwrap_or(&uri_clean)
+                .to_string();
             if !path_without_scheme.starts_with('/') {
                 format!("/{}", path_without_scheme)
             } else {

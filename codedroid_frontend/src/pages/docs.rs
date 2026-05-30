@@ -1,19 +1,19 @@
-use leptos::prelude::*;
-use web_sys::{MouseEvent, window};
-use wasm_bindgen::JsCast;
 use crate::components::app_bar::AppBar;
 use crate::components::icon::LucideIcon;
+use leptos::prelude::*;
+use wasm_bindgen::JsCast;
+use web_sys::{window, MouseEvent};
 
 fn resolve_relative_path(current: &str, relative: &str) -> String {
     if relative.starts_with('/') || relative.contains("://") {
         return relative.to_string();
     }
-    
+
     let mut parts: Vec<&str> = current.split('/').collect();
     if !parts.is_empty() {
         parts.pop();
     }
-    
+
     for segment in relative.split('/') {
         if segment == "." {
             continue;
@@ -25,7 +25,7 @@ fn resolve_relative_path(current: &str, relative: &str) -> String {
             parts.push(segment);
         }
     }
-    
+
     parts.join("/")
 }
 
@@ -38,7 +38,7 @@ fn escape_html(text: &str) -> String {
 }
 
 pub fn markdown_to_html(md: &str) -> String {
-    use pulldown_cmark::{Parser, Options, Event, Tag, TagEnd, CodeBlockKind};
+    use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
@@ -63,10 +63,10 @@ pub fn markdown_to_html(md: &str) -> String {
             Event::End(TagEnd::CodeBlock) => {
                 if in_code_block {
                     in_code_block = false;
-                    
+
                     let escaped_code = escape_html(&current_code);
                     let raw_code_attr = current_code.replace('"', "&quot;");
-                    
+
                     let html = format!(
                         r##"<div class="md-code-block">
                             <div class="md-code-header">
@@ -78,7 +78,11 @@ pub fn markdown_to_html(md: &str) -> String {
                             </div>
                             <pre><code class="language-{}">{}</code></pre>
                         </div>"##,
-                        if current_lang.is_empty() { "code" } else { &current_lang },
+                        if current_lang.is_empty() {
+                            "code"
+                        } else {
+                            &current_lang
+                        },
                         raw_code_attr,
                         current_lang,
                         escaped_code
@@ -87,11 +91,22 @@ pub fn markdown_to_html(md: &str) -> String {
                 }
             }
             Event::Start(Tag::Link { dest_url, .. }) => {
-                let is_md_link = dest_url.ends_with(".md") || dest_url.contains(".md#") || (!dest_url.contains("://") && !dest_url.starts_with('#'));
+                let is_md_link = dest_url.ends_with(".md")
+                    || dest_url.contains(".md#")
+                    || (!dest_url.contains("://") && !dest_url.starts_with('#'));
                 if is_md_link {
-                    events.push(Event::Html(format!(r##"<a class="md-link" href="#" data-path="{}">"##, dest_url).into()));
+                    events.push(Event::Html(
+                        format!(r##"<a class="md-link" href="#" data-path="{}">"##, dest_url)
+                            .into(),
+                    ));
                 } else {
-                    events.push(Event::Html(format!(r##"<a href="{}" target="_blank" rel="noopener noreferrer">"##, dest_url).into()));
+                    events.push(Event::Html(
+                        format!(
+                            r##"<a href="{}" target="_blank" rel="noopener noreferrer">"##,
+                            dest_url
+                        )
+                        .into(),
+                    ));
                 }
             }
             Event::End(TagEnd::Link) => {
@@ -146,7 +161,7 @@ pub fn DocsPage() -> impl IntoView {
         loading.set(true);
         error.set(String::new());
         let path_clone = path.clone();
-        
+
         leptos::task::spawn_local(async move {
             match crate::api::read_doc_api(&path_clone).await {
                 Ok(res) => {
@@ -177,9 +192,13 @@ pub fn DocsPage() -> impl IntoView {
 
     // Handle dynamic link and copy button clicks
     let handle_click = move |e: MouseEvent| {
-        let Some(target) = e.target() else { return; };
-        let Ok(element) = target.dyn_into::<web_sys::Element>() else { return; };
-        
+        let Some(target) = e.target() else {
+            return;
+        };
+        let Ok(element) = target.dyn_into::<web_sys::Element>() else {
+            return;
+        };
+
         let mut current: Option<web_sys::Element> = Some(element.clone());
         while let Some(el) = current {
             if el.class_list().contains("btn-copy-code") {
@@ -188,19 +207,21 @@ pub fn DocsPage() -> impl IntoView {
                         let _ = win.navigator().clipboard().write_text(&code);
                         if let Some(span) = el.query_selector("span").ok().flatten() {
                             let span_el = span.dyn_into::<web_sys::HtmlElement>().unwrap();
-                            let old_text = span_el.text_content().unwrap_or_else(|| "Copy".to_string());
+                            let old_text =
+                                span_el.text_content().unwrap_or_else(|| "Copy".to_string());
                             span_el.set_text_content(Some("Copied!"));
                             let span_clone = span_el.clone();
                             gloo_timers::callback::Timeout::new(1500, move || {
                                 span_clone.set_text_content(Some(&old_text));
-                            }).forget();
+                            })
+                            .forget();
                         }
                     }
                 }
                 e.prevent_default();
                 return;
             }
-            
+
             if el.class_list().contains("md-link") {
                 if let Some(rel_path) = el.get_attribute("data-path") {
                     let resolved = resolve_relative_path(&current_path.get_untracked(), &rel_path);
@@ -209,7 +230,7 @@ pub fn DocsPage() -> impl IntoView {
                 e.prevent_default();
                 return;
             }
-            
+
             current = el.parent_element();
         }
     };

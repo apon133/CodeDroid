@@ -28,7 +28,7 @@ fn glob_to_regex(pattern: &str) -> Option<regex::Regex> {
 
     let mut regex_str = String::new();
     regex_str.push_str("(?i)"); // case-insensitive flag for the entire regex
-    
+
     let has_wildcard = trimmed.contains('*') || trimmed.contains('?');
     if !has_wildcard {
         regex_str.push_str(".*");
@@ -63,7 +63,11 @@ fn matches_filter(path: &str, filter_str: &str, default_match: bool) -> bool {
         return default_match;
     }
 
-    let patterns: Vec<&str> = trimmed.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    let patterns: Vec<&str> = trimmed
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
     if patterns.is_empty() {
         return default_match;
     }
@@ -119,7 +123,7 @@ fn find_matches_advanced(
             for mat in re.find_iter(content) {
                 let start = mat.start();
                 let end = mat.end();
-                
+
                 if whole_word {
                     if is_whole_word(content, start, end) {
                         matches.push((start, end));
@@ -127,7 +131,7 @@ fn find_matches_advanced(
                 } else {
                     matches.push((start, end));
                 }
-                
+
                 if matches.len() >= 500 {
                     break;
                 }
@@ -138,8 +142,16 @@ fn find_matches_advanced(
         }
     }
 
-    let search_str = if match_case { content.to_string() } else { content.to_lowercase() };
-    let find_str = if match_case { needle.to_string() } else { needle.to_lowercase() };
+    let search_str = if match_case {
+        content.to_string()
+    } else {
+        content.to_lowercase()
+    };
+    let find_str = if match_case {
+        needle.to_string()
+    } else {
+        needle.to_lowercase()
+    };
 
     let mut matches = Vec::new();
     let mut start_pos = 0usize;
@@ -147,7 +159,7 @@ fn find_matches_advanced(
     while let Some(idx) = search_str[start_pos..].find(&find_str) {
         let actual_start = start_pos + idx;
         let actual_end = actual_start + find_str.len();
-        
+
         if whole_word {
             if is_whole_word(content, actual_start, actual_end) {
                 matches.push((actual_start, actual_end));
@@ -155,7 +167,7 @@ fn find_matches_advanced(
         } else {
             matches.push((actual_start, actual_end));
         }
-        
+
         start_pos = actual_start + find_str.len();
         if start_pos >= content.len() || matches.len() >= 500 {
             break;
@@ -227,7 +239,9 @@ fn search_project_files(
 
         let key = store::file_key(project_id, &entry.name);
         let content = store::load_file(&key);
-        for (start_byte, end_byte) in find_matches_advanced(&content, needle, match_case, whole_word, use_regex) {
+        for (start_byte, end_byte) in
+            find_matches_advanced(&content, needle, match_case, whole_word, use_regex)
+        {
             let prefix = &content[..start_byte];
             let line_number = prefix.bytes().filter(|b| *b == b'\n').count() + 1;
             let line_start = prefix.rfind('\n').map(|idx| idx + 1).unwrap_or(0);
@@ -296,7 +310,11 @@ pub fn SearchBar(
 
         let current = find_index.get_untracked();
         let next = if step < 0 {
-            if current == 0 { matches.len() - 1 } else { current - 1 }
+            if current == 0 {
+                matches.len() - 1
+            } else {
+                current - 1
+            }
         } else {
             (current + 1) % matches.len()
         };
@@ -404,7 +422,11 @@ pub fn ProjectSearchReplacePanel(
 
             let mut changed_files = Vec::<(String, String)>::new();
             let mut total_replacements = 0usize;
-            for entry in file_tree.get_untracked().into_iter().filter(|entry| !entry.is_dir) {
+            for entry in file_tree
+                .get_untracked()
+                .into_iter()
+                .filter(|entry| !entry.is_dir)
+            {
                 let show_file = if !include_str.is_empty() {
                     matches_filter(&entry.name, include_str, true)
                 } else {
@@ -423,7 +445,8 @@ pub fn ProjectSearchReplacePanel(
 
                 let key = store::file_key(&project_id, &entry.name);
                 let content = store::load_file(&key);
-                let (updated, count) = replace_all_advanced(&content, &query, &replacement, m_case, w_word, u_regex);
+                let (updated, count) =
+                    replace_all_advanced(&content, &query, &replacement, m_case, w_word, u_regex);
                 if count > 0 {
                     store::save_file(&key, &updated);
                     total_replacements += count;
@@ -453,7 +476,11 @@ pub fn ProjectSearchReplacePanel(
                 });
             }
 
-            show_snack.run(format!("Replaced {} match{}.", total_replacements, if total_replacements == 1 { "" } else { "es" }));
+            show_snack.run(format!(
+                "Replaced {} match{}.",
+                total_replacements,
+                if total_replacements == 1 { "" } else { "es" }
+            ));
         }
     });
 
@@ -464,14 +491,14 @@ pub fn ProjectSearchReplacePanel(
 
         <div class=move || if sidebar_open.get() { "file-tree-panel search-replace-panel open" } else { "file-tree-panel search-replace-panel" }>
             <div class="sidebar-tabs">
-                <button 
+                <button
                     class=move || if sidebar_mode.get() == 0 { "sidebar-tab active" } else { "sidebar-tab" }
                     on:click=move |_| sidebar_mode.set(0)
                 >
                     <LucideIcon name="folder" size="14" />
                     <span>"Files"</span>
                 </button>
-                <button 
+                <button
                     class=move || if sidebar_mode.get() == 1 { "sidebar-tab active" } else { "sidebar-tab" }
                     on:click=move |_| sidebar_mode.set(1)
                 >
@@ -499,21 +526,21 @@ pub fn ProjectSearchReplacePanel(
                         on:input=move |e| project_query.set(event_target_value(&e))
                     />
                     <div class="search-input-options" style="display:flex; gap:2px; flex-shrink:0;">
-                        <button 
+                        <button
                             class=move || if match_case.get() { "search-opt-btn active" } else { "search-opt-btn" }
                             title="Match Case"
                             on:click=move |_| match_case.update(|v| *v = !*v)
                         >
                             "Aa"
                         </button>
-                        <button 
+                        <button
                             class=move || if whole_word.get() { "search-opt-btn active" } else { "search-opt-btn" }
                             title="Match Whole Word"
                             on:click=move |_| whole_word.update(|v| *v = !*v)
                         >
                             "ab"
                         </button>
-                        <button 
+                        <button
                             class=move || if use_regex.get() { "search-opt-btn active" } else { "search-opt-btn" }
                             title="Use Regular Expression"
                             on:click=move |_| use_regex.update(|v| *v = !*v)
@@ -531,9 +558,9 @@ pub fn ProjectSearchReplacePanel(
                     <button class="replace-all-btn" title="Replace all" on:click=move |_| replace_all.run(())>
                         <LucideIcon name="replace-all" size="15" />
                     </button>
-                    <button 
+                    <button
                         class=move || if show_details.get() { "replace-all-btn active" } else { "replace-all-btn" }
-                        title="Toggle Search Details" 
+                        title="Toggle Search Details"
                         style="margin-left: 4px;"
                         on:click=move |_| show_details.update(|v| *v = !*v)
                     >
@@ -574,7 +601,7 @@ pub fn ProjectSearchReplacePanel(
                 let u_regex = use_regex.get();
                 let f_include = files_to_include.get();
                 let f_exclude = files_to_exclude.get();
-                
+
                 let results = search_project_files(
                     &project_id,
                     file_tree.get(),

@@ -1,7 +1,7 @@
-use leptos::prelude::*;
-use wasm_bindgen_futures::spawn_local;
 use crate::api;
 use crate::pages::editor::utils::resolve_completion;
+use leptos::prelude::*;
+use wasm_bindgen_futures::spawn_local;
 
 pub fn make_on_select(
     code: RwSignal<String>,
@@ -26,7 +26,9 @@ pub fn make_on_select(
                             word_start = i + 1;
                             break;
                         }
-                        if i == 0 { word_start = 0; }
+                        if i == 0 {
+                            word_start = 0;
+                        }
                     }
                     let before = val.substring(0, word_start as u32);
                     let after = val.substring(end, val.length());
@@ -47,7 +49,9 @@ pub fn make_on_select(
                     spawn_local(async move {
                         if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
                             if let Ok(Some(target)) = doc.query_selector(".code-editor") {
-                                if let Ok(target) = target.dyn_into::<web_sys::HtmlTextAreaElement>() {
+                                if let Ok(target) =
+                                    target.dyn_into::<web_sys::HtmlTextAreaElement>()
+                                {
                                     let _ = target.focus();
                                     target.set_selection_start(Some(new_pos)).unwrap();
                                     target.set_selection_end(Some(new_pos)).unwrap();

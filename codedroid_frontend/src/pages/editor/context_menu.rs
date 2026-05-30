@@ -18,14 +18,14 @@ pub fn ContextMenu(
                 if let Some(window) = web_sys::window() {
                     let win_width = window.inner_width().ok().and_then(|v| v.as_f64()).unwrap_or(1000.0);
                     let win_height = window.inner_height().ok().and_then(|v| v.as_f64()).unwrap_or(800.0);
-                    
+
                     // Approximate size of our context menu
                     let menu_width = 220.0;
                     let menu_height = 200.0;
-                    
+
                     let mut x = coords.0;
                     let mut y = coords.1;
-                    
+
                     if x + menu_width > win_width {
                         x = (win_width - menu_width - 10.0).max(10.0);
                     }
@@ -53,8 +53,8 @@ pub fn ContextMenu(
                         show_menu.set(false);
                     }
                 />
-                <div 
-                    class="context-menu-floating" 
+                <div
+                    class="context-menu-floating"
                     style=format!("left: {}px; top: {}px;", adjusted_x, adjusted_y)
                     on:mousedown=move |e| {
                         // Prevent textarea focus loss when context menu is interacted with

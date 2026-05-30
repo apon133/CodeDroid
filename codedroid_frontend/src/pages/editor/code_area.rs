@@ -1,13 +1,13 @@
-use leptos::prelude::*;
-use crate::models::Settings;
 use super::utils::*;
 use crate::api;
+use crate::models::Settings;
+use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
-use super::hover::{HoverCard, build_hover_html};
-use super::suggestions::SuggestionsOverlay;
-use super::error_popover::ErrorPopover;
 use super::context_menu::ContextMenu;
+use super::error_popover::ErrorPopover;
+use super::hover::{build_hover_html, HoverCard};
+use super::suggestions::SuggestionsOverlay;
 
 struct ThreadSafeTimeout(Option<gloo_timers::callback::Timeout>);
 unsafe impl Send for ThreadSafeTimeout {}
@@ -44,7 +44,7 @@ pub fn EditorCodeArea(
     let hover_coords = RwSignal::new((0.0, 0.0));
     let hover_loading = RwSignal::new(false);
     let hover_error = RwSignal::new(None::<String>);
-    
+
     let textarea_ref = NodeRef::<leptos::html::Textarea>::new();
     let mouse_coords = RwSignal::new((0.0, 0.0));
     let hover_version = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
@@ -54,7 +54,7 @@ pub fn EditorCodeArea(
     let context_menu_coords = RwSignal::new((0.0, 0.0));
     let touch_start = RwSignal::new(None::<((f64, f64), f64)>);
     let long_press_timeout_id = StoredValue::new(ThreadSafeTimeout(None));
-    
+
     let close_context_menu = move || {
         show_context_menu.set(false);
     };
@@ -121,49 +121,49 @@ pub fn EditorCodeArea(
                             let rect = target_el.unchecked_ref::<web_sys::Element>().get_bounding_client_rect();
                             let val = target_el.value();
                             let font_size = settings.get_untracked().font_size as f64;
-                            
+
                             let line_height = font_size * 1.6;
                             let char_width = font_size * 0.602;
-                            
+
                             let style = web_sys::window().unwrap().get_computed_style(target_el).unwrap().unwrap();
                             let padding_left = style.get_property_value("padding-left").unwrap_or_default()
                                 .replace("px", "").parse::<f64>().unwrap_or(0.0);
                             let padding_top = style.get_property_value("padding-top").unwrap_or_default()
                                 .replace("px", "").parse::<f64>().unwrap_or(0.0);
-                            
+
                             let relative_x = mouse_x - rect.left() - padding_left + target_el.scroll_left() as f64;
                             let relative_y = mouse_y - rect.top() - padding_top + target_el.scroll_top() as f64;
-                            
+
                             let line_idx = (relative_y / line_height).floor() as i32;
                             let char_idx = (relative_x / char_width).round() as i32;
-                            
+
                             if line_idx >= 0 && char_idx >= 0 {
                                 let lines: Vec<&str> = val.split('\n').collect();
                                 if (line_idx as usize) < lines.len() {
                                     let line_text = lines[line_idx as usize];
                                     let char_idx = char_idx.min(line_text.chars().count() as i32);
-                                    
+
                                     let char_at = line_text.chars().nth(char_idx as usize);
                                     let is_word_char = char_at.map(|c: char| c.is_alphanumeric() || c == '_' || c == '.' || c == ':').unwrap_or(false);
-                                    
+
                                     let l = line_idx as u32;
                                     let c = char_idx as u32;
-                                    
+
                                     let active_file = active_tab.get_untracked();
                                     let diags = diagnostics_list.get_untracked();
                                     let matching_diags = get_matching_diagnostics(&diags, active_file.as_ref(), l, c);
-                                    
+
                                     let has_diags = !matching_diags.is_empty();
-                                    
+
                                     if is_word_char || has_diags {
                                         hover_loading.set(is_word_char);
                                         hover_visible.set(true);
                                         hover_error.set(None);
-                                        
+
                                         let card_x = mouse_x - rect.left();
                                         let card_y = mouse_y - rect.top() + 20.0;
                                         hover_coords.set((card_x, card_y));
-                                        
+
                                         if is_word_char {
                                             let active_file = active_tab.get_untracked().unwrap_or_default();
                                             let lang = file_to_lsp_lang(&active_file);
@@ -174,14 +174,14 @@ pub fn EditorCodeArea(
                                             let hover_loading = hover_loading.clone();
                                             let hover_visible = hover_visible.clone();
                                             let hover_error = hover_error.clone();
-                                            
+
                                             if !matching_diags_clone.is_empty() {
                                                 let initial_html = build_hover_html(&matching_diags_clone, None);
                                                 hover_content.set(Some(initial_html));
                                             } else {
                                                 hover_content.set(None);
                                             }
-                                            
+
                                             spawn_local(async move {
                                                 match api::hover_api(&proj_path, &active_file, &code_content, l, c, &lang).await {
                                                     Ok(res) => {
@@ -250,30 +250,30 @@ pub fn EditorCodeArea(
                         if let Some(target) = textarea_ref.get() {
                             let target_el: &web_sys::HtmlTextAreaElement = &target;
                             let val = target_el.value();
-                            
+
                             let (line, character) = {
                                 let before_cursor = val.chars().take(cursor_idx as usize).collect::<String>();
                                 let lines: Vec<&str> = before_cursor.split('\n').collect();
                                 (lines.len().saturating_sub(1) as u32, lines.last().map(|l: &&str| (*l).chars().count()).unwrap_or(0) as u32)
                             };
-                            
+
                             let char_at = val.chars().nth(cursor_idx as usize);
                             let is_word_char = char_at.map(|c: char| c.is_alphanumeric() || c == '_' || c == '.' || c == ':').unwrap_or(false);
-                            
+
                             let active_file = active_tab.get_untracked();
                             let diags = diagnostics_list.get_untracked();
                             let matching_diags = get_matching_diagnostics(&diags, active_file.as_ref(), line, character);
-                            
+
                             let has_diags = !matching_diags.is_empty();
-                            
+
                             if is_word_char || has_diags {
                                 hover_loading.set(is_word_char);
                                 hover_visible.set(true);
                                 hover_error.set(None);
-                                
+
                                 let coords = cursor_coords.get_untracked();
                                 hover_coords.set((coords.0, coords.1 + 10.0));
-                                
+
                                 if is_word_char {
                                     let active_file = active_tab.get_untracked().unwrap_or_default();
                                     let lang = file_to_lsp_lang(&active_file);
@@ -284,14 +284,14 @@ pub fn EditorCodeArea(
                                     let hover_loading = hover_loading.clone();
                                     let hover_visible = hover_visible.clone();
                                     let hover_error = hover_error.clone();
-                                    
+
                                     if !matching_diags_clone.is_empty() {
                                         let initial_html = build_hover_html(&matching_diags_clone, None);
                                         hover_content.set(Some(initial_html));
                                     } else {
                                         hover_content.set(None);
                                     }
-                                    
+
                                     spawn_local(async move {
                                         match api::hover_api(&proj_path, &active_file, &code_content, line, character, &lang).await {
                                             Ok(res) => {
@@ -346,7 +346,7 @@ pub fn EditorCodeArea(
                         let cx = e.client_x() as f64;
                         let cy = e.client_y() as f64;
                         mouse_coords.set((cx, cy));
-                        
+
                         let current_version = hover_version.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
                         let trigger_hover_c = trigger_hover.clone();
                         let hover_version_c = hover_version.clone();
@@ -390,7 +390,7 @@ pub fn EditorCodeArea(
                                 let primary_diag = line_diags.iter().min_by_key(|d| d.severity.unwrap_or(1));
                                 let has_error = line_diags.iter().any(|d| d.severity.unwrap_or(1) == 1);
                                 let has_warning = line_diags.iter().any(|d| d.severity.unwrap_or(1) == 2);
-                                
+
                                 let line_class = match primary_diag.map(|d| d.severity.unwrap_or(1)) {
                                     Some(1) => "editor-line has-error",
                                     Some(2) => "editor-line has-warning",
@@ -406,7 +406,7 @@ pub fn EditorCodeArea(
                                 } else {
                                     "line-number-item"
                                 };
-                                
+
                                 let gutter_marker = if has_error {
                                     "🔴"
                                 } else if has_warning {
@@ -440,21 +440,21 @@ pub fn EditorCodeArea(
                                                     4 => "squiggly-hint-line",
                                                     _ => "squiggly-error-line",
                                                 };
-                                                
+
                                                 let start_char = d.range.start.character as f64;
                                                 let mut end_char = d.range.end.character as f64;
-                                                
+
                                                 if d.range.end.line > d.range.start.line {
                                                     end_char = raw_line_len as f64;
                                                 }
-                                                
+
                                                 let end_char = end_char.max(start_char + 1.0); // at least 1 char width
                                                 let left_px = start_char * char_width;
                                                 let width_px = (end_char - start_char) * char_width;
-                                                
+
                                                 view! {
-                                                    <div 
-                                                        class=squiggly_class 
+                                                    <div
+                                                        class=squiggly_class
                                                         style=format!("left: calc(var(--line-padding) + {}px); width: {}px;", left_px, width_px)
                                                     />
                                                 }
@@ -469,9 +469,9 @@ pub fn EditorCodeArea(
                                                     _ => "inline-diagnostic-msg error",
                                                 };
                                                 let msg_left = raw_line_len as f64 * char_width;
-                                                
+
                                                 view! {
-                                                    <span 
+                                                    <span
                                                         class=msg_class
                                                         style=format!("left: calc(var(--line-padding) + {}px + 24px);", msg_left)
                                                     >
@@ -542,7 +542,7 @@ pub fn EditorCodeArea(
 
                                     let start = target.selection_start().unwrap().unwrap_or(0);
                                     cursor_pos.set(start);
-                                    
+
                                     if let Some(coords) = update_cursor_coords(&val, start) {
                                         cursor_coords.set(coords);
                                     }
@@ -694,7 +694,7 @@ pub fn EditorCodeArea(
                                     let start = target.selection_start().unwrap().unwrap_or(0);
                                     cursor_pos.set(start);
                                     let val = target.value();
-                                    
+
                                     if let Some(coords) = update_cursor_coords(&val, start) {
                                         cursor_coords.set(coords);
                                     }
@@ -723,7 +723,7 @@ pub fn EditorCodeArea(
                                     let start = target.selection_start().unwrap().unwrap_or(0);
                                     cursor_pos.set(start);
                                     let val = target.value();
-                                    
+
                                     if let Some(coords) = update_cursor_coords(&val, start) {
                                         cursor_coords.set(coords);
                                     }

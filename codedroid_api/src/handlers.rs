@@ -1,21 +1,21 @@
+use crate::lsp;
+use crate::models::{
+    CodeRequest, CodeResponse, CommandRequest, CommandResponse, CompletionRequest,
+    CompletionResponse, CopyRequest, CreateDirRequest, DefinitionRequest, DefinitionResponse,
+    DeleteRequest, FileInfo, FormatRequest, FormatResponse, HoverRequest, HoverResponse,
+    MoveRequest, PackageRequest, PackageResponse, ReadFileRequest, ReadFileResponse,
+    ReferencesRequest, ReferencesResponse, ScanProjectRequest, ScanProjectResponse, StopRequest,
+    SyncRequest,
+};
+use crate::runner::*;
+use crate::utils::resolve_project_dir;
 use axum::Json;
 use std::fs;
+use std::io::Read;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::io::Read;
 use std::time::Duration;
-use crate::models::{
-    CodeRequest, CodeResponse, StopRequest, PackageRequest, SyncRequest,
-    CompletionRequest, CompletionResponse, DeleteRequest, CopyRequest, CreateDirRequest,
-    MoveRequest, FormatRequest, FormatResponse, PackageResponse,
-    DefinitionRequest, DefinitionResponse, ReferencesRequest, ReferencesResponse,
-    ReadFileRequest, ReadFileResponse, HoverRequest, HoverResponse,
-    CommandRequest, CommandResponse
-};
-use crate::utils::resolve_project_dir;
-use crate::runner::*;
-use crate::lsp;
 
 pub async fn run_code(Json(payload): Json<CodeRequest>) -> Json<CodeResponse> {
     let project_dir = resolve_project_dir(&payload.project_path);
@@ -69,7 +69,7 @@ pub async fn run_code(Json(payload): Json<CodeRequest>) -> Json<CodeResponse> {
                     run_javascript(payload, &project_dir)
                 }
             }
-        },
+        }
         _ => Json(CodeResponse {
             output: "".to_string(),
             error: format!("Unsupported language: {}", payload.language),
@@ -90,7 +90,10 @@ pub async fn stop_process(Json(payload): Json<StopRequest>) -> Json<CodeResponse
     } else {
         Command::new("sh")
             .arg("-c")
-            .arg(format!("kill -9 -{} || kill -9 {}", payload.pid, payload.pid))
+            .arg(format!(
+                "kill -9 -{} || kill -9 {}",
+                payload.pid, payload.pid
+            ))
             .output()
     };
 
@@ -121,7 +124,8 @@ fn get_dependency_file_info(dir: &str, lang: &str) -> Option<(String, String)> {
         "swift" => "Package.swift".to_string(),
         "haskell" => {
             if let Ok(entries) = fs::read_dir(dir) {
-                entries.flatten()
+                entries
+                    .flatten()
                     .map(|e| e.file_name().to_string_lossy().into_owned())
                     .find(|name| name.ends_with(".cabal"))
                     .unwrap_or_else(|| "project.cabal".to_string())
@@ -133,7 +137,8 @@ fn get_dependency_file_info(dir: &str, lang: &str) -> Option<(String, String)> {
         "java" | "kotlin" => "pom.xml".to_string(),
         "csharp" => {
             if let Ok(entries) = fs::read_dir(dir) {
-                entries.flatten()
+                entries
+                    .flatten()
                     .map(|e| e.file_name().to_string_lossy().into_owned())
                     .find(|name| name.ends_with(".csproj"))
                     .unwrap_or_else(|| "Project.csproj".to_string())
@@ -155,7 +160,7 @@ fn get_dependency_file_info(dir: &str, lang: &str) -> Option<(String, String)> {
 pub async fn add_package(Json(payload): Json<PackageRequest>) -> Json<PackageResponse> {
     let lang = payload.language.to_lowercase();
     let dir = resolve_project_dir(&payload.project_path);
-    
+
     match lang.as_str() {
         "dart" => {
             let path = format!("{}/pubspec.yaml", dir);
@@ -185,40 +190,49 @@ pub async fn add_package(Json(payload): Json<PackageRequest>) -> Json<PackageRes
         }
         "python" => {
             let path = format!("{}/requirements.txt", dir);
-            if !fs::metadata(&path).is_ok() { let _ = fs::write(path, ""); }
+            if !fs::metadata(&path).is_ok() {
+                let _ = fs::write(path, "");
+            }
         }
         "ruby" => {
             let path = format!("{}/Gemfile", dir);
-            if !fs::metadata(&path).is_ok() { let _ = fs::write(path, "source \"https://rubygems.org\""); }
+            if !fs::metadata(&path).is_ok() {
+                let _ = fs::write(path, "source \"https://rubygems.org\"");
+            }
         }
         "scala" => {
             let path = format!("{}/build.sbt", dir);
-            if !fs::metadata(&path).is_ok() { let _ = fs::write(path, "name := \"Project\"\nversion := \"0.1\"\nscalaVersion := \"2.13.12\""); }
+            if !fs::metadata(&path).is_ok() {
+                let _ = fs::write(
+                    path,
+                    "name := \"Project\"\nversion := \"0.1\"\nscalaVersion := \"2.13.12\"",
+                );
+            }
         }
         "swift" => {
             let path = format!("{}/Package.swift", dir);
-            if !fs::metadata(&path).is_ok() { 
+            if !fs::metadata(&path).is_ok() {
                 let pkg_content = format!("// swift-tools-version: 5.9\nimport PackageDescription\n\nlet package = Package(\n    name: \"Project\",\n    targets: [.executableTarget(name: \"Project\")]\n)");
-                let _ = fs::write(path, pkg_content); 
+                let _ = fs::write(path, pkg_content);
             }
         }
         "haskell" => {
             let path = format!("{}/project.cabal", dir);
-            if !fs::metadata(&path).is_ok() { 
+            if !fs::metadata(&path).is_ok() {
                 let cabal_content = "name: project\nversion: 0.1.0.0\nexecutable project\n  main-is: main.hs\n  build-depends: base";
                 let _ = fs::write(path, cabal_content);
             }
         }
         "javascript" | "typescript" => {
             let path = format!("{}/package.json", dir);
-            if !fs::metadata(&path).is_ok() { 
+            if !fs::metadata(&path).is_ok() {
                 let pkg_content = r#"{
   "name": "project",
   "version": "1.0.0",
   "main": "main.js",
   "dependencies": {}
 }"#;
-                let _ = fs::write(path, pkg_content); 
+                let _ = fs::write(path, pkg_content);
             }
         }
         "java" | "kotlin" => {
@@ -241,39 +255,129 @@ pub async fn add_package(Json(payload): Json<PackageRequest>) -> Json<PackageRes
     }
 
     let (cmd, args) = match lang.as_str() {
-        "rust" => ("cargo".to_string(), vec!["add".to_string(), payload.package.clone()]),
-        "go" => ("go".to_string(), vec!["get".to_string(), payload.package.clone()]),
-        "dart" => ("dart".to_string(), vec!["pub".to_string(), "add".to_string(), payload.package.clone()]),
-        "csharp" => ("dotnet".to_string(), vec!["add".to_string(), "package".to_string(), payload.package.clone()]),
-        "python" => ("pip3".to_string(), vec!["install".to_string(), payload.package.clone(), "--break-system-packages".to_string()]),
-        "java" | "kotlin" => ("mvn".to_string(), vec!["dependency:get".to_string(), format!("-Dartifact={}", payload.package)]),
-        "swift" => ("swift".to_string(), vec!["package".to_string(), "add".to_string(), payload.package.clone()]),
-        "ruby" => ("gem".to_string(), vec!["install".to_string(), payload.package.clone()]),
-        "r" => ("Rscript".to_string(), vec!["-e".to_string(), format!("install.packages('{}', repos='http://cran.us.r-project.org')", payload.package)]),
-        "perl" => ("cpan".to_string(), vec!["-i".to_string(), payload.package.clone()]),
-        "haskell" => ("cabal".to_string(), vec!["install".to_string(), "--lib".to_string(), payload.package.clone()]),
-        "javascript" | "typescript" => ("npm".to_string(), vec!["install".to_string(), payload.package.clone()]),
-        "scala" => ("sh".to_string(), vec!["-c".to_string(), format!("echo '\nlibraryDependencies += \"{}\"' >> build.sbt", payload.package)]),
-        "pascal" => ("fppkg".to_string(), vec!["install".to_string(), payload.package.clone()]),
+        "rust" => (
+            "cargo".to_string(),
+            vec!["add".to_string(), payload.package.clone()],
+        ),
+        "go" => (
+            "go".to_string(),
+            vec!["get".to_string(), payload.package.clone()],
+        ),
+        "dart" => (
+            "dart".to_string(),
+            vec![
+                "pub".to_string(),
+                "add".to_string(),
+                payload.package.clone(),
+            ],
+        ),
+        "csharp" => (
+            "dotnet".to_string(),
+            vec![
+                "add".to_string(),
+                "package".to_string(),
+                payload.package.clone(),
+            ],
+        ),
+        "python" => (
+            "pip3".to_string(),
+            vec![
+                "install".to_string(),
+                payload.package.clone(),
+                "--break-system-packages".to_string(),
+            ],
+        ),
+        "java" | "kotlin" => (
+            "mvn".to_string(),
+            vec![
+                "dependency:get".to_string(),
+                format!("-Dartifact={}", payload.package),
+            ],
+        ),
+        "swift" => (
+            "swift".to_string(),
+            vec![
+                "package".to_string(),
+                "add".to_string(),
+                payload.package.clone(),
+            ],
+        ),
+        "ruby" => (
+            "gem".to_string(),
+            vec!["install".to_string(), payload.package.clone()],
+        ),
+        "r" => (
+            "Rscript".to_string(),
+            vec![
+                "-e".to_string(),
+                format!(
+                    "install.packages('{}', repos='http://cran.us.r-project.org')",
+                    payload.package
+                ),
+            ],
+        ),
+        "perl" => (
+            "cpan".to_string(),
+            vec!["-i".to_string(), payload.package.clone()],
+        ),
+        "haskell" => (
+            "cabal".to_string(),
+            vec![
+                "install".to_string(),
+                "--lib".to_string(),
+                payload.package.clone(),
+            ],
+        ),
+        "javascript" | "typescript" => (
+            "npm".to_string(),
+            vec!["install".to_string(), payload.package.clone()],
+        ),
+        "scala" => (
+            "sh".to_string(),
+            vec![
+                "-c".to_string(),
+                format!(
+                    "echo '\nlibraryDependencies += \"{}\"' >> build.sbt",
+                    payload.package
+                ),
+            ],
+        ),
+        "pascal" => (
+            "fppkg".to_string(),
+            vec!["install".to_string(), payload.package.clone()],
+        ),
         "c" | "cpp" => {
             if std::path::Path::new("/data/data/com.termux").exists() {
-                ("pkg".to_string(), vec!["install".to_string(), "-y".to_string(), payload.package.clone()])
+                (
+                    "pkg".to_string(),
+                    vec![
+                        "install".to_string(),
+                        "-y".to_string(),
+                        payload.package.clone(),
+                    ],
+                )
             } else {
-                ("apt-get".to_string(), vec!["install".to_string(), "-y".to_string(), payload.package.clone()])
+                (
+                    "apt-get".to_string(),
+                    vec![
+                        "install".to_string(),
+                        "-y".to_string(),
+                        payload.package.clone(),
+                    ],
+                )
             }
-        },
-        _ => return Json(PackageResponse {
-            output: "".to_string(),
-            error: format!("Package management not supported for: {}", lang),
-            dependency_file_name: None,
-            dependency_file_content: None,
-        }),
+        }
+        _ => {
+            return Json(PackageResponse {
+                output: "".to_string(),
+                error: format!("Package management not supported for: {}", lang),
+                dependency_file_name: None,
+                dependency_file_content: None,
+            })
+        }
     };
 
-    let run_output = Command::new(cmd)
-        .args(args)
-        .current_dir(&dir)
-        .output();
+    let run_output = Command::new(cmd).args(args).current_dir(&dir).output();
 
     let (output_str, error_str, success) = match run_output {
         Ok(out) => (
@@ -304,7 +408,12 @@ pub async fn add_package(Json(payload): Json<PackageRequest>) -> Json<PackageRes
             let gem_path = format!("{}/Gemfile", dir);
             if let Ok(mut content) = fs::read_to_string(&gem_path) {
                 let expected_gem = format!("gem \"{}\"", payload.package.trim());
-                if !content.lines().any(|l| l.trim().contains(&format!("gem \"{}\"", payload.package.trim())) || l.trim().contains(&format!("gem '{}'", payload.package.trim()))) {
+                if !content.lines().any(|l| {
+                    l.trim()
+                        .contains(&format!("gem \"{}\"", payload.package.trim()))
+                        || l.trim()
+                            .contains(&format!("gem '{}'", payload.package.trim()))
+                }) {
                     if !content.ends_with('\n') && !content.is_empty() {
                         content.push('\n');
                     }
@@ -327,9 +436,16 @@ pub async fn add_package(Json(payload): Json<PackageRequest>) -> Json<PackageRes
                             group_id, artifact_id, version
                         );
                         let new_content = if content.contains("<dependencies>") {
-                            content.replace("<dependencies>", &format!("<dependencies>\n{}", dep_xml))
+                            content
+                                .replace("<dependencies>", &format!("<dependencies>\n{}", dep_xml))
                         } else if content.contains("</project>") {
-                            content.replace("</project>", &format!("    <dependencies>\n{}\n    </dependencies>\n</project>", dep_xml))
+                            content.replace(
+                                "</project>",
+                                &format!(
+                                    "    <dependencies>\n{}\n    </dependencies>\n</project>",
+                                    dep_xml
+                                ),
+                            )
                         } else {
                             content
                         };
@@ -357,7 +473,7 @@ pub async fn add_package(Json(payload): Json<PackageRequest>) -> Json<PackageRes
 
 pub async fn sync_file(Json(payload): Json<SyncRequest>) -> Json<CodeResponse> {
     let target_path = resolve_project_dir(&payload.path);
-    
+
     if let Ok(metadata) = fs::metadata(&target_path) {
         if metadata.is_dir() {
             let _ = fs::remove_dir_all(&target_path);
@@ -367,7 +483,7 @@ pub async fn sync_file(Json(payload): Json<SyncRequest>) -> Json<CodeResponse> {
     if let Some(parent) = std::path::Path::new(&target_path).parent() {
         let _ = fs::create_dir_all(parent);
     }
-    
+
     match fs::write(&target_path, payload.content) {
         Ok(_) => Json(CodeResponse {
             output: "File synced".to_string(),
@@ -386,7 +502,10 @@ pub async fn sync_file(Json(payload): Json<SyncRequest>) -> Json<CodeResponse> {
 
 pub async fn get_completions(Json(payload): Json<CompletionRequest>) -> Json<CompletionResponse> {
     let lang = payload.language.to_lowercase();
-    println!("🔍 Completion requested for {}: line {}, char {}", lang, payload.line, payload.character);
+    println!(
+        "🔍 Completion requested for {}: line {}, char {}",
+        lang, payload.line, payload.character
+    );
 
     let project_dir = resolve_project_dir(&payload.project_path);
     let file_uri = if let Some(ref rel_path) = payload.file_path {
@@ -419,7 +538,9 @@ pub async fn get_completions(Json(payload): Json<CompletionRequest>) -> Json<Com
     let lsp_cmd = match lang.as_str() {
         "rust" => Some(("rust-analyzer", vec![])),
         "python" => Some(("pylsp", vec![])),
-        "javascript" | "typescript" | "jsx" | "tsx" => Some(("typescript-language-server", vec!["--stdio"])),
+        "javascript" | "typescript" | "jsx" | "tsx" => {
+            Some(("typescript-language-server", vec!["--stdio"]))
+        }
         "go" => Some(("gopls", vec![])),
         "c" | "cpp" => Some(("clangd", vec![])),
         "dart" => Some(("dart", vec!["language-server"])),
@@ -475,10 +596,13 @@ environment:
 "#;
                     let _ = fs::write(pubspec_path, default_pubspec);
                 }
-            } else if lang == "jsx" || lang == "tsx" || lang == "javascript" || lang == "typescript" {
+            } else if lang == "jsx" || lang == "tsx" || lang == "javascript" || lang == "typescript"
+            {
                 let jsconfig_path = format!("{}/jsconfig.json", project_dir);
                 let tsconfig_path = format!("{}/tsconfig.json", project_dir);
-                if !std::path::Path::new(&jsconfig_path).exists() && !std::path::Path::new(&tsconfig_path).exists() {
+                if !std::path::Path::new(&jsconfig_path).exists()
+                    && !std::path::Path::new(&tsconfig_path).exists()
+                {
                     println!("📝 Creating default jsconfig.json for JS/JSX LSP");
                     let default_config = r#"{
   "compilerOptions": {
@@ -497,7 +621,10 @@ environment:
             let root_uri = format!("file://{}", project_dir);
             let final_cmd = crate::utils::resolve_lsp_executable(&lang, cmd);
 
-            println!("🚀 Starting LSP server for {}: {} (root: {})", lang, final_cmd, root_uri);
+            println!(
+                "🚀 Starting LSP server for {}: {} (root: {})",
+                lang, final_cmd, root_uri
+            );
             match lsp::LspClient::new(&final_cmd, &args, Some(&root_uri)) {
                 Ok(client) => {
                     servers.insert(lang.clone(), client);
@@ -507,7 +634,7 @@ environment:
                 }
             }
         }
-        
+
         if let Some(client) = servers.get_mut(&lang) {
             if let Some(ref rel_path) = payload.file_path {
                 let dest_path = format!("{}/{}", project_dir, rel_path);
@@ -517,29 +644,72 @@ environment:
                 let _ = fs::write(&dest_path, &payload.code);
             } else {
                 match lang.as_str() {
-                    "rust" => { let _ = fs::write(format!("{}/src/main.rs", project_dir), &payload.code); },
-                    "dart" => { let _ = fs::write(format!("{}/lib/main.dart", project_dir), &payload.code); },
-                    "cpp" => { let _ = fs::write(format!("{}/main.cpp", project_dir), &payload.code); },
-                    "c" => { let _ = fs::write(format!("{}/main.c", project_dir), &payload.code); },
-                    "python" => { let _ = fs::write(format!("{}/main.py", project_dir), &payload.code); },
-                    "go" => { let _ = fs::write(format!("{}/main.go", project_dir), &payload.code); },
-                    "ruby" => { let _ = fs::write(format!("{}/main.rb", project_dir), &payload.code); },
-                    "javascript" => { let _ = fs::write(format!("{}/main.js", project_dir), &payload.code); },
-                    "typescript" => { let _ = fs::write(format!("{}/main.ts", project_dir), &payload.code); },
-                    "jsx" => { let _ = fs::write(format!("{}/main.jsx", project_dir), &payload.code); },
-                    "tsx" => { let _ = fs::write(format!("{}/main.tsx", project_dir), &payload.code); },
-                    "kotlin" => { let _ = fs::write(format!("{}/main.kt", project_dir), &payload.code); },
-                    "java" => { let _ = fs::write(format!("{}/main.java", project_dir), &payload.code); },
-                    "swift" => { let _ = fs::write(format!("{}/main.swift", project_dir), &payload.code); },
-                    "html" => { let _ = fs::write(format!("{}/index.html", project_dir), &payload.code); },
-                    "css" => { let _ = fs::write(format!("{}/style.css", project_dir), &payload.code); },
-                    "vue" => { let _ = fs::write(format!("{}/Component.vue", project_dir), &payload.code); },
-                    "svelte" => { let _ = fs::write(format!("{}/Component.svelte", project_dir), &payload.code); },
+                    "rust" => {
+                        let _ = fs::write(format!("{}/src/main.rs", project_dir), &payload.code);
+                    }
+                    "dart" => {
+                        let _ = fs::write(format!("{}/lib/main.dart", project_dir), &payload.code);
+                    }
+                    "cpp" => {
+                        let _ = fs::write(format!("{}/main.cpp", project_dir), &payload.code);
+                    }
+                    "c" => {
+                        let _ = fs::write(format!("{}/main.c", project_dir), &payload.code);
+                    }
+                    "python" => {
+                        let _ = fs::write(format!("{}/main.py", project_dir), &payload.code);
+                    }
+                    "go" => {
+                        let _ = fs::write(format!("{}/main.go", project_dir), &payload.code);
+                    }
+                    "ruby" => {
+                        let _ = fs::write(format!("{}/main.rb", project_dir), &payload.code);
+                    }
+                    "javascript" => {
+                        let _ = fs::write(format!("{}/main.js", project_dir), &payload.code);
+                    }
+                    "typescript" => {
+                        let _ = fs::write(format!("{}/main.ts", project_dir), &payload.code);
+                    }
+                    "jsx" => {
+                        let _ = fs::write(format!("{}/main.jsx", project_dir), &payload.code);
+                    }
+                    "tsx" => {
+                        let _ = fs::write(format!("{}/main.tsx", project_dir), &payload.code);
+                    }
+                    "kotlin" => {
+                        let _ = fs::write(format!("{}/main.kt", project_dir), &payload.code);
+                    }
+                    "java" => {
+                        let _ = fs::write(format!("{}/main.java", project_dir), &payload.code);
+                    }
+                    "swift" => {
+                        let _ = fs::write(format!("{}/main.swift", project_dir), &payload.code);
+                    }
+                    "html" => {
+                        let _ = fs::write(format!("{}/index.html", project_dir), &payload.code);
+                    }
+                    "css" => {
+                        let _ = fs::write(format!("{}/style.css", project_dir), &payload.code);
+                    }
+                    "vue" => {
+                        let _ = fs::write(format!("{}/Component.vue", project_dir), &payload.code);
+                    }
+                    "svelte" => {
+                        let _ =
+                            fs::write(format!("{}/Component.svelte", project_dir), &payload.code);
+                    }
                     _ => {}
                 }
             }
-            
-            match client.get_completions(&file_uri, &payload.code, payload.line, payload.character, &lang) {
+
+            match client.get_completions(
+                &file_uri,
+                &payload.code,
+                payload.line,
+                payload.character,
+                &lang,
+            ) {
                 Ok(mut sugg) => {
                     suggestions.append(&mut sugg);
                 }
@@ -574,7 +744,10 @@ environment:
 
 pub async fn delete_file(Json(payload): Json<DeleteRequest>) -> Json<CodeResponse> {
     let target_path = resolve_project_dir(&payload.path);
-    println!("🗑 Deleting file/folder: {} (is_dir: {})", target_path, payload.is_dir);
+    println!(
+        "🗑 Deleting file/folder: {} (is_dir: {})",
+        target_path, payload.is_dir
+    );
     let res = if payload.is_dir {
         fs::remove_dir_all(&target_path)
     } else {
@@ -599,8 +772,11 @@ pub async fn delete_file(Json(payload): Json<DeleteRequest>) -> Json<CodeRespons
 pub async fn copy_file(Json(payload): Json<CopyRequest>) -> Json<CodeResponse> {
     let src = resolve_project_dir(&payload.src_path);
     let dest = resolve_project_dir(&payload.dest_path);
-    println!("📋 Copying from {} to {} (is_dir: {})", src, dest, payload.is_dir);
-    
+    println!(
+        "📋 Copying from {} to {} (is_dir: {})",
+        src, dest, payload.is_dir
+    );
+
     if let Some(parent) = std::path::Path::new(&dest).parent() {
         let _ = fs::create_dir_all(parent);
     }
@@ -627,7 +803,10 @@ pub async fn copy_file(Json(payload): Json<CopyRequest>) -> Json<CodeResponse> {
     }
 }
 
-fn copy_dir_all(src: impl AsRef<std::path::Path>, dst: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+fn copy_dir_all(
+    src: impl AsRef<std::path::Path>,
+    dst: impl AsRef<std::path::Path>,
+) -> std::io::Result<()> {
     fs::create_dir_all(&dst)?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;
@@ -693,10 +872,8 @@ fn run_formatter(
 ) -> Result<String, String> {
     let resolved_cmd = crate::utils::resolve_lsp_executable(lang, cmd_name);
     println!("Running formatter: {} {:?}", resolved_cmd, args);
-    
-    let output = Command::new(&resolved_cmd)
-        .args(&args)
-        .output();
+
+    let output = Command::new(&resolved_cmd).args(&args).output();
 
     match output {
         Ok(out) => {
@@ -708,8 +885,16 @@ fn run_formatter(
             } else {
                 let stderr = String::from_utf8_lossy(&out.stderr).to_string();
                 let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-                let err_msg = if !stderr.trim().is_empty() { stderr } else { stdout };
-                Err(format!("Formatter failed (exit code {}): {}", out.status.code().unwrap_or(-1), err_msg))
+                let err_msg = if !stderr.trim().is_empty() {
+                    stderr
+                } else {
+                    stdout
+                };
+                Err(format!(
+                    "Formatter failed (exit code {}): {}",
+                    out.status.code().unwrap_or(-1),
+                    err_msg
+                ))
             }
         }
         Err(e) => {
@@ -736,7 +921,7 @@ fn run_formatter(
 pub async fn format_code(Json(payload): Json<FormatRequest>) -> Json<FormatResponse> {
     let project_dir = resolve_project_dir(&payload.project_path);
     let lang = payload.language.to_lowercase();
-    
+
     let ext = match lang.as_str() {
         "rust" => "rs",
         "go" => "go",
@@ -762,7 +947,10 @@ pub async fn format_code(Json(payload): Json<FormatRequest>) -> Json<FormatRespo
     if ext == "txt" {
         return Json(FormatResponse {
             formatted_code: payload.code,
-            error: Some(format!("Formatting not supported for language: {}", payload.language)),
+            error: Some(format!(
+                "Formatting not supported for language: {}",
+                payload.language
+            )),
         });
     }
 
@@ -778,7 +966,10 @@ pub async fn format_code(Json(payload): Json<FormatRequest>) -> Json<FormatRespo
     if let Err(e) = fs::write(&temp_filepath, &payload.code) {
         return Json(FormatResponse {
             formatted_code: payload.code,
-            error: Some(format!("Failed to write temporary file for formatting: {}", e)),
+            error: Some(format!(
+                "Failed to write temporary file for formatting: {}",
+                e
+            )),
         });
     }
 
@@ -787,7 +978,10 @@ pub async fn format_code(Json(payload): Json<FormatRequest>) -> Json<FormatRespo
         "go" => ("gofmt", vec!["-w".to_string(), temp_filepath.clone()]),
         "python" => ("black", vec![temp_filepath.clone()]),
         "dart" => ("dart", vec!["format".to_string(), temp_filepath.clone()]),
-        "c" | "cpp" | "c++" | "java" => ("clang-format", vec!["-i".to_string(), temp_filepath.clone()]),
+        "c" | "cpp" | "c++" | "java" => (
+            "clang-format",
+            vec!["-i".to_string(), temp_filepath.clone()],
+        ),
         "kotlin" => ("ktlint", vec!["-F".to_string(), temp_filepath.clone()]),
         "swift" => ("swiftformat", vec![temp_filepath.clone()]),
         "ruby" => ("rufo", vec![temp_filepath.clone()]),
@@ -795,16 +989,30 @@ pub async fn format_code(Json(payload): Json<FormatRequest>) -> Json<FormatRespo
         "javascript" | "typescript" | "jsx" | "tsx" | "html" | "css" | "vue" | "svelte" => {
             let prettier_cmd = crate::utils::resolve_lsp_executable(&lang, "prettier");
             if prettier_cmd != "prettier" && std::path::Path::new(&prettier_cmd).exists() {
-                ("prettier", vec!["--write".to_string(), temp_filepath.clone()])
+                (
+                    "prettier",
+                    vec!["--write".to_string(), temp_filepath.clone()],
+                )
             } else {
-                ("npx", vec!["-y".to_string(), "prettier".to_string(), "--write".to_string(), temp_filepath.clone()])
+                (
+                    "npx",
+                    vec![
+                        "-y".to_string(),
+                        "prettier".to_string(),
+                        "--write".to_string(),
+                        temp_filepath.clone(),
+                    ],
+                )
             }
         }
         _ => {
             let _ = fs::remove_file(&temp_filepath);
             return Json(FormatResponse {
                 formatted_code: payload.code,
-                error: Some(format!("Formatting not supported for language: {}", payload.language)),
+                error: Some(format!(
+                    "Formatting not supported for language: {}",
+                    payload.language
+                )),
             });
         }
     };
@@ -827,7 +1035,10 @@ pub async fn format_code(Json(payload): Json<FormatRequest>) -> Json<FormatRespo
 
 pub async fn get_definition(Json(payload): Json<DefinitionRequest>) -> Json<DefinitionResponse> {
     let lang = payload.language.to_lowercase();
-    println!("🔍 Definition requested for {}: line {}, char {}", lang, payload.line, payload.character);
+    println!(
+        "🔍 Definition requested for {}: line {}, char {}",
+        lang, payload.line, payload.character
+    );
 
     let project_dir = resolve_project_dir(&payload.project_path);
     let file_uri = if let Some(ref rel_path) = payload.file_path {
@@ -860,7 +1071,9 @@ pub async fn get_definition(Json(payload): Json<DefinitionRequest>) -> Json<Defi
     let lsp_cmd = match lang.as_str() {
         "rust" => Some(("rust-analyzer", vec![])),
         "python" => Some(("pylsp", vec![])),
-        "javascript" | "typescript" | "jsx" | "tsx" => Some(("typescript-language-server", vec!["--stdio"])),
+        "javascript" | "typescript" | "jsx" | "tsx" => {
+            Some(("typescript-language-server", vec!["--stdio"]))
+        }
         "go" => Some(("gopls", vec![])),
         "c" | "cpp" => Some(("clangd", vec![])),
         "dart" => Some(("dart", vec!["language-server"])),
@@ -903,10 +1116,13 @@ pub async fn get_definition(Json(payload): Json<DefinitionRequest>) -> Json<Defi
                     let default_pubspec = "name: codedroid_project\ndescription: A new Dart project.\nversion: 1.0.0\nenvironment:\n  sdk: '>=3.0.0 <4.0.0'\n";
                     let _ = fs::write(pubspec_path, default_pubspec);
                 }
-            } else if lang == "jsx" || lang == "tsx" || lang == "javascript" || lang == "typescript" {
+            } else if lang == "jsx" || lang == "tsx" || lang == "javascript" || lang == "typescript"
+            {
                 let jsconfig_path = format!("{}/jsconfig.json", project_dir);
                 let tsconfig_path = format!("{}/tsconfig.json", project_dir);
-                if !std::path::Path::new(&jsconfig_path).exists() && !std::path::Path::new(&tsconfig_path).exists() {
+                if !std::path::Path::new(&jsconfig_path).exists()
+                    && !std::path::Path::new(&tsconfig_path).exists()
+                {
                     let default_config = "{\n  \"compilerOptions\": {\n    \"jsx\": \"react-jsx\",\n    \"target\": \"ESNext\",\n    \"module\": \"ESNext\",\n    \"moduleResolution\": \"node\",\n    \"allowJs\": true,\n    \"checkJs\": false\n  }\n}";
                     let _ = fs::write(jsconfig_path, default_config);
                 }
@@ -915,7 +1131,10 @@ pub async fn get_definition(Json(payload): Json<DefinitionRequest>) -> Json<Defi
             let root_uri = format!("file://{}", project_dir);
             let final_cmd = crate::utils::resolve_lsp_executable(&lang, cmd);
 
-            println!("🚀 Starting LSP server for definition: {} (root: {})", final_cmd, root_uri);
+            println!(
+                "🚀 Starting LSP server for definition: {} (root: {})",
+                final_cmd, root_uri
+            );
             match lsp::LspClient::new(&final_cmd, &args, Some(&root_uri)) {
                 Ok(client) => {
                     servers.insert(lang.clone(), client);
@@ -935,8 +1154,14 @@ pub async fn get_definition(Json(payload): Json<DefinitionRequest>) -> Json<Defi
                 }
                 let _ = fs::write(&dest_path, &payload.code);
             }
-            
-            match client.get_definition(&file_uri, &payload.code, payload.line, payload.character, &lang) {
+
+            match client.get_definition(
+                &file_uri,
+                &payload.code,
+                payload.line,
+                payload.character,
+                &lang,
+            ) {
                 Ok(locs) => {
                     locations = locs;
                 }
@@ -955,7 +1180,10 @@ pub async fn get_definition(Json(payload): Json<DefinitionRequest>) -> Json<Defi
 
 pub async fn get_references(Json(payload): Json<ReferencesRequest>) -> Json<ReferencesResponse> {
     let lang = payload.language.to_lowercase();
-    println!("🔍 References requested for {}: line {}, char {}", lang, payload.line, payload.character);
+    println!(
+        "🔍 References requested for {}: line {}, char {}",
+        lang, payload.line, payload.character
+    );
 
     let project_dir = resolve_project_dir(&payload.project_path);
     let file_uri = if let Some(ref rel_path) = payload.file_path {
@@ -988,7 +1216,9 @@ pub async fn get_references(Json(payload): Json<ReferencesRequest>) -> Json<Refe
     let lsp_cmd = match lang.as_str() {
         "rust" => Some(("rust-analyzer", vec![])),
         "python" => Some(("pylsp", vec![])),
-        "javascript" | "typescript" | "jsx" | "tsx" => Some(("typescript-language-server", vec!["--stdio"])),
+        "javascript" | "typescript" | "jsx" | "tsx" => {
+            Some(("typescript-language-server", vec!["--stdio"]))
+        }
         "go" => Some(("gopls", vec![])),
         "c" | "cpp" => Some(("clangd", vec![])),
         "dart" => Some(("dart", vec!["language-server"])),
@@ -1031,10 +1261,13 @@ pub async fn get_references(Json(payload): Json<ReferencesRequest>) -> Json<Refe
                     let default_pubspec = "name: codedroid_project\ndescription: A new Dart project.\nversion: 1.0.0\nenvironment:\n  sdk: '>=3.0.0 <4.0.0'\n";
                     let _ = fs::write(pubspec_path, default_pubspec);
                 }
-            } else if lang == "jsx" || lang == "tsx" || lang == "javascript" || lang == "typescript" {
+            } else if lang == "jsx" || lang == "tsx" || lang == "javascript" || lang == "typescript"
+            {
                 let jsconfig_path = format!("{}/jsconfig.json", project_dir);
                 let tsconfig_path = format!("{}/tsconfig.json", project_dir);
-                if !std::path::Path::new(&jsconfig_path).exists() && !std::path::Path::new(&tsconfig_path).exists() {
+                if !std::path::Path::new(&jsconfig_path).exists()
+                    && !std::path::Path::new(&tsconfig_path).exists()
+                {
                     let default_config = "{\n  \"compilerOptions\": {\n    \"jsx\": \"react-jsx\",\n    \"target\": \"ESNext\",\n    \"module\": \"ESNext\",\n    \"moduleResolution\": \"node\",\n    \"allowJs\": true,\n    \"checkJs\": false\n  }\n}";
                     let _ = fs::write(jsconfig_path, default_config);
                 }
@@ -1043,7 +1276,10 @@ pub async fn get_references(Json(payload): Json<ReferencesRequest>) -> Json<Refe
             let root_uri = format!("file://{}", project_dir);
             let final_cmd = crate::utils::resolve_lsp_executable(&lang, cmd);
 
-            println!("🚀 Starting LSP server for references: {} (root: {})", final_cmd, root_uri);
+            println!(
+                "🚀 Starting LSP server for references: {} (root: {})",
+                final_cmd, root_uri
+            );
             match lsp::LspClient::new(&final_cmd, &args, Some(&root_uri)) {
                 Ok(client) => {
                     servers.insert(lang.clone(), client);
@@ -1063,8 +1299,14 @@ pub async fn get_references(Json(payload): Json<ReferencesRequest>) -> Json<Refe
                 }
                 let _ = fs::write(&dest_path, &payload.code);
             }
-            
-            match client.get_references(&file_uri, &payload.code, payload.line, payload.character, &lang) {
+
+            match client.get_references(
+                &file_uri,
+                &payload.code,
+                payload.line,
+                payload.character,
+                &lang,
+            ) {
                 Ok(locs) => {
                     locations = locs;
                 }
@@ -1097,14 +1339,17 @@ pub async fn read_file(Json(payload): Json<ReadFileRequest>) -> Json<ReadFileRes
 
 pub async fn get_hover(Json(payload): Json<HoverRequest>) -> Json<HoverResponse> {
     let lang = payload.language.to_lowercase();
-    println!("💡 Hover requested for {}: line {}, char {}", lang, payload.line, payload.character);
+    println!(
+        "💡 Hover requested for {}: line {}, char {}",
+        lang, payload.line, payload.character
+    );
 
     let project_dir = resolve_project_dir(&payload.project_path);
-    let is_absolute = payload.file_path.starts_with('/') 
-        || payload.file_path.starts_with("Users/") 
-        || payload.file_path.starts_with("home/") 
+    let is_absolute = payload.file_path.starts_with('/')
+        || payload.file_path.starts_with("Users/")
+        || payload.file_path.starts_with("home/")
         || payload.file_path.starts_with("data/");
-        
+
     let file_uri = if is_absolute {
         let clean_path = if payload.file_path.starts_with('/') {
             payload.file_path.clone()
@@ -1120,14 +1365,20 @@ pub async fn get_hover(Json(payload): Json<HoverRequest>) -> Json<HoverResponse>
     let lsp_cmd = match lang.as_str() {
         "rust" => Some(("rust-analyzer", vec![])),
         "python" => Some(("pylsp", vec![])),
-        "javascript" | "typescript" | "jsx" | "tsx" => Some(("typescript-language-server", vec!["--stdio"])),
+        "javascript" | "typescript" | "jsx" | "tsx" => {
+            Some(("typescript-language-server", vec!["--stdio"]))
+        }
         "go" => Some(("gopls", vec![])),
         "c" | "cpp" => Some(("clangd", vec![])),
-        "java" => Some(("jdtls", vec![
-            "-data", &jdtls_data,
-            "--jvm-arg=-XX:+UseG1GC",
-            "--jvm-arg=-XX:+UseStringDeduplication"
-        ])),
+        "java" => Some((
+            "jdtls",
+            vec![
+                "-data",
+                &jdtls_data,
+                "--jvm-arg=-XX:+UseG1GC",
+                "--jvm-arg=-XX:+UseStringDeduplication",
+            ],
+        )),
         "dart" => Some(("dart", vec!["language-server"])),
         "ruby" => Some(("solargraph", vec!["stdio"])),
         "kotlin" => Some(("kotlin-language-server", vec![])),
@@ -1153,10 +1404,13 @@ pub async fn get_hover(Json(payload): Json<HoverRequest>) -> Json<HoverResponse>
                     let default_config = "analyzer:\n  strong-mode:\n    implicit-casts: true\n    implicit-dynamic: true\n";
                     let _ = fs::write(analysis_options_path, default_config);
                 }
-            } else if lang == "jsx" || lang == "tsx" || lang == "javascript" || lang == "typescript" {
+            } else if lang == "jsx" || lang == "tsx" || lang == "javascript" || lang == "typescript"
+            {
                 let jsconfig_path = format!("{}/jsconfig.json", project_dir);
                 let tsconfig_path = format!("{}/tsconfig.json", project_dir);
-                if !std::path::Path::new(&jsconfig_path).exists() && !std::path::Path::new(&tsconfig_path).exists() {
+                if !std::path::Path::new(&jsconfig_path).exists()
+                    && !std::path::Path::new(&tsconfig_path).exists()
+                {
                     let default_config = "{\n  \"compilerOptions\": {\n    \"jsx\": \"react-jsx\",\n    \"target\": \"ESNext\",\n    \"module\": \"ESNext\",\n    \"moduleResolution\": \"node\",\n    \"allowJs\": true,\n    \"checkJs\": false\n  }\n}";
                     let _ = fs::write(jsconfig_path, default_config);
                 }
@@ -1165,7 +1419,10 @@ pub async fn get_hover(Json(payload): Json<HoverRequest>) -> Json<HoverResponse>
             let root_uri = format!("file://{}", project_dir);
             let final_cmd = crate::utils::resolve_lsp_executable(&lang, cmd);
 
-            println!("🚀 Starting LSP server for hover: {} (root: {})", final_cmd, root_uri);
+            println!(
+                "🚀 Starting LSP server for hover: {} (root: {})",
+                final_cmd, root_uri
+            );
             match lsp::LspClient::new(&final_cmd, &args, Some(&root_uri)) {
                 Ok(client) => {
                     servers.insert(lang.clone(), client);
@@ -1185,8 +1442,14 @@ pub async fn get_hover(Json(payload): Json<HoverRequest>) -> Json<HoverResponse>
                 }
                 let _ = fs::write(&dest_path, &payload.code);
             }
-            
-            match client.get_hover(&file_uri, &payload.code, payload.line, payload.character, &lang) {
+
+            match client.get_hover(
+                &file_uri,
+                &payload.code,
+                payload.line,
+                payload.character,
+                &lang,
+            ) {
                 Ok(res) => {
                     contents = res;
                 }
@@ -1213,13 +1476,13 @@ pub async fn run_command(Json(payload): Json<CommandRequest>) -> Json<CommandRes
     } else {
         ("sh", "-c")
     };
-    
+
     let mut cmd = Command::new(shell);
     cmd.arg(arg)
-       .arg(&payload.command)
-       .current_dir(&dir)
-       .stdout(Stdio::piped())
-       .stderr(Stdio::piped());
+        .arg(&payload.command)
+        .current_dir(&dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
     #[cfg(unix)]
     {
@@ -1250,7 +1513,9 @@ pub async fn run_command(Json(payload): Json<CommandRequest>) -> Json<CommandRes
     thread::spawn(move || {
         let mut buffer = [0; 1024];
         while let Ok(n) = stdout.read(&mut buffer) {
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             let mut buf = s_out.lock().unwrap();
             buf.push_str(&String::from_utf8_lossy(&buffer[..n]));
         }
@@ -1260,7 +1525,9 @@ pub async fn run_command(Json(payload): Json<CommandRequest>) -> Json<CommandRes
     thread::spawn(move || {
         let mut buffer = [0; 1024];
         while let Ok(n) = stderr.read(&mut buffer) {
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             let mut buf = s_err.lock().unwrap();
             buf.push_str(&String::from_utf8_lossy(&buffer[..n]));
         }
@@ -1302,6 +1569,71 @@ pub async fn run_command(Json(payload): Json<CommandRequest>) -> Json<CommandRes
     }
 }
 
+fn scan_dir_recursive(
+    base_path: &std::path::Path,
+    current_path: &std::path::Path,
+    files: &mut Vec<FileInfo>,
+) -> std::io::Result<()> {
+    if current_path.is_dir() {
+        for entry in std::fs::read_dir(current_path)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if name == ".git"
+                    || name == ".DS_Store"
+                    || name == ".dart_tool"
+                    || name == ".gradle"
+                    || name == ".idea"
+                    || name == "node_modules"
+                    || name == "build"
+                    || name == "target"
+                {
+                    continue;
+                }
+            }
+
+            let rel_path = path
+                .strip_prefix(base_path)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?
+                .to_string_lossy()
+                .into_owned();
+
+            let is_dir = path.is_dir();
+            files.push(FileInfo { rel_path, is_dir });
+
+            if is_dir {
+                let _ = scan_dir_recursive(base_path, &path, files);
+            }
+        }
+    }
+    Ok(())
+}
+
+pub async fn scan_project(Json(payload): Json<ScanProjectRequest>) -> Json<ScanProjectResponse> {
+    let project_dir = resolve_project_dir(&payload.project_path);
+    let base_path = std::path::Path::new(&project_dir);
+
+    let mut files = Vec::new();
+    if !base_path.exists() {
+        return Json(ScanProjectResponse {
+            files,
+            error: "Project directory does not exist".to_string(),
+        });
+    }
+
+    match scan_dir_recursive(base_path, base_path, &mut files) {
+        Ok(_) => Json(ScanProjectResponse {
+            files,
+            error: "".to_string(),
+        }),
+        Err(e) => Json(ScanProjectResponse {
+            files: Vec::new(),
+            error: format!("Failed to scan project directory: {}", e),
+        }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1316,11 +1648,12 @@ mod tests {
         };
         let response = format_code(axum::Json(payload)).await;
         if response.0.error.is_none() {
-            assert!(response.0.formatted_code.contains("fn main() {\n    println!(\"hello\");\n}"));
+            assert!(response
+                .0
+                .formatted_code
+                .contains("fn main() {\n    println!(\"hello\");\n}"));
         } else {
             println!("Formatter warning/error: {:?}", response.0.error);
         }
     }
 }
-
-

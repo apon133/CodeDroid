@@ -1,7 +1,7 @@
-use leptos::prelude::*;
-use crate::api;
-use pulldown_cmark::{Parser, Options, html};
 use super::utils::highlight_code;
+use crate::api;
+use leptos::prelude::*;
+use pulldown_cmark::{html, Options, Parser};
 
 pub fn markdown_to_html(markdown: &str) -> String {
     use pulldown_cmark::{Event, Tag};
@@ -9,14 +9,14 @@ pub fn markdown_to_html(markdown: &str) -> String {
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TASKLISTS);
-    
+
     let parser = Parser::new_ext(markdown, options);
     let mut new_events = Vec::new();
-    
+
     let mut in_code_block = false;
     let mut code_block_lang = String::new();
     let mut code_block_content = String::new();
-    
+
     for event in parser {
         match event {
             Event::Start(Tag::CodeBlock(ref kind)) => {
@@ -31,7 +31,8 @@ pub fn markdown_to_html(markdown: &str) -> String {
                 if in_code_block {
                     in_code_block = false;
                     let highlighted = highlight_code(&code_block_content, &code_block_lang);
-                    let html_block = format!("<div class=\"hover-code-block\">{}</div>", highlighted);
+                    let html_block =
+                        format!("<div class=\"hover-code-block\">{}</div>", highlighted);
                     new_events.push(Event::Html(html_block.into()));
                 } else {
                     new_events.push(Event::End(end_tag));
@@ -58,7 +59,7 @@ pub fn markdown_to_html(markdown: &str) -> String {
             }
         }
     }
-    
+
     let mut html_output = String::new();
     html::push_html(&mut html_output, new_events.into_iter());
     html_output
@@ -66,13 +67,16 @@ pub fn markdown_to_html(markdown: &str) -> String {
 
 pub fn build_hover_html(_diagnostics: &[api::Diagnostic], hover_markdown: Option<&str>) -> String {
     let mut html = String::new();
-    
+
     // Render hover markdown only (removing diagnostic error details from documentation tooltip)
     if let Some(md) = hover_markdown {
         let md_html = markdown_to_html(md);
-        html.push_str(&format!("<div class=\"hover-markdown-content\">{}</div>", md_html));
+        html.push_str(&format!(
+            "<div class=\"hover-markdown-content\">{}</div>",
+            md_html
+        ));
     }
-    
+
     html
 }
 
@@ -91,28 +95,28 @@ pub fn HoverCard(
     view! {
         {move || hover_visible.get().then(|| {
             let coords = hover_coords.get();
-            
+
             let is_mobile = web_sys::window()
                 .and_then(|w| w.inner_width().ok())
                 .and_then(|w| w.as_f64())
                 .map(|w| w < 768.0)
                 .unwrap_or(false);
-                
+
             let hover_class = if is_mobile {
                 "hover-bottom-sheet"
             } else {
                 "hover-floating"
             };
-            
+
             let style = if is_mobile {
                 "".to_string()
             } else {
                 format!("left:{}px; top:{}px", coords.0, coords.1)
             };
-            
+
             let _ = trigger_definition;
             let _ = trigger_references;
-            
+
             view! {
                 <div
                     class=hover_class

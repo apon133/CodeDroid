@@ -1,9 +1,9 @@
-use leptos::prelude::*;
-use web_sys::Event;
-use crate::models::Settings;
-use crate::store;
 use crate::components::app_bar::AppBar;
 use crate::components::icon::LucideIcon;
+use crate::models::Settings;
+use crate::store;
+use leptos::prelude::*;
+use web_sys::Event;
 
 #[component]
 pub fn SettingsPage() -> impl IntoView {
@@ -216,7 +216,7 @@ pub fn SettingsPage() -> impl IntoView {
 
                 <div class="settings-section">
                     <div class="settings-section-title">"Community"</div>
-                    
+
                     <a href="https://discord.gg/5srCEqsht" target="_blank" rel="noopener noreferrer" style="text-decoration:none;display:block;color:inherit">
                         <div class="setting-row" style="cursor:pointer">
                             <div style="display:flex;align-items:center;gap:12px">

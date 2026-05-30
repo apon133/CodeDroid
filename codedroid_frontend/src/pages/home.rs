@@ -1,14 +1,14 @@
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
-use web_sys::MouseEvent;
 use uuid::Uuid;
+use web_sys::MouseEvent;
 
+use crate::components::app_bar::AppBar;
+use crate::components::icon::LucideIcon;
+use crate::components::new_project_modal::{NewProjectModal, NewProjectResult};
+use crate::components::snackbar::Snackbar;
 use crate::models::Project;
 use crate::store;
-use crate::components::app_bar::AppBar;
-use crate::components::snackbar::Snackbar;
-use crate::components::new_project_modal::{NewProjectModal, NewProjectResult};
-use crate::components::icon::LucideIcon;
 
 fn default_files(lang: &str, framework: &str, name: &str) -> Vec<(String, String)> {
     match lang {
@@ -137,12 +137,17 @@ fn format_project_path(path: &str) -> String {
             .and_then(|w| w.navigator().user_agent().ok())
             .map(|ua| {
                 let ua_lower = ua.to_lowercase();
-                ua_lower.contains("android") || ua_lower.contains("iphone") || ua_lower.contains("ipad")
+                ua_lower.contains("android")
+                    || ua_lower.contains("iphone")
+                    || ua_lower.contains("ipad")
             })
             .unwrap_or(false);
 
         if is_mobile {
-            format!("phone/download/codedroid{}", &path["/Codedroid_Projects".len()..])
+            format!(
+                "phone/download/codedroid{}",
+                &path["/Codedroid_Projects".len()..]
+            )
         } else {
             path.to_string()
         }
@@ -165,7 +170,10 @@ pub fn HomePage() -> impl IntoView {
         let msg = msg.to_string();
         snack_msg.set(Some(msg));
         let snack = snack_msg;
-        gloo_timers::callback::Timeout::new(3000, move || { snack.set(None); }).forget();
+        gloo_timers::callback::Timeout::new(3000, move || {
+            snack.set(None);
+        })
+        .forget();
     };
 
     let on_create = {
@@ -283,6 +291,10 @@ pub fn HomePage() -> impl IntoView {
                 let projects_clone = projects.clone();
                 let close = move |_: MouseEvent| confirm_delete.set(None);
                 let delete = move |_: MouseEvent| {
+                    let path = proj2.path.clone();
+                    wasm_bindgen_futures::spawn_local(async move {
+                        let _ = crate::api::delete_file_api(&path, true).await;
+                    });
                     store::delete_project(&projects_clone, &proj2.id);
                     confirm_delete.set(None);
                 };

@@ -1,6 +1,6 @@
-use leptos::prelude::*;
-use crate::api;
 use super::utils::kind_icon;
+use crate::api;
+use leptos::prelude::*;
 
 #[component]
 pub fn SuggestionsOverlay(
@@ -30,11 +30,20 @@ pub fn SuggestionsOverlay(
         let _sug_count = suggestions.get().len();
         if let Some(window) = web_sys::window() {
             if let Some(document) = window.document() {
-                if let Some(container) = document.query_selector(".suggestions-list-container").ok().flatten() {
-                    if let Some(selected_el) = document.query_selector(".suggestion-item.selected").ok().flatten() {
+                if let Some(container) = document
+                    .query_selector(".suggestions-list-container")
+                    .ok()
+                    .flatten()
+                {
+                    if let Some(selected_el) = document
+                        .query_selector(".suggestion-item.selected")
+                        .ok()
+                        .flatten()
+                    {
                         use wasm_bindgen::JsCast;
                         if let Some(el) = selected_el.dyn_ref::<web_sys::HtmlElement>() {
-                            if let Some(container_el) = container.dyn_ref::<web_sys::HtmlElement>() {
+                            if let Some(container_el) = container.dyn_ref::<web_sys::HtmlElement>()
+                            {
                                 let item_top = el.offset_top();
                                 let item_bottom = item_top + el.offset_height();
                                 let scroll_top = container_el.scroll_top();
@@ -62,8 +71,8 @@ pub fn SuggestionsOverlay(
                 let selected = selected_idx.get();
                 let current_item = items.get(selected).cloned();
                 view! {
-                    <div 
-                        class="suggestions-floating" 
+                    <div
+                        class="suggestions-floating"
                         on:mousedown=move |e: web_sys::MouseEvent| { e.prevent_default(); }
                         style=format!("left:{}px; top:{}px", coords.0, coords.1)
                     >
@@ -74,7 +83,7 @@ pub fn SuggestionsOverlay(
                                 let (touch_start, set_touch_start) = signal((0.0, 0.0));
                                 let (has_moved, set_has_moved) = signal(false);
                                 view! {
-                                    <button 
+                                    <button
                                         class=move || if selected_idx.get() == i { "suggestion-item selected" } else { "suggestion-item" }
                                         on:mousedown=move |e: web_sys::MouseEvent| {
                                             e.prevent_default();
@@ -119,8 +128,8 @@ pub fn SuggestionsOverlay(
                                         {s.detail.map(|d| view! { <span class="suggestion-detail">{d}</span> })}
                                         {move || (selected_idx.get() == i && s.documentation.is_some()).then(|| {
                                             view! {
-                                                <span 
-                                                    class="suggestion-read-more" 
+                                                <span
+                                                    class="suggestion-read-more"
                                                     title="Toggle Details"
                                                     on:mousedown=move |e: web_sys::MouseEvent| {
                                                         e.prevent_default();

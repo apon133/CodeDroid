@@ -1,8 +1,8 @@
+use crate::api;
+use crate::pages::editor::utils::is_absolute_path;
+use crate::store;
 use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use crate::api;
-use crate::store;
-use crate::pages::editor::utils::is_absolute_path;
 
 pub fn make_save_current(
     pid: String,
@@ -26,7 +26,10 @@ pub fn make_save_current(
             spawn_local(async move {
                 let full_path = if tab_name.starts_with('/') {
                     tab_name.clone()
-                } else if tab_name.starts_with("Users/") || tab_name.starts_with("home/") || tab_name.starts_with("data/") {
+                } else if tab_name.starts_with("Users/")
+                    || tab_name.starts_with("home/")
+                    || tab_name.starts_with("data/")
+                {
                     format!("/{}", tab_name)
                 } else if is_absolute_path(&tab_name) {
                     tab_name.clone()

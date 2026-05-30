@@ -1,7 +1,7 @@
+use crate::components::icon::LucideIcon;
+use crate::pages::editor::utils::*;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
-use crate::pages::editor::utils::*;
-use crate::components::icon::LucideIcon;
 use web_sys::{Event, KeyboardEvent, MouseEvent};
 
 #[component]
@@ -32,20 +32,23 @@ pub fn FileTree(
     let (collapsed_dirs, set_collapsed_dirs) = signal(std::collections::HashSet::<String>::new());
     let (selected_path, set_selected_path) = signal(Option::<String>::None);
     let get_target_dir = move || {
-        selected_path.get().map(|path| {
-            let is_dir = file_tree.get().iter().any(|f| f.name == path && f.is_dir);
-            if is_dir {
-                path
-            } else {
-                if let Some(pos) = path.rfind('/') {
-                    path[..pos].to_string()
+        selected_path
+            .get()
+            .map(|path| {
+                let is_dir = file_tree.get().iter().any(|f| f.name == path && f.is_dir);
+                if is_dir {
+                    path
                 } else {
-                    String::new()
+                    if let Some(pos) = path.rfind('/') {
+                        path[..pos].to_string()
+                    } else {
+                        String::new()
+                    }
                 }
-            }
-        }).unwrap_or_default()
+            })
+            .unwrap_or_default()
     };
-    
+
     let start_long_press = Callback::new({
         let paste_entry = paste_entry.clone();
         move |target_dir: Option<String>| {
@@ -60,7 +63,7 @@ pub fn FileTree(
             });
         }
     });
-    
+
     let cancel_long_press = Callback::new(move |_: ()| {
         set_press_id.update(|id| *id += 1);
     });
@@ -70,7 +73,7 @@ pub fn FileTree(
             <div class="sidebar-overlay" on:click=move |_| toggle_sidebar.run(()) />
         })}
 
-        <div 
+        <div
             class=move || if sidebar_open.get() { "file-tree-panel open" } else { "file-tree-panel" }
             on:mousedown=move |e| {
                 if e.target() == e.current_target() {
@@ -90,14 +93,14 @@ pub fn FileTree(
             on:touchcancel=move |_| cancel_long_press.run(())
         >
             <div class="sidebar-tabs">
-                <button 
+                <button
                     class=move || if sidebar_mode.get() == 0 { "sidebar-tab active" } else { "sidebar-tab" }
                     on:click=move |_| sidebar_mode.set(0)
                 >
                     <LucideIcon name="folder" size="14" />
                     <span>"Files"</span>
                 </button>
-                <button 
+                <button
                     class=move || if sidebar_mode.get() == 1 { "sidebar-tab active" } else { "sidebar-tab" }
                     on:click=move |_| sidebar_mode.set(1)
                 >
@@ -140,9 +143,9 @@ pub fn FileTree(
                     >
                         <LucideIcon name="folder-plus" size="18" />
                     </button>
-                    <button 
-                        class="btn-tree-action-header" 
-                        title="Paste" 
+                    <button
+                        class="btn-tree-action-header"
+                        title="Paste"
                         style=move || {
                             let has_copied = copied_item.get().is_some();
                             let opacity = if has_copied { "1.0" } else { "0.25" };
@@ -286,16 +289,16 @@ pub fn FileTree(
                             let fname_touchstart = f.name.clone();
                             let fname_active = f.name.clone();
                             let fname_lang = f.name.clone();
-                            
+
                             let f_click = f.clone();
                             let f_copy_btn = f.clone();
                             let f_delete_btn = f.clone();
                             let f_rename_btn = f.clone();
-                            
+
                             let depth = path_depth(&f.name);
                             let indent = depth * 16;
                             let display_name = path_basename(&f.name).to_string();
-                            
+
                             view! {
                                 <div
                                     class=move || {
@@ -366,7 +369,7 @@ pub fn FileTree(
                                             })}
                                         </span>
                                     </div>
-                                    
+
                                     <div class="file-item-actions" style="display:flex; gap:6px; flex-shrink:0; align-items:center">
                                         {
                                             let target_dir_outer = fname_click.clone();
@@ -375,8 +378,8 @@ pub fn FileTree(
                                                 let target_dir = target_dir_outer.clone();
                                                 let paste_entry = paste_entry.clone();
                                                 (is_dir && copied_item.get().is_some()).then(|| view! {
-                                                    <button 
-                                                        class="btn-tree-action" 
+                                                    <button
+                                                        class="btn-tree-action"
                                                         style="background:transparent; border:none; color:var(--accent2); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;"
                                                         title="Paste here"
                                                         on:click=move |e| {
@@ -389,8 +392,8 @@ pub fn FileTree(
                                                 })
                                             }
                                         }
-                                        <button 
-                                            class="btn-tree-action" 
+                                        <button
+                                            class="btn-tree-action"
                                             style="background:transparent; border:none; color:var(--text2); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center; opacity: 0.6;"
                                             title="Rename/Move"
                                             on:click=move |e| {
@@ -405,8 +408,8 @@ pub fn FileTree(
                                         >
                                             <LucideIcon name="edit" size="13" />
                                         </button>
-                                        <button 
-                                            class="btn-tree-action" 
+                                        <button
+                                            class="btn-tree-action"
                                             style="background:transparent; border:none; color:var(--text2); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center; opacity: 0.6;"
                                             title="Copy"
                                             on:click=move |e| {
@@ -416,8 +419,8 @@ pub fn FileTree(
                                         >
                                             <LucideIcon name="copy" size="13" />
                                         </button>
-                                        <button 
-                                            class="btn-tree-action" 
+                                        <button
+                                            class="btn-tree-action"
                                             style="background:transparent; border:none; color:#ff453a; cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center; opacity: 0.6;"
                                             title="Delete"
                                             on:click=move |e| {
@@ -487,19 +490,19 @@ pub fn TabStrip(
 pub fn apply_replacement(code: &str, range: &crate::api::Range, replacement: &str) -> String {
     let lines: Vec<&str> = code.lines().collect();
     let mut new_lines = Vec::new();
-    
+
     let start_line = range.start.line as usize;
     let start_col = range.start.character as usize;
     let end_line = range.end.line as usize;
     let end_col = range.end.character as usize;
-    
+
     if start_line == end_line && start_line < lines.len() {
         for (i, line) in lines.iter().enumerate() {
             if i == start_line {
                 let chars: Vec<char> = line.chars().collect();
                 let s = std::cmp::min(start_col, chars.len());
                 let e = std::cmp::min(end_col, chars.len());
-                
+
                 let mut new_line = String::new();
                 new_line.push_str(&chars[..s].iter().collect::<String>());
                 new_line.push_str(replacement);
@@ -515,7 +518,7 @@ pub fn apply_replacement(code: &str, range: &crate::api::Range, replacement: &st
             content.push_str(code);
             return content;
         }
-        
+
         for (i, line) in lines.iter().enumerate() {
             if i < start_line || i > end_line {
                 new_lines.push(line.to_string());
@@ -541,7 +544,7 @@ pub fn apply_replacement(code: &str, range: &crate::api::Range, replacement: &st
         }
         return code.to_string();
     }
-    
+
     let mut result = new_lines.join("\n");
     if code.ends_with('\n') && !result.ends_with('\n') {
         result.push('\n');
@@ -563,20 +566,23 @@ pub fn BottomPanel(
     on_click_reference: Callback<crate::api::Location>,
     active_tab: Signal<Option<String>>,
     project_path: Signal<String>,
+    project_id: String,
+    file_tree_data: RwSignal<Vec<crate::pages::editor::utils::FileEntry>>,
 ) -> impl IntoView {
     let expanded_idx = RwSignal::new(Option::<usize>::None);
     let suggestions_state = RwSignal::new(Option::<Vec<crate::api::CodeSuggestion>>::None);
     let loading_suggestions = RwSignal::new(false);
+    let project_id_stored = StoredValue::new(project_id);
 
     let command_input = RwSignal::new(String::new());
     let terminal_history = RwSignal::new(Vec::<String>::new());
     let history_index = RwSignal::new(Option::<usize>::None);
     let is_running_cmd = RwSignal::new(false);
     let terminal_pid = RwSignal::new(Option::<u32>::None);
-    
+
     let input_ref = NodeRef::<leptos::html::Input>::new();
     let output_area_ref = NodeRef::<leptos::html::Div>::new();
-    
+
     // Auto-scroll effect
     Effect::new(move |_| {
         let _ = output.get();
@@ -599,16 +605,25 @@ pub fn BottomPanel(
             let mut current = output.get_untracked();
             current.push_str("\n[Stopping command...]\n");
             output.set(current);
-            
+
+            let proj_id_clone = project_id_stored.get_value();
+            let proj_path_clone = project_path.get_untracked();
+            let file_tree_data_clone = file_tree_data.clone();
             spawn_local(async move {
                 let _ = crate::api::stop_process(pid).await;
                 terminal_pid.set(None);
                 is_running_cmd.set(false);
-                
+
                 let mut current = output.get_untracked();
                 current.push_str("[Command stopped]\n");
                 output.set(current);
-                
+
+                crate::pages::editor::operations::sync_from_disk(
+                    proj_id_clone,
+                    proj_path_clone,
+                    file_tree_data_clone,
+                );
+
                 if let Some(input) = input_ref.get() {
                     let _ = input.focus();
                 }
@@ -669,6 +684,8 @@ pub fn BottomPanel(
 
             is_running_cmd.set(true);
 
+            let proj_id_clone = project_id_stored.get_value();
+            let file_tree_data_clone = file_tree_data.clone();
             spawn_local(async move {
                 let res = crate::api::run_command_api(&cmd, &proj_path).await;
                 let mut current = output.get_untracked();
@@ -698,7 +715,13 @@ pub fn BottomPanel(
                 if terminal_pid.get_untracked().is_none() {
                     is_running_cmd.set(false);
                 }
-                
+
+                crate::pages::editor::operations::sync_from_disk(
+                    proj_id_clone,
+                    proj_path.clone(),
+                    file_tree_data_clone,
+                );
+
                 // Re-focus input
                 if let Some(input) = input_ref.get() {
                     let _ = input.focus();
@@ -710,7 +733,13 @@ pub fn BottomPanel(
             if !hist.is_empty() {
                 let next_idx = match history_index.get_untracked() {
                     None => hist.len() - 1,
-                    Some(idx) => if idx > 0 { idx - 1 } else { 0 },
+                    Some(idx) => {
+                        if idx > 0 {
+                            idx - 1
+                        } else {
+                            0
+                        }
+                    }
                 };
                 history_index.set(Some(next_idx));
                 command_input.set(hist[next_idx].clone());
@@ -846,7 +875,7 @@ pub fn BottomPanel(
                                             _ => String::new(),
                                         }
                                     }).unwrap_or_default();
-                                    
+
                                     let diag_clone = diag.clone();
                                     let on_click_problem_cb = on_click_problem;
                                     let show_snack_cb = show_snack;
@@ -863,11 +892,11 @@ pub fn BottomPanel(
                                                     expanded_idx.set(Some(idx));
                                                     suggestions_state.set(None);
                                                     loading_suggestions.set(true);
-                                                    
+
                                                     let code_val = code.get_untracked();
                                                     let lang_val = language.get_untracked();
                                                     let diag_val = diag_clone.clone();
-                                                    
+
                                                     spawn_local(async move {
                                                         if let Ok(resp) = crate::api::get_error_suggestions_api(&code_val, &lang_val, &diag_val).await {
                                                             suggestions_state.set(Some(resp.suggestions));
@@ -907,11 +936,11 @@ pub fn BottomPanel(
                                                                                 let explanation = sugg.explanation.clone();
                                                                                 let replacement = sugg.replacement.clone();
                                                                                 let range = sugg.range.clone();
-                                                                                
+
                                                                                 let code_sig = code;
                                                                                 let snack = show_snack_cb;
                                                                                 let has_fix = replacement.is_some() && range.is_some();
-                                                                                
+
                                                                                 let on_apply_fix = move |_| {
                                                                                     if let (Some(repl), Some(r)) = (&replacement, &range) {
                                                                                         let orig = code_sig.get_untracked();
@@ -920,7 +949,7 @@ pub fn BottomPanel(
                                                                                         snack.run("Quick Fix applied successfully!".to_string());
                                                                                     }
                                                                                 };
-                                                                                
+
                                                                                 view! {
                                                                                     <div class="suggestion-card">
                                                                                         <div class="suggestion-card-header">
@@ -966,7 +995,7 @@ pub fn BottomPanel(
                         let active = active_tab.get();
                         let current_code = code.get();
                         let lines: Vec<String> = current_code.lines().map(|s| s.to_string()).collect();
-                        
+
                         view! {
                             <div class="references-list-container">
                                 {refs.into_iter().map(|loc| {
@@ -983,12 +1012,12 @@ pub fn BottomPanel(
                                     };
                                     let line = loc.range.start.line;
                                     let col = loc.range.start.character;
-                                    
+
                                     let is_active_file = active.as_ref().map(|act| {
                                         let suffix = format!("/{}", act);
                                         loc.uri.ends_with(&suffix)
                                     }).unwrap_or(false);
-                                    
+
                                     let line_preview = if is_active_file && (line as usize) < lines.len() {
                                         let content = lines[line as usize].trim().to_string();
                                         if !content.is_empty() {
@@ -999,7 +1028,7 @@ pub fn BottomPanel(
                                     } else {
                                         None
                                     };
-                                    
+
                                     let click_cb = on_click_reference;
                                     view! {
                                         <div class="reference-item" on:click=move |_| click_cb.run(loc_clone.clone())>

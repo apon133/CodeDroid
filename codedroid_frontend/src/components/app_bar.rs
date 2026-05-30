@@ -11,7 +11,9 @@ pub fn AppBar(
     #[prop(optional)] children: Option<Children>,
 ) -> impl IntoView {
     let navigate = use_navigate();
-    let on_back = move |_: MouseEvent| { navigate("/", Default::default()); };
+    let on_back = move |_: MouseEvent| {
+        navigate("/", Default::default());
+    };
 
     view! {
         <div class="app-bar">

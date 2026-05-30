@@ -1,5 +1,5 @@
-use leptos::prelude::*;
 use crate::components::icon::LucideIcon;
+use leptos::prelude::*;
 
 #[component]
 pub fn PreviewPanel(

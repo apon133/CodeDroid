@@ -1,7 +1,7 @@
+use crate::models::{Project, Settings, Snippet};
+use gloo_storage::{LocalStorage, Storage};
 /// LocalStorage-backed reactive store (mirrors Flutter Hive+Riverpod)
 use leptos::prelude::*;
-use gloo_storage::{LocalStorage, Storage};
-use crate::models::{Project, Settings, Snippet};
 
 // ── Projects ──────────────────────────────────────────────────────────────
 pub fn load_projects() -> Vec<Project> {
@@ -17,9 +17,30 @@ pub fn add_project(projects: &RwSignal<Vec<Project>>, p: Project) {
     save_projects(&projects.get_untracked());
 }
 
+pub fn clear_project_files_from_local_storage(project_id: &str) {
+    if let Some(window) = web_sys::window() {
+        if let Ok(Some(storage)) = window.local_storage() {
+            let prefix = format!("codedroid_file_{}_", project_id);
+            let mut keys_to_remove = Vec::new();
+            let len = storage.length().unwrap_or(0);
+            for i in 0..len {
+                if let Ok(Some(k)) = storage.key(i) {
+                    if k.starts_with(&prefix) {
+                        keys_to_remove.push(k);
+                    }
+                }
+            }
+            for k in keys_to_remove {
+                let _ = storage.remove_item(&k);
+            }
+        }
+    }
+}
+
 pub fn delete_project(projects: &RwSignal<Vec<Project>>, id: &str) {
     projects.update(|v| v.retain(|p| p.id != id));
     save_projects(&projects.get_untracked());
+    clear_project_files_from_local_storage(id);
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────

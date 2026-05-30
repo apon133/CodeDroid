@@ -1,7 +1,7 @@
-use leptos::prelude::*;
-use wasm_bindgen_futures::spawn_local;
 use crate::api;
 use crate::pages::editor::utils::{file_to_lsp_lang, is_project_source_file};
+use leptos::prelude::*;
+use wasm_bindgen_futures::spawn_local;
 
 pub fn make_trigger_diagnostics(
     ppath: String,
@@ -30,7 +30,9 @@ pub fn make_trigger_diagnostics(
         spawn_local(async move {
             gloo_timers::future::TimeoutFuture::new(800).await;
             if last_diag_req.get_untracked() == req_id {
-                if let Ok(resp) = api::get_diagnostics_api(&code_val, &file_lang, &ppath, &rel_file).await {
+                if let Ok(resp) =
+                    api::get_diagnostics_api(&code_val, &file_lang, &ppath, &rel_file).await
+                {
                     if last_diag_req.get_untracked() == req_id {
                         diagnostics_list.set(resp.diagnostics);
                     }

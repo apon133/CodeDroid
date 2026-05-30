@@ -1,8 +1,8 @@
-use leptos::prelude::*;
-use wasm_bindgen_futures::spawn_local;
 use crate::api;
 use crate::pages::editor::utils::{build_file_tree, FileEntry};
 use crate::store;
+use leptos::prelude::*;
+use wasm_bindgen_futures::spawn_local;
 
 pub fn make_delete_entry(
     pid: String,
@@ -13,13 +13,13 @@ pub fn make_delete_entry(
 ) -> Callback<FileEntry> {
     Callback::new(move |entry: FileEntry| {
         let storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
-        
+
         if entry.is_dir {
             // Delete all keys in LocalStorage matching prefix
             let len = storage.length().unwrap_or(0);
             let dir_prefix = format!("codedroid_file_{}_{}/", pid, entry.name);
             let placeholder_key = format!("codedroid_file_{}_{}/.codedroid_dir", pid, entry.name);
-            
+
             let mut keys_to_remove = Vec::new();
             for i in 0..len {
                 if let Ok(Some(k)) = storage.key(i) {

@@ -113,29 +113,52 @@ impl LspClient {
                         if let Ok(val) = serde_json::from_slice::<Value>(&body) {
                             if let Some(id) = val.get("id").and_then(|id| id.as_u64()) {
                                 responses_clone.lock().unwrap().insert(id as usize, val);
-                            } else if let Some(method) = val.get("method").and_then(|m| m.as_str()) {
+                            } else if let Some(method) = val.get("method").and_then(|m| m.as_str())
+                            {
                                 if method == "textDocument/publishDiagnostics" {
                                     if let Some(params) = val.get("params") {
-                                        if let (Some(uri), Some(diags)) = (params["uri"].as_str(), params["diagnostics"].as_array()) {
-                                            if let Ok(parsed_diags) = serde_json::from_value::<Vec<Diagnostic>>(json!(diags)) {
-                                                diagnostics_clone.lock().unwrap().insert(uri.to_string(), parsed_diags);
-                                                let mut versions = diagnostics_version_clone.lock().unwrap();
-                                                let entry = versions.entry(uri.to_string()).or_insert(0);
+                                        if let (Some(uri), Some(diags)) = (
+                                            params["uri"].as_str(),
+                                            params["diagnostics"].as_array(),
+                                        ) {
+                                            if let Ok(parsed_diags) =
+                                                serde_json::from_value::<Vec<Diagnostic>>(json!(
+                                                    diags
+                                                ))
+                                            {
+                                                diagnostics_clone
+                                                    .lock()
+                                                    .unwrap()
+                                                    .insert(uri.to_string(), parsed_diags);
+                                                let mut versions =
+                                                    diagnostics_version_clone.lock().unwrap();
+                                                let entry =
+                                                    versions.entry(uri.to_string()).or_insert(0);
                                                 *entry += 1;
                                             }
                                         }
                                     }
                                 } else if method == "tsserver/request" {
-                                    if let Some(params) = val.get("params").and_then(|p| p.as_array()) {
-                                        if let Some(first_param) = params.first().and_then(|fp| fp.as_array()) {
-                                            if let Some(nested_id) = first_param.first().and_then(|id| id.as_u64()) {
+                                    if let Some(params) =
+                                        val.get("params").and_then(|p| p.as_array())
+                                    {
+                                        if let Some(first_param) =
+                                            params.first().and_then(|fp| fp.as_array())
+                                        {
+                                            if let Some(nested_id) =
+                                                first_param.first().and_then(|id| id.as_u64())
+                                            {
                                                 let response = json!({
                                                     "jsonrpc": "2.0",
                                                     "method": "tsserver/response",
                                                     "params": [[nested_id, Value::Null]]
                                                 });
                                                 let body = response.to_string();
-                                                let msg = format!("Content-Length: {}\r\n\r\n{}", body.len(), body);
+                                                let msg = format!(
+                                                    "Content-Length: {}\r\n\r\n{}",
+                                                    body.len(),
+                                                    body
+                                                );
                                                 if let Ok(mut stdin_lock) = stdin_clone.lock() {
                                                     let _ = stdin_lock.write_all(msg.as_bytes());
                                                     let _ = stdin_lock.flush();
@@ -581,10 +604,7 @@ impl LspClient {
         Ok(())
     }
 
-    pub fn notify_file_saved(
-        &mut self,
-        file_uri: &str,
-    ) -> std::io::Result<()> {
+    pub fn notify_file_saved(&mut self, file_uri: &str) -> std::io::Result<()> {
         let did_save = json!({
             "jsonrpc": "2.0",
             "method": "textDocument/didSave",
@@ -617,22 +637,31 @@ impl LspClient {
         for (uri, file_diags) in diags_lock.iter() {
             let uri_clean = uri.replace('\\', "/");
             let mut rel_path = if uri_clean.starts_with(&prefix) {
-                uri_clean.strip_prefix(&prefix).unwrap_or(&uri_clean).to_string()
+                uri_clean
+                    .strip_prefix(&prefix)
+                    .unwrap_or(&uri_clean)
+                    .to_string()
             } else if uri_clean.starts_with(&prefix_alt) {
-                uri_clean.strip_prefix(&prefix_alt).unwrap_or(&uri_clean).to_string()
+                uri_clean
+                    .strip_prefix(&prefix_alt)
+                    .unwrap_or(&uri_clean)
+                    .to_string()
             } else {
                 let p_with_file = "file://";
                 if uri_clean.starts_with(p_with_file) {
-                    uri_clean.strip_prefix(p_with_file).unwrap_or(&uri_clean).to_string()
+                    uri_clean
+                        .strip_prefix(p_with_file)
+                        .unwrap_or(&uri_clean)
+                        .to_string()
                 } else {
                     uri_clean.clone()
                 }
             };
-            
+
             if rel_path.starts_with('/') {
                 rel_path = rel_path.trim_start_matches('/').to_string();
             }
-            
+
             for d in file_diags {
                 let mut d_clone = d.clone();
                 d_clone.file = Some(rel_path.clone());
@@ -702,7 +731,9 @@ pub fn fallback_completions(code: &str, prefix: &str) -> Vec<CompletionItem> {
 
 fn parse_location(val: &Value) -> Option<Location> {
     if let (Some(uri), Some(range_val)) = (
-        val.get("uri").and_then(|u| u.as_str()).or_else(|| val.get("targetUri").and_then(|u| u.as_str())),
+        val.get("uri")
+            .and_then(|u| u.as_str())
+            .or_else(|| val.get("targetUri").and_then(|u| u.as_str())),
         val.get("range").or_else(|| val.get("targetRange")),
     ) {
         if let Ok(range) = serde_json::from_value::<Range>(range_val.clone()) {

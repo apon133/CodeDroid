@@ -1,7 +1,7 @@
-use leptos::prelude::*;
-use wasm_bindgen_futures::spawn_local;
 use crate::api;
 use crate::store;
+use leptos::prelude::*;
+use wasm_bindgen_futures::spawn_local;
 
 pub fn make_run_code(
     pid: String,
@@ -16,7 +16,9 @@ pub fn make_run_code(
     save_current: Callback<()>,
 ) -> Callback<()> {
     Callback::new(move |_: ()| {
-        if is_running.get_untracked() { return; }
+        if is_running.get_untracked() {
+            return;
+        }
         save_current.run(());
         let current_code = code.get_untracked();
         let lang = plang.clone();
@@ -30,8 +32,14 @@ pub fn make_run_code(
         let cargo_toml = if lang == "rust" {
             let k = store::file_key(&pid2, "Cargo.toml");
             let v = store::load_file(&k);
-            if v.is_empty() { None } else { Some(v) }
-        } else { None };
+            if v.is_empty() {
+                None
+            } else {
+                Some(v)
+            }
+        } else {
+            None
+        };
 
         spawn_local(async move {
             let res = api::run_code(&current_code, &lang, &path, cargo_toml.as_deref()).await;
@@ -39,10 +47,14 @@ pub fn make_run_code(
                 Ok(r) => {
                     let mut out = r.output.clone();
                     if !r.error.is_empty() {
-                        if !out.is_empty() { out.push('\n'); }
+                        if !out.is_empty() {
+                            out.push('\n');
+                        }
                         out.push_str(&r.error);
                     }
-                    if out.is_empty() { out = "Code executed with no output.".to_string(); }
+                    if out.is_empty() {
+                        out = "Code executed with no output.".to_string();
+                    }
                     output.set(out);
                     is_error.set(!r.error.is_empty());
                     current_pid.set(r.pid);

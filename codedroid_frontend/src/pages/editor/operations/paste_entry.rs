@@ -1,8 +1,8 @@
+use crate::api;
+use crate::pages::editor::utils::{build_file_tree, FileEntry};
+use crate::store;
 use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use crate::api;
-use crate::store;
-use crate::pages::editor::utils::{build_file_tree, FileEntry};
 
 pub fn make_paste_entry(
     pid: String,
@@ -49,7 +49,8 @@ pub fn make_paste_entry(
                         if k.starts_with(&src_prefix) {
                             if let Some(sub) = k.strip_prefix(&src_prefix) {
                                 if let Ok(Some(val)) = storage.get_item(&k) {
-                                    let new_k = format!("codedroid_file_{}_{}/{}", pid, dest_name, sub);
+                                    let new_k =
+                                        format!("codedroid_file_{}_{}/{}", pid, dest_name, sub);
                                     copied_keys.push((new_k, val));
                                 }
                             }

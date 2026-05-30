@@ -1,6 +1,6 @@
+use crate::lsp::{Diagnostic, Position, Range};
+use axum::{http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
-use axum::{Json, http::StatusCode};
-use crate::lsp::{Diagnostic, Range, Position};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct SuggestionRequest {
@@ -33,9 +33,9 @@ pub async fn get_error_suggestions_handler(
     // ── RUST RULES ──
     if payload.language.to_lowercase() == "rust" {
         // Rule 1: Immutable mutation (E0384) or cannot borrow as mutable
-        if msg.contains("cannot mutate immutable variable") 
-            || msg.contains("cannot borrow") && msg.contains("as mutable") 
-            || msg.contains("cannot assign to immutable") 
+        if msg.contains("cannot mutate immutable variable")
+            || msg.contains("cannot borrow") && msg.contains("as mutable")
+            || msg.contains("cannot assign to immutable")
         {
             // Try to extract variable name from message: e.g. `cannot mutate immutable variable `x``
             let var_name = extract_variable_name(&diag.message);
@@ -43,7 +43,7 @@ pub async fn get_error_suggestions_handler(
                 let explanation = format!(
                     "In Rust, variables are immutable by default. To mutate `{name}`, you must declare it with `let mut {name}` instead of `let {name}`."
                 );
-                
+
                 // Let's try to locate the definition of this variable in previous lines to provide a replacement range
                 if let Some(def_range) = find_let_binding_range(code, name, diag.range.start.line) {
                     suggestions.push(CodeSuggestion {
@@ -63,13 +63,14 @@ pub async fn get_error_suggestions_handler(
             } else {
                 suggestions.push(CodeSuggestion {
                     title: "Make variable mutable".to_string(),
-                    explanation: "Declare the variable with `let mut` to make it mutable.".to_string(),
+                    explanation: "Declare the variable with `let mut` to make it mutable."
+                        .to_string(),
                     replacement: None,
                     range: None,
                 });
             }
         }
-        
+
         // Rule 2: Unused variables
         if msg.contains("unused variable") {
             let var_name = extract_variable_name(&diag.message);
@@ -86,7 +87,11 @@ pub async fn get_error_suggestions_handler(
         // Rule 3: Mismatched types (expected XYZ, found ZYX)
         if msg.contains("mismatched types") || (msg.contains("expected") && msg.contains("found")) {
             // expected `String`, found `&str`
-            if msg.contains("expected") && msg.contains("string") && msg.contains("found") && msg.contains("&str") {
+            if msg.contains("expected")
+                && msg.contains("string")
+                && msg.contains("found")
+                && msg.contains("&str")
+            {
                 suggestions.push(CodeSuggestion {
                     title: "Convert `&str` to `String` using `.to_string()`".to_string(),
                     explanation: "The function expects an owned `String` but found a borrowed `&str`. You can convert it using `.to_string()` or `.into()`.".to_string(),
@@ -95,7 +100,11 @@ pub async fn get_error_suggestions_handler(
                 });
             }
             // expected `&str`, found `String`
-            else if msg.contains("expected") && msg.contains("&str") && msg.contains("found") && msg.contains("string") {
+            else if msg.contains("expected")
+                && msg.contains("&str")
+                && msg.contains("found")
+                && msg.contains("string")
+            {
                 suggestions.push(CodeSuggestion {
                     title: "Borrow String as `&str` using `&`".to_string(),
                     explanation: "The function expects a borrowed string slice `&str` but found an owned `String`. You can borrow it using `&` or `.as_str()`.".to_string(),
@@ -116,14 +125,22 @@ pub async fn get_error_suggestions_handler(
         }
 
         // Rule 4: Unresolved import / cannot find struct/trait/type/value in scope
-        if msg.contains("cannot find") && (msg.contains("struct") || msg.contains("trait") || msg.contains("type") || msg.contains("value") || msg.contains("macro")) {
+        if msg.contains("cannot find")
+            && (msg.contains("struct")
+                || msg.contains("trait")
+                || msg.contains("type")
+                || msg.contains("value")
+                || msg.contains("macro"))
+        {
             let name = extract_unresolved_name(&diag.message);
             if let Some(ref n) = name {
                 // Check if it's standard collections or Leptos traits/signals
                 let suggestion_import = match n.as_str() {
                     "HashMap" => Some("use std::collections::HashMap;"),
                     "HashSet" => Some("use std::collections::HashSet;"),
-                    "RwSignal" | "Signal" | "create_signal" | "component" | "IntoView" => Some("use leptos::prelude::*;"),
+                    "RwSignal" | "Signal" | "create_signal" | "component" | "IntoView" => {
+                        Some("use leptos::prelude::*;")
+                    }
                     "Arc" => Some("use std::sync::Arc;"),
                     "Mutex" => Some("use std::sync::Mutex;"),
                     "Instant" => Some("use std::time::Instant;"),
@@ -181,7 +198,14 @@ pub async fn get_error_suggestions_handler(
     }
 
     // ── JAVASCRIPT / TYPESCRIPT RULES ──
-    if ["javascript", "typescript", "typescriptreact", "javascriptreact"].contains(&payload.language.to_lowercase().as_str()) {
+    if [
+        "javascript",
+        "typescript",
+        "typescriptreact",
+        "javascriptreact",
+    ]
+    .contains(&payload.language.to_lowercase().as_str())
+    {
         if msg.contains("cannot find name") {
             let name = extract_variable_name(&diag.message);
             if let Some(ref n) = name {
@@ -229,12 +253,12 @@ fn get_code_at_range(code: &str, range: &Range) -> String {
     if start_line >= lines.len() {
         return String::new();
     }
-    
+
     if start_line == end_line {
         let line = lines[start_line];
         let start_char = range.start.character as usize;
         let end_char = range.end.character as usize;
-        
+
         let chars: Vec<char> = line.chars().collect();
         let s = std::cmp::min(start_char, chars.len());
         let e = std::cmp::min(end_char, chars.len());
@@ -242,7 +266,7 @@ fn get_code_at_range(code: &str, range: &Range) -> String {
             return chars[s..e].iter().collect();
         }
     }
-    
+
     String::new()
 }
 
@@ -250,7 +274,7 @@ fn get_code_at_range(code: &str, range: &Range) -> String {
 fn find_let_binding_range(code: &str, var_name: &str, current_line: u32) -> Option<Range> {
     let lines: Vec<&str> = code.lines().collect();
     let limit = std::cmp::min(current_line as usize, lines.len());
-    
+
     for i in (0..limit).rev() {
         let line = lines[i];
         let trimmed = line.trim_start();
@@ -260,8 +284,14 @@ fn find_let_binding_range(code: &str, var_name: &str, current_line: u32) -> Opti
                 let start_char = pos as u32;
                 let end_char = (pos + 4 + var_name.len()) as u32; // "let " is 4 chars
                 return Some(Range {
-                    start: Position { line: i as u32, character: start_char },
-                    end: Position { line: i as u32, character: end_char },
+                    start: Position {
+                        line: i as u32,
+                        character: start_char,
+                    },
+                    end: Position {
+                        line: i as u32,
+                        character: end_char,
+                    },
                 });
             }
         }

@@ -1,7 +1,7 @@
-use leptos::prelude::*;
-use wasm_bindgen_futures::spawn_local;
 use crate::api;
 use crate::pages::editor::utils::file_to_lsp_lang;
+use leptos::prelude::*;
+use wasm_bindgen_futures::spawn_local;
 
 pub fn make_format_code(
     ppath: String,
@@ -16,9 +16,13 @@ pub fn make_format_code(
     trigger_diagnostics: Callback<String>,
 ) -> Callback<()> {
     Callback::new(move |_: ()| {
-        if is_running.get_untracked() { return; }
+        if is_running.get_untracked() {
+            return;
+        }
         let current_code = code.get_untracked();
-        if current_code.trim().is_empty() { return; }
+        if current_code.trim().is_empty() {
+            return;
+        }
 
         let lang = if let Some(ref filename) = active_tab.get_untracked() {
             file_to_lsp_lang(filename)

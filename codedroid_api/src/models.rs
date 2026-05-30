@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::lsp;
+use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
 pub struct CodeRequest {
@@ -164,4 +164,21 @@ pub struct CommandResponse {
     pub error: String,
     pub success: bool,
     pub pid: Option<u32>,
+}
+
+#[derive(Deserialize)]
+pub struct ScanProjectRequest {
+    pub project_path: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct FileInfo {
+    pub rel_path: String,
+    pub is_dir: bool,
+}
+
+#[derive(Serialize)]
+pub struct ScanProjectResponse {
+    pub files: Vec<FileInfo>,
+    pub error: String,
 }

@@ -1,8 +1,8 @@
-use serde::{Deserialize, Serialize};
-use axum::Json;
-use std::fs;
 use crate::lsp::{self, Diagnostic};
 use crate::utils::resolve_project_dir;
+use axum::Json;
+use serde::{Deserialize, Serialize};
+use std::fs;
 
 #[derive(Deserialize)]
 pub struct DiagnosticsRequest {
@@ -52,7 +52,9 @@ pub async fn get_diagnostics_handler(
     let lsp_cmd = match lang.as_str() {
         "rust" => Some(("rust-analyzer", vec![])),
         "python" => Some(("pylsp", vec![])),
-        "javascript" | "typescript" | "jsx" | "tsx" => Some(("typescript-language-server", vec!["--stdio"])),
+        "javascript" | "typescript" | "jsx" | "tsx" => {
+            Some(("typescript-language-server", vec!["--stdio"]))
+        }
         "go" => Some(("gopls", vec![])),
         "c" | "cpp" => Some(("clangd", vec![])),
         "dart" => Some(("dart", vec!["language-server"])),
@@ -65,11 +67,12 @@ pub async fn get_diagnostics_handler(
         "vue" => Some(("vue-language-server", vec!["--stdio"])),
         "svelte" => Some(("svelteserver", vec!["--stdio"])),
         _ => None,
-    };    let mut diagnostics = vec![];
+    };
+    let mut diagnostics = vec![];
 
     if let Some((cmd, args)) = lsp_cmd {
         let servers_arc = lsp::get_servers();
-        
+
         // Scope 1: Initialize server and sync file
         let mut start_version = 0;
         let mut client_found = false;
@@ -116,7 +119,10 @@ environment:
                 let root_uri = format!("file://{}", project_dir);
                 let final_cmd = crate::utils::resolve_lsp_executable(&lang, cmd);
 
-                println!("🚀 Starting LSP server for {}: {} (root: {})", lang, final_cmd, root_uri);
+                println!(
+                    "🚀 Starting LSP server for {}: {} (root: {})",
+                    lang, final_cmd, root_uri
+                );
                 match lsp::LspClient::new(&final_cmd, &args, Some(&root_uri)) {
                     Ok(client) => {
                         servers.insert(lang.clone(), client);
@@ -137,24 +143,66 @@ environment:
                     let _ = fs::write(&dest_path, &payload.code);
                 } else {
                     match lang.as_str() {
-                        "rust" => { let _ = fs::write(format!("{}/src/main.rs", project_dir), &payload.code); },
-                        "dart" => { let _ = fs::write(format!("{}/lib/main.dart", project_dir), &payload.code); },
-                        "cpp" => { let _ = fs::write(format!("{}/main.cpp", project_dir), &payload.code); },
-                        "c" => { let _ = fs::write(format!("{}/main.c", project_dir), &payload.code); },
-                        "python" => { let _ = fs::write(format!("{}/main.py", project_dir), &payload.code); },
-                        "go" => { let _ = fs::write(format!("{}/main.go", project_dir), &payload.code); },
-                        "ruby" => { let _ = fs::write(format!("{}/main.rb", project_dir), &payload.code); },
-                        "javascript" => { let _ = fs::write(format!("{}/main.js", project_dir), &payload.code); },
-                        "typescript" => { let _ = fs::write(format!("{}/main.ts", project_dir), &payload.code); },
-                        "jsx" => { let _ = fs::write(format!("{}/main.jsx", project_dir), &payload.code); },
-                        "tsx" => { let _ = fs::write(format!("{}/main.tsx", project_dir), &payload.code); },
-                        "kotlin" => { let _ = fs::write(format!("{}/main.kt", project_dir), &payload.code); },
-                        "java" => { let _ = fs::write(format!("{}/main.java", project_dir), &payload.code); },
-                        "swift" => { let _ = fs::write(format!("{}/main.swift", project_dir), &payload.code); },
-                        "html" => { let _ = fs::write(format!("{}/index.html", project_dir), &payload.code); },
-                        "css" => { let _ = fs::write(format!("{}/style.css", project_dir), &payload.code); },
-                        "vue" => { let _ = fs::write(format!("{}/Component.vue", project_dir), &payload.code); },
-                        "svelte" => { let _ = fs::write(format!("{}/Component.svelte", project_dir), &payload.code); },
+                        "rust" => {
+                            let _ =
+                                fs::write(format!("{}/src/main.rs", project_dir), &payload.code);
+                        }
+                        "dart" => {
+                            let _ =
+                                fs::write(format!("{}/lib/main.dart", project_dir), &payload.code);
+                        }
+                        "cpp" => {
+                            let _ = fs::write(format!("{}/main.cpp", project_dir), &payload.code);
+                        }
+                        "c" => {
+                            let _ = fs::write(format!("{}/main.c", project_dir), &payload.code);
+                        }
+                        "python" => {
+                            let _ = fs::write(format!("{}/main.py", project_dir), &payload.code);
+                        }
+                        "go" => {
+                            let _ = fs::write(format!("{}/main.go", project_dir), &payload.code);
+                        }
+                        "ruby" => {
+                            let _ = fs::write(format!("{}/main.rb", project_dir), &payload.code);
+                        }
+                        "javascript" => {
+                            let _ = fs::write(format!("{}/main.js", project_dir), &payload.code);
+                        }
+                        "typescript" => {
+                            let _ = fs::write(format!("{}/main.ts", project_dir), &payload.code);
+                        }
+                        "jsx" => {
+                            let _ = fs::write(format!("{}/main.jsx", project_dir), &payload.code);
+                        }
+                        "tsx" => {
+                            let _ = fs::write(format!("{}/main.tsx", project_dir), &payload.code);
+                        }
+                        "kotlin" => {
+                            let _ = fs::write(format!("{}/main.kt", project_dir), &payload.code);
+                        }
+                        "java" => {
+                            let _ = fs::write(format!("{}/main.java", project_dir), &payload.code);
+                        }
+                        "swift" => {
+                            let _ = fs::write(format!("{}/main.swift", project_dir), &payload.code);
+                        }
+                        "html" => {
+                            let _ = fs::write(format!("{}/index.html", project_dir), &payload.code);
+                        }
+                        "css" => {
+                            let _ = fs::write(format!("{}/style.css", project_dir), &payload.code);
+                        }
+                        "vue" => {
+                            let _ =
+                                fs::write(format!("{}/Component.vue", project_dir), &payload.code);
+                        }
+                        "svelte" => {
+                            let _ = fs::write(
+                                format!("{}/Component.svelte", project_dir),
+                                &payload.code,
+                            );
+                        }
                         _ => {}
                     }
                 }

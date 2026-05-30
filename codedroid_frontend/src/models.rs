@@ -75,19 +75,19 @@ pub fn lang_icon(lang: &str) -> &'static str {
 pub fn lang_color(lang: &str) -> (&'static str, &'static str) {
     // (color, background)
     match lang {
-        "rust"       => ("#DEA584", "rgba(222,165,132,.15)"),
-        "go"         => ("#00ADD8", "rgba(0,173,216,.15)"),
-        "python"     => ("#3776AB", "rgba(55,118,171,.15)"),
-        "java"       => ("#007396", "rgba(0,115,150,.15)"),
-        "dart"       => ("#0175C2", "rgba(1,117,194,.15)"),
+        "rust" => ("#DEA584", "rgba(222,165,132,.15)"),
+        "go" => ("#00ADD8", "rgba(0,173,216,.15)"),
+        "python" => ("#3776AB", "rgba(55,118,171,.15)"),
+        "java" => ("#007396", "rgba(0,115,150,.15)"),
+        "dart" => ("#0175C2", "rgba(1,117,194,.15)"),
         "javascript" => ("#F7DF1E", "rgba(247,223,30,.15)"),
         "typescript" => ("#3178C6", "rgba(49,120,198,.15)"),
-        "kotlin"     => ("#7F52FF", "rgba(127,82,255,.15)"),
-        "swift"      => ("#F05138", "rgba(240,81,56,.15)"),
-        "c" | "cpp"  => ("#A8B9CC", "rgba(168,185,204,.15)"),
-        "csharp"     => ("#239120", "rgba(35,145,32,.15)"),
-        "ruby"       => ("#CC342D", "rgba(204,52,45,.15)"),
-        _            => ("#007ACC", "rgba(0,122,204,.15)"),
+        "kotlin" => ("#7F52FF", "rgba(127,82,255,.15)"),
+        "swift" => ("#F05138", "rgba(240,81,56,.15)"),
+        "c" | "cpp" => ("#A8B9CC", "rgba(168,185,204,.15)"),
+        "csharp" => ("#239120", "rgba(35,145,32,.15)"),
+        "ruby" => ("#CC342D", "rgba(204,52,45,.15)"),
+        _ => ("#007ACC", "rgba(0,122,204,.15)"),
     }
 }
 
@@ -157,4 +157,3 @@ pub struct CommandResponse {
     pub success: bool,
     pub pid: Option<u32>,
 }
-

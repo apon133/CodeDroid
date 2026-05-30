@@ -4,7 +4,7 @@ pub fn resolve_project_dir(path: &str) -> String {
     if path.starts_with("/Codedroid_Projects") {
         // Map web virtual path to a real local path
         let relative_path = &path["/Codedroid_Projects".len()..]; // e.g. "/project_name" or ""
-        
+
         // Detect if we are running in Termux/Android
         let is_android = std::env::var("ANDROID_DATA").is_ok()
             || std::path::Path::new("/sdcard").exists()
@@ -14,7 +14,7 @@ pub fn resolve_project_dir(path: &str) -> String {
             // Target path: phone/download/codedroid -> /sdcard/Download/codedroid
             let sdcard_path = format!("/sdcard/Download/codedroid{}", relative_path);
             let emulated_path = format!("/storage/emulated/0/Download/codedroid{}", relative_path);
-            
+
             // Try creating directories. If storage permission is granted, these will succeed.
             if fs::create_dir_all(&sdcard_path).is_ok() {
                 sdcard_path
@@ -23,12 +23,15 @@ pub fn resolve_project_dir(path: &str) -> String {
             } else {
                 // Try Termux storage shortcut ~/storage/shared
                 if let Ok(home) = std::env::var("HOME") {
-                    let termux_shared = format!("{}/storage/shared/Download/codedroid{}", home, relative_path);
+                    let termux_shared = format!(
+                        "{}/storage/shared/Download/codedroid{}",
+                        home, relative_path
+                    );
                     if fs::create_dir_all(&termux_shared).is_ok() {
                         return termux_shared;
                     }
                 }
-                
+
                 // Fallback to cache directory if shared storage isn't setup/permitted yet
                 eprintln!("⚠️ Warning: Android storage is not writable. Please run 'termux-setup-storage' in Termux to grant permission.");
                 let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
@@ -75,10 +78,7 @@ pub fn find_url_in_output(output: &str) -> Option<String> {
 
         // Replace localhost / 127.0.0.1 / 0.0.0.0 with the real LAN IP
         // so that URLs work when opened from a mobile phone on the same WiFi.
-        let resolved_host = if host == "localhost"
-            || host == "127.0.0.1"
-            || host == "0.0.0.0"
-        {
+        let resolved_host = if host == "localhost" || host == "127.0.0.1" || host == "0.0.0.0" {
             get_local_ip()
         } else {
             host.to_string()
@@ -94,7 +94,8 @@ pub fn extract_prefix(code: &str, line: u32, character: u32) -> String {
         let line_str = line_str.strip_suffix('\r').unwrap_or(line_str);
         let char_idx = (character as usize).min(line_str.len());
         let before_cursor = &line_str[..char_idx];
-        before_cursor.chars()
+        before_cursor
+            .chars()
             .rev()
             .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '!')
             .collect::<String>()
@@ -108,7 +109,7 @@ pub fn extract_prefix(code: &str, line: u32, character: u32) -> String {
 
 pub fn resolve_lsp_executable(lang: &str, cmd: &str) -> String {
     let home = std::env::var("HOME").unwrap_or_default();
-    
+
     // 1. Check if it's already in the PATH
     #[cfg(not(windows))]
     {
@@ -129,8 +130,8 @@ pub fn resolve_lsp_executable(lang: &str, cmd: &str) -> String {
 
     // 2. Check common installation directories.
     // Termux on Android uses $PREFIX = /data/data/com.termux/files/usr
-    let termux_prefix = std::env::var("PREFIX")
-        .unwrap_or_else(|_| "/data/data/com.termux/files/usr".to_string());
+    let termux_prefix =
+        std::env::var("PREFIX").unwrap_or_else(|_| "/data/data/com.termux/files/usr".to_string());
 
     let mut search_paths = vec![
         // Termux (Android) — checked first on Android devices
@@ -206,8 +207,8 @@ pub fn resolve_lsp_executable(lang: &str, cmd: &str) -> String {
 /// Searches Termux, npm-global, Homebrew, /usr/local, and /usr/lib in order.
 pub fn resolve_typescript_sdk() -> String {
     let home = std::env::var("HOME").unwrap_or_default();
-    let termux_prefix = std::env::var("PREFIX")
-        .unwrap_or_else(|_| "/data/data/com.termux/files/usr".to_string());
+    let termux_prefix =
+        std::env::var("PREFIX").unwrap_or_else(|_| "/data/data/com.termux/files/usr".to_string());
 
     let candidates = vec![
         // Termux global npm modules

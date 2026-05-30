@@ -1,10 +1,12 @@
-use syntect::parsing::SyntaxSet;
-use syntect::highlighting::ThemeSet;
-use syntect::html::{highlighted_html_for_string, styled_line_to_highlighted_html, IncludeBackground};
-use syntect::easy::HighlightLines;
-use web_sys;
-use leptos::prelude::*;
 use crate::api;
+use leptos::prelude::*;
+use syntect::easy::HighlightLines;
+use syntect::highlighting::ThemeSet;
+use syntect::html::{
+    highlighted_html_for_string, styled_line_to_highlighted_html, IncludeBackground,
+};
+use syntect::parsing::SyntaxSet;
+use web_sys;
 
 thread_local! {
     pub static SYNTAX_SET: SyntaxSet = SyntaxSet::load_defaults_newlines();
@@ -12,8 +14,16 @@ thread_local! {
 }
 
 pub fn is_absolute_path(path: &str) -> bool {
-    path.starts_with('/') || path.starts_with("Users/") || path.starts_with("home/") || path.starts_with("data/") ||
-    (path.len() >= 2 && path.chars().next().map_or(false, |c| c.is_ascii_alphabetic()) && path.chars().nth(1) == Some(':'))
+    path.starts_with('/')
+        || path.starts_with("Users/")
+        || path.starts_with("home/")
+        || path.starts_with("data/")
+        || (path.len() >= 2
+            && path
+                .chars()
+                .next()
+                .map_or(false, |c| c.is_ascii_alphabetic())
+            && path.chars().nth(1) == Some(':'))
 }
 
 #[allow(dead_code)]
@@ -38,10 +48,12 @@ pub fn highlight_code(code: &str, ext: &str) -> String {
 
     SYNTAX_SET.with(|ss| {
         THEME_SET.with(|ts| {
-            let syntax = ss.find_syntax_by_extension(mapped_ext)
+            let syntax = ss
+                .find_syntax_by_extension(mapped_ext)
                 .unwrap_or_else(|| ss.find_syntax_plain_text());
             let theme = &ts.themes["base16-ocean.dark"];
-            highlighted_html_for_string(code, ss, syntax, theme).unwrap_or_else(|_| code.to_string())
+            highlighted_html_for_string(code, ss, syntax, theme)
+                .unwrap_or_else(|_| code.to_string())
         })
     })
 }
@@ -57,17 +69,21 @@ pub fn highlight_code_lines(code: &str, ext: &str) -> Vec<String> {
 
     SYNTAX_SET.with(|ss| {
         THEME_SET.with(|ts| {
-            let syntax = ss.find_syntax_by_extension(mapped_ext)
+            let syntax = ss
+                .find_syntax_by_extension(mapped_ext)
                 .unwrap_or_else(|| ss.find_syntax_plain_text());
             let theme = &ts.themes["base16-ocean.dark"];
-            
+
             let mut highlighter = HighlightLines::new(syntax, theme);
             let mut lines = Vec::new();
-            
+
             for line in code.split('\n') {
                 let line_with_nl = format!("{}\n", line);
-                let regions = highlighter.highlight_line(&line_with_nl, ss).unwrap_or_default();
-                let html = styled_line_to_highlighted_html(&regions, IncludeBackground::No).unwrap_or_default();
+                let regions = highlighter
+                    .highlight_line(&line_with_nl, ss)
+                    .unwrap_or_default();
+                let html = styled_line_to_highlighted_html(&regions, IncludeBackground::No)
+                    .unwrap_or_default();
                 lines.push(html);
             }
             lines
@@ -106,103 +122,193 @@ pub fn file_to_lsp_lang(filename: &str) -> String {
 #[allow(dead_code)]
 fn is_web_lang(lang: &str) -> bool {
     let l = lang.to_lowercase();
-    l == "javascript" || l == "typescript" || l == "html" || l == "css" || l == "vue" || l == "svelte" ||
-    l == "react" || l == "nextjs" || l == "next.js" || l == "remix" || l == "angular" || l == "vanilla" ||
-    l == "jsx" || l == "tsx"
+    l == "javascript"
+        || l == "typescript"
+        || l == "html"
+        || l == "css"
+        || l == "vue"
+        || l == "svelte"
+        || l == "react"
+        || l == "nextjs"
+        || l == "next.js"
+        || l == "remix"
+        || l == "angular"
+        || l == "vanilla"
+        || l == "jsx"
+        || l == "tsx"
 }
 
 pub fn is_project_source_file(filename: &str, _lang: &str) -> bool {
     let ext = file_extension(filename).to_lowercase();
-    matches!(ext.as_str(), 
-        "rs" | "py" | "js" | "jsx" | "ts" | "tsx" | "go" | "c" | "h" | "cpp" | "hpp" | "cc" | "java" | "dart" | "rb" | "kt" | "swift" | "html" | "htm" | "css" | "vue" | "svelte"
+    matches!(
+        ext.as_str(),
+        "rs" | "py"
+            | "js"
+            | "jsx"
+            | "ts"
+            | "tsx"
+            | "go"
+            | "c"
+            | "h"
+            | "cpp"
+            | "hpp"
+            | "cc"
+            | "java"
+            | "dart"
+            | "rb"
+            | "kt"
+            | "swift"
+            | "html"
+            | "htm"
+            | "css"
+            | "vue"
+            | "svelte"
     )
 }
 
 pub fn file_lang_name(name: &str) -> &'static str {
     let lower_name = name.to_lowercase();
-    if lower_name == "cargo.toml" { return "Rust Config"; }
-    if lower_name == "go.mod" { return "Go Config"; }
-    if lower_name == "package.json" { return "Node Config"; }
-    if lower_name == "pubspec.yaml" { return "Dart Config"; }
-    if lower_name == "gemfile" || lower_name == "gemfile.lock" { return "Ruby Config"; }
-    if lower_name == "requirements.txt" || lower_name == "pipfile" || lower_name == "pyproject.toml" { return "Python Config"; }
-    if lower_name == "build.gradle" || lower_name == "pom.xml" { return "Java Config"; }
-    if lower_name == "composer.json" { return "PHP Config"; }
-    
+    if lower_name == "cargo.toml" {
+        return "Rust Config";
+    }
+    if lower_name == "go.mod" {
+        return "Go Config";
+    }
+    if lower_name == "package.json" {
+        return "Node Config";
+    }
+    if lower_name == "pubspec.yaml" {
+        return "Dart Config";
+    }
+    if lower_name == "gemfile" || lower_name == "gemfile.lock" {
+        return "Ruby Config";
+    }
+    if lower_name == "requirements.txt" || lower_name == "pipfile" || lower_name == "pyproject.toml"
+    {
+        return "Python Config";
+    }
+    if lower_name == "build.gradle" || lower_name == "pom.xml" {
+        return "Java Config";
+    }
+    if lower_name == "composer.json" {
+        return "PHP Config";
+    }
+
     match file_extension(name).to_lowercase().as_str() {
-        "rs"   => "Rust",
-        "go"   => "Go",
-        "py"   => "Python",
-        "js"   => "JavaScript",
-        "ts"   => "TypeScript",
-        "jsx"  => "React JS",
-        "tsx"  => "React TS",
-        "vue"  => "Vue",
+        "rs" => "Rust",
+        "go" => "Go",
+        "py" => "Python",
+        "js" => "JavaScript",
+        "ts" => "TypeScript",
+        "jsx" => "React JS",
+        "tsx" => "React TS",
+        "vue" => "Vue",
         "svelte" => "Svelte",
         "java" => "Java",
         "dart" => "Dart",
-        "c"    => "C",
-        "cpp"  => "C++",
+        "c" => "C",
+        "cpp" => "C++",
         "h" | "hpp" => "Header",
-        "cs"   => "C#",
+        "cs" => "C#",
         "csproj" => "NuGet Project",
-        "sln"  => "Visual Studio Solution",
-        "kt"   => "Kotlin",
-        "swift"=> "Swift",
-        "rb"   => "Ruby",
+        "sln" => "Visual Studio Solution",
+        "kt" => "Kotlin",
+        "swift" => "Swift",
+        "rb" => "Ruby",
         "html" => "HTML",
-        "css"  => "CSS",
+        "css" => "CSS",
         "toml" => "TOML",
         "yaml" | "yml" => "YAML",
         "json" => "JSON",
         "md" | "markdown" => "Markdown",
         "sh" | "bash" => "Shell",
-        _      => "Text",
+        _ => "Text",
     }
 }
 
 pub fn file_icon(name: &str) -> &'static str {
     let lower_name = name.to_lowercase();
-    if lower_name == "cargo.toml" || lower_name == "cargo.lock" { return "/assets/icons/cargo.svg"; }
-    if lower_name == "go.mod" || lower_name == "go.sum" || lower_name == "go.work" { return "/assets/icons/gomod.svg"; }
-    if lower_name == "package.json" || lower_name == "package-lock.json" || lower_name == "yarn.lock" || lower_name == "pnpm-lock.yaml" { return "/assets/icons/npm.svg"; }
-    if lower_name == "pubspec.yaml" || lower_name == "pubspec.lock" { return "/assets/icons/yaml.svg"; }
-    if lower_name == "requirements.txt" || lower_name == "pipfile" || lower_name == "pipfile.lock" || lower_name == "pyproject.toml" || lower_name == "setup.py" { return "/assets/icons/python.svg"; }
-    if lower_name == "build.gradle" || lower_name == "build.gradle.kts" || lower_name == "settings.gradle" || lower_name == "settings.gradle.kts" || lower_name == "gradle.properties" { return "/assets/icons/gradle.svg"; }
-    if lower_name == "pom.xml" { return "/assets/icons/maven.svg"; }
-    if lower_name == "composer.json" || lower_name == "composer.lock" { return "/assets/icons/composer.svg"; }
-    if lower_name == "gemfile" || lower_name == "gemfile.lock" { return "/assets/icons/ruby.svg"; }
-    if lower_name == "nuxt.config.js" || lower_name == "nuxt.config.ts" { return "/assets/icons/nuxt.svg"; }
-    if lower_name == "next.config.js" || lower_name == "next.config.mjs" || lower_name == "next.config.ts" { return "/assets/icons/nextjs.svg"; }
-    if lower_name == "angular.json" { return "/assets/icons/angular.svg"; }
+    if lower_name == "cargo.toml" || lower_name == "cargo.lock" {
+        return "/assets/icons/cargo.svg";
+    }
+    if lower_name == "go.mod" || lower_name == "go.sum" || lower_name == "go.work" {
+        return "/assets/icons/gomod.svg";
+    }
+    if lower_name == "package.json"
+        || lower_name == "package-lock.json"
+        || lower_name == "yarn.lock"
+        || lower_name == "pnpm-lock.yaml"
+    {
+        return "/assets/icons/npm.svg";
+    }
+    if lower_name == "pubspec.yaml" || lower_name == "pubspec.lock" {
+        return "/assets/icons/yaml.svg";
+    }
+    if lower_name == "requirements.txt"
+        || lower_name == "pipfile"
+        || lower_name == "pipfile.lock"
+        || lower_name == "pyproject.toml"
+        || lower_name == "setup.py"
+    {
+        return "/assets/icons/python.svg";
+    }
+    if lower_name == "build.gradle"
+        || lower_name == "build.gradle.kts"
+        || lower_name == "settings.gradle"
+        || lower_name == "settings.gradle.kts"
+        || lower_name == "gradle.properties"
+    {
+        return "/assets/icons/gradle.svg";
+    }
+    if lower_name == "pom.xml" {
+        return "/assets/icons/maven.svg";
+    }
+    if lower_name == "composer.json" || lower_name == "composer.lock" {
+        return "/assets/icons/composer.svg";
+    }
+    if lower_name == "gemfile" || lower_name == "gemfile.lock" {
+        return "/assets/icons/ruby.svg";
+    }
+    if lower_name == "nuxt.config.js" || lower_name == "nuxt.config.ts" {
+        return "/assets/icons/nuxt.svg";
+    }
+    if lower_name == "next.config.js"
+        || lower_name == "next.config.mjs"
+        || lower_name == "next.config.ts"
+    {
+        return "/assets/icons/nextjs.svg";
+    }
+    if lower_name == "angular.json" {
+        return "/assets/icons/angular.svg";
+    }
 
     match file_extension(name).to_lowercase().as_str() {
-        "rs"   => "/assets/icons/rust.svg",
-        "go"   => "/assets/icons/go.svg",
-        "py"   => "/assets/icons/python.svg",
-        "js"   => "/assets/icons/javascript.svg",
-        "jsx"  => "/assets/icons/react.svg",
-        "ts"   => "/assets/icons/typescript.svg",
-        "tsx"  => "/assets/icons/react.svg",
-        "vue"  => "/assets/icons/vue.svg",
+        "rs" => "/assets/icons/rust.svg",
+        "go" => "/assets/icons/go.svg",
+        "py" => "/assets/icons/python.svg",
+        "js" => "/assets/icons/javascript.svg",
+        "jsx" => "/assets/icons/react.svg",
+        "ts" => "/assets/icons/typescript.svg",
+        "tsx" => "/assets/icons/react.svg",
+        "vue" => "/assets/icons/vue.svg",
         "svelte" => "/assets/icons/svelte.svg",
         "java" => "/assets/icons/java.svg",
         "dart" => "/assets/icons/dart.svg",
         "c" | "h" => "/assets/icons/c.svg",
         "cpp" | "hpp" | "cc" => "/assets/icons/cpp.svg",
-        "cs"   => "/assets/icons/csharp.svg",
+        "cs" => "/assets/icons/csharp.svg",
         "csproj" | "sln" => "/assets/icons/nuget.svg",
-        "kt"   => "/assets/icons/kotlin.svg",
-        "swift"=> "/assets/icons/swift.svg",
-        "rb"   => "/assets/icons/ruby.svg",
+        "kt" => "/assets/icons/kotlin.svg",
+        "swift" => "/assets/icons/swift.svg",
+        "rb" => "/assets/icons/ruby.svg",
         "yaml" | "yml" => "/assets/icons/yaml.svg",
         "toml" => "/assets/icons/toml.svg",
         "json" => "/assets/icons/json.svg",
         "md" | "markdown" => "/assets/icons/markdown.svg",
         "html" => "/assets/icons/html.svg",
-        "css"  => "/assets/icons/css.svg",
+        "css" => "/assets/icons/css.svg",
         "sh" | "bash" => "/assets/icons/shell.svg",
-        _      => "/assets/icons/generic.svg",
+        _ => "/assets/icons/generic.svg",
     }
 }
 
@@ -460,13 +566,13 @@ pub fn build_file_tree(project_id: &str) -> Vec<FileEntry> {
 pub fn compare_hierarchical(a: &FileEntry, b: &FileEntry) -> std::cmp::Ordering {
     let a_parts: Vec<&str> = a.name.split('/').collect();
     let b_parts: Vec<&str> = b.name.split('/').collect();
-    
+
     let min_len = std::cmp::min(a_parts.len(), b_parts.len());
     for i in 0..min_len {
         if a_parts[i] != b_parts[i] {
             let a_is_dir = i < a_parts.len() - 1 || (i == a_parts.len() - 1 && a.is_dir);
             let b_is_dir = i < b_parts.len() - 1 || (i == b_parts.len() - 1 && b.is_dir);
-            
+
             if a_is_dir != b_is_dir {
                 if a_is_dir {
                     return std::cmp::Ordering::Less;
@@ -477,10 +583,9 @@ pub fn compare_hierarchical(a: &FileEntry, b: &FileEntry) -> std::cmp::Ordering 
             return a_parts[i].cmp(b_parts[i]);
         }
     }
-    
+
     a_parts.len().cmp(&b_parts.len())
 }
-
 
 pub fn path_basename(path: &str) -> &str {
     path.split('/').last().unwrap_or(path)
@@ -527,7 +632,7 @@ pub fn resolve_completion(item: &crate::api::CompletionItem) -> (String, Option<
         let mut cursor_offset = None;
         let chars: Vec<char> = raw_snippet.chars().collect();
         let mut i = 0;
-        
+
         while i < chars.len() {
             if chars[i] == '$' && i + 1 < chars.len() {
                 let next = chars[i + 1];
@@ -586,7 +691,12 @@ pub fn resolve_completion(item: &crate::api::CompletionItem) -> (String, Option<
     }
 }
 
-pub fn handle_auto_close_pairs(val: &str, start: u32, end: u32, key: &str) -> Option<(String, u32, u32)> {
+pub fn handle_auto_close_pairs(
+    val: &str,
+    start: u32,
+    end: u32,
+    key: &str,
+) -> Option<(String, u32, u32)> {
     if key == "(" || key == "{" || key == "[" || key == "\"" || key == "'" {
         let close_char = match key {
             "(" => ")",
@@ -657,8 +767,11 @@ pub fn handle_backspace_pairs(val: &str, start: u32, end: u32) -> Option<(String
         if start < val_js.length() {
             let prev_char = val_js.substring(start - 1, start);
             let next_char = val_js.substring(start, start + 1);
-            
-            let is_pair = match (String::from(prev_char).as_str(), String::from(next_char).as_str()) {
+
+            let is_pair = match (
+                String::from(prev_char).as_str(),
+                String::from(next_char).as_str(),
+            ) {
                 ("(", ")") => true,
                 ("{", "}") => true,
                 ("[", "]") => true,
@@ -666,7 +779,7 @@ pub fn handle_backspace_pairs(val: &str, start: u32, end: u32) -> Option<(String
                 ("'", "'") => true,
                 _ => false,
             };
-            
+
             if is_pair {
                 let new_val = format!(
                     "{}{}",
@@ -687,11 +800,14 @@ pub fn get_matching_diagnostics(
     line: u32,
     character: u32,
 ) -> Vec<api::Diagnostic> {
-    diags.iter()
+    diags
+        .iter()
         .filter(|d| {
             let file_matches = d.file.is_none() || d.file.as_ref() == active_file;
-            if !file_matches { return false; }
-            
+            if !file_matches {
+                return false;
+            }
+
             if line >= d.range.start.line && line <= d.range.end.line {
                 if line == d.range.start.line && line == d.range.end.line {
                     character >= d.range.start.character && character <= d.range.end.character
@@ -715,7 +831,12 @@ pub fn update_cursor_coords(val: &str, start: u32) -> Option<(f64, f64)> {
     let window = web_sys::window()?;
     let document = window.document()?;
     let mirror = document.get_element_by_id("cursor-mirror")?;
-    let textarea = document.query_selector(".code-editor").ok().flatten()?.dyn_into::<web_sys::HtmlTextAreaElement>().ok()?;
+    let textarea = document
+        .query_selector(".code-editor")
+        .ok()
+        .flatten()?
+        .dyn_into::<web_sys::HtmlTextAreaElement>()
+        .ok()?;
     let scroll_top = textarea.scroll_top() as f64;
     let scroll_left = textarea.scroll_left() as f64;
     if start as usize <= val.len() {
@@ -727,7 +848,7 @@ pub fn update_cursor_coords(val: &str, start: u32) -> Option<(f64, f64)> {
         let span_el = span.dyn_into::<web_sys::HtmlElement>().ok()?;
         Some((
             span_el.offset_left() as f64 - scroll_left,
-            span_el.offset_top() as f64 + 20.0 - scroll_top
+            span_el.offset_top() as f64 + 20.0 - scroll_top,
         ))
     } else {
         None

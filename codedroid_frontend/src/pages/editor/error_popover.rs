@@ -1,6 +1,6 @@
-use leptos::prelude::*;
-use crate::api;
 use super::components::apply_replacement;
+use crate::api;
+use leptos::prelude::*;
 
 #[component]
 pub fn ErrorPopover(
@@ -19,7 +19,7 @@ pub fn ErrorPopover(
                 let snack = show_snack;
                 let code_sig = code;
                 let active_error_sig = active_error;
-                
+
                 let severity = diag.severity.unwrap_or(1);
                 let popover_class = match severity {
                     1 => "error-floating-popover",
@@ -42,10 +42,10 @@ pub fn ErrorPopover(
                     4 => "💡",
                     _ => "🔴",
                 };
-                
+
                 view! {
-                    <div 
-                        class=popover_class 
+                    <div
+                        class=popover_class
                         style=format!("left:{}px; top:{}px", coords.0, coords.1)
                         on:mousedown=move |e: web_sys::MouseEvent| {
                             e.prevent_default();
@@ -60,7 +60,7 @@ pub fn ErrorPopover(
                             <span class="error-floating-icon">{severity_icon}</span>
                             <span class=title_class>{diag.message}</span>
                         </div>
-                        
+
                         {move || {
                             if loading {
                                 view! {
@@ -80,10 +80,10 @@ pub fn ErrorPopover(
                                             let snack_cb = snack;
                                             let code_cb = code_sig;
                                             let active_error_cb = active_error_sig;
-                                            
+
                                             let has_fix = replacement.is_some() && range.is_some();
                                             let show_expl = RwSignal::new(false);
-                                            
+
                                             let on_apply = move |e: web_sys::MouseEvent| {
                                                 e.stop_propagation();
                                                 if let (Some(repl), Some(r)) = (&replacement, &range) {
@@ -94,15 +94,15 @@ pub fn ErrorPopover(
                                                     active_error_cb.set(None);
                                                 }
                                             };
-                                            
+
                                             let toggle_expl = move |_| {
                                                 show_expl.update(|v| *v = !*v);
                                             };
-                                            
+
                                             view! {
                                                 <div class="error-floating-suggestion-wrapper" style="display:flex; flex-direction:column;">
-                                                    <div 
-                                                        class="error-floating-suggestion-item" 
+                                                    <div
+                                                        class="error-floating-suggestion-item"
                                                         on:click=toggle_expl
                                                         style="cursor:pointer;"
                                                     >

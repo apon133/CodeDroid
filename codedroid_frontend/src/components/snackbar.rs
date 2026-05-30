@@ -5,7 +5,7 @@ use leptos::prelude::*;
 #[component]
 pub fn Snackbar(message: ReadSignal<Option<String>>) -> impl IntoView {
     let visible = move || message.get().is_some();
-    let text   = move || message.get().unwrap_or_default();
+    let text = move || message.get().unwrap_or_default();
 
     view! {
         <div

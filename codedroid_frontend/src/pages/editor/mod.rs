@@ -4,14 +4,17 @@ use wasm_bindgen_futures::spawn_local;
 
 pub mod utils;
 pub mod components;
-pub mod code_area;
 pub mod preview;
 pub mod footer;
 pub mod search_bar;
+pub mod code_area;
+pub mod error_popover;
+pub mod hover;
+pub mod suggestions;
 
 use utils::*;
 use components::*;
-use code_area::*;
+use code_area::EditorCodeArea;
 use preview::*;
 use footer::*;
 use search_bar::*;
@@ -132,17 +135,52 @@ pub fn EditorPage() -> impl IntoView {
         let project_lang_str = project_lang_str.clone();
         let active_error = active_error.clone();
         let active_tab = active_tab.clone();
-        move |(line, _col): (u32, u32)| {
+        move |(line, col): (u32, u32)| {
             let diags = diagnostics_list.get_untracked();
             let current_tab = active_tab.get_untracked();
+            
+            web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!(
+                "[check_error_at_cursor] Clicked/Cursor at line: {}, col: {}. Active Tab: {:?}. Total Diags: {}",
+                line, col, current_tab, diags.len()
+            )));
+
             let diag_opt = diags.iter().find(|d| {
-                d.range.start.line == line && (d.file.is_none() || d.file == current_tab)
-            }).cloned();
+                let file_matches = d.file.is_none() || d.file == current_tab;
+                if !file_matches { return false; }
+                
+                // Precise match: cursor is within the diagnostic range (lines and columns)
+                if line >= d.range.start.line && line <= d.range.end.line {
+                    if line == d.range.start.line && line == d.range.end.line {
+                        col >= d.range.start.character && col <= d.range.end.character
+                    } else if line == d.range.start.line {
+                        col >= d.range.start.character
+                    } else if line == d.range.end.line {
+                        col <= d.range.end.character
+                    } else {
+                        true
+                    }
+                } else {
+                    false
+                }
+            }).cloned().or_else(|| {
+                // Line-level fallback: cursor is on any line intersected by the diagnostic
+                diags.iter().find(|d| {
+                    let file_matches = d.file.is_none() || d.file == current_tab;
+                    file_matches && line >= d.range.start.line && line <= d.range.end.line
+                }).cloned()
+            });
             
             if let Some(diag) = diag_opt {
+                web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!(
+                    "[check_error_at_cursor] Matching diagnostic found: {}", diag.message
+                )));
+                
                 let current = active_error.get_untracked();
                 if let Some((curr_diag, _, _)) = &current {
                     if curr_diag.message == diag.message && curr_diag.range.start.line == diag.range.start.line {
+                        web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(
+                            "[check_error_at_cursor] Diagnostic already active. Skipping fetch."
+                        ));
                         return;
                     }
                 }
@@ -153,13 +191,25 @@ pub fn EditorPage() -> impl IntoView {
                 let lang_val = project_lang_str.get_value();
                 
                 spawn_local(async move {
+                    web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(
+                        "[check_error_at_cursor] Fetching error suggestions from API..."
+                    ));
                     if let Ok(resp) = api::get_error_suggestions_api(&code_val, &lang_val, &diag).await {
+                        web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!(
+                            "[check_error_at_cursor] API call success. Got {} suggestions.", resp.suggestions.len()
+                        )));
                         active_error.set(Some((diag, resp.suggestions, false)));
                     } else {
-                        active_error.set(None);
+                        web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(
+                            "[check_error_at_cursor] API call failed. Setting active_error with empty suggestions."
+                        ));
+                        active_error.set(Some((diag, Vec::new(), false)));
                     }
                 });
             } else {
+                web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(
+                    "[check_error_at_cursor] No matching diagnostic found. Setting active_error to None."
+                ));
                 active_error.set(None);
             }
         }

@@ -4,6 +4,7 @@ use syntect::html::{highlighted_html_for_string, styled_line_to_highlighted_html
 use syntect::easy::HighlightLines;
 use web_sys;
 use leptos::prelude::*;
+use crate::api;
 
 thread_local! {
     pub static SYNTAX_SET: SyntaxSet = SyntaxSet::load_defaults_newlines();
@@ -574,5 +575,153 @@ pub fn resolve_completion(item: &crate::api::CompletionItem) -> (String, Option<
         } else {
             (label.clone(), None)
         }
+    }
+}
+
+pub fn handle_auto_close_pairs(val: &str, start: u32, end: u32, key: &str) -> Option<(String, u32, u32)> {
+    if key == "(" || key == "{" || key == "[" || key == "\"" || key == "'" {
+        let close_char = match key {
+            "(" => ")",
+            "{" => "}",
+            "[" => "]",
+            "\"" => "\"",
+            "'" => "'",
+            _ => "",
+        };
+        let val_js = js_sys::JsString::from(val);
+        if start != end {
+            let selected_text = val_js.substring(start, end);
+            let new_val = format!(
+                "{}{}{}{}{}",
+                String::from(val_js.substring(0, start)),
+                key,
+                String::from(selected_text),
+                close_char,
+                String::from(val_js.substring(end, val_js.length()))
+            );
+            let new_start = start + 1;
+            let new_end = end + 1;
+            Some((new_val, new_start, new_end))
+        } else {
+            let new_val = format!(
+                "{}{}{}{}",
+                String::from(val_js.substring(0, start)),
+                key,
+                close_char,
+                String::from(val_js.substring(end, val_js.length()))
+            );
+            let new_pos = start + 1;
+            Some((new_val, new_pos, new_pos))
+        }
+    } else if key == ")" || key == "}" || key == "]" || key == "\"" || key == "'" {
+        if start == end {
+            let val_js = js_sys::JsString::from(val);
+            if start < val_js.length() {
+                let next_char = val_js.substring(start, start + 1);
+                if next_char == key {
+                    let new_pos = start + 1;
+                    return Some((val.to_string(), new_pos, new_pos));
+                }
+            }
+        }
+        None
+    } else {
+        None
+    }
+}
+
+pub fn handle_tab_insertion(val: &str, start: u32, end: u32, tab_size: usize) -> (String, u32) {
+    let spaces = " ".repeat(tab_size);
+    let val_js = js_sys::JsString::from(val);
+    let new_val = format!(
+        "{}{}{}",
+        String::from(val_js.substring(0, start)),
+        spaces,
+        String::from(val_js.substring(end, val_js.length()))
+    );
+    let new_pos = start + spaces.len() as u32;
+    (new_val, new_pos)
+}
+
+pub fn handle_backspace_pairs(val: &str, start: u32, end: u32) -> Option<(String, u32)> {
+    if start == end && start > 0 {
+        let val_js = js_sys::JsString::from(val);
+        if start < val_js.length() {
+            let prev_char = val_js.substring(start - 1, start);
+            let next_char = val_js.substring(start, start + 1);
+            
+            let is_pair = match (String::from(prev_char).as_str(), String::from(next_char).as_str()) {
+                ("(", ")") => true,
+                ("{", "}") => true,
+                ("[", "]") => true,
+                ("\"", "\"") => true,
+                ("'", "'") => true,
+                _ => false,
+            };
+            
+            if is_pair {
+                let new_val = format!(
+                    "{}{}",
+                    String::from(val_js.substring(0, start - 1)),
+                    String::from(val_js.substring(start + 1, val_js.length()))
+                );
+                let new_pos = start - 1;
+                return Some((new_val, new_pos));
+            }
+        }
+    }
+    None
+}
+
+pub fn get_matching_diagnostics(
+    diags: &[api::Diagnostic],
+    active_file: Option<&String>,
+    line: u32,
+    character: u32,
+) -> Vec<api::Diagnostic> {
+    diags.iter()
+        .filter(|d| {
+            let file_matches = d.file.is_none() || d.file.as_ref() == active_file;
+            if !file_matches { return false; }
+            
+            if line >= d.range.start.line && line <= d.range.end.line {
+                if line == d.range.start.line && line == d.range.end.line {
+                    character >= d.range.start.character && character <= d.range.end.character
+                } else if line == d.range.start.line {
+                    character >= d.range.start.character
+                } else if line == d.range.end.line {
+                    character <= d.range.end.character
+                } else {
+                    true
+                }
+            } else {
+                false
+            }
+        })
+        .cloned()
+        .collect()
+}
+
+pub fn update_cursor_coords(val: &str, start: u32) -> Option<(f64, f64)> {
+    use wasm_bindgen::JsCast;
+    let window = web_sys::window()?;
+    let document = window.document()?;
+    let mirror = document.get_element_by_id("cursor-mirror")?;
+    let textarea = document.query_selector(".code-editor").ok().flatten()?.dyn_into::<web_sys::HtmlTextAreaElement>().ok()?;
+    let scroll_top = textarea.scroll_top() as f64;
+    let scroll_left = textarea.scroll_left() as f64;
+    if start as usize <= val.len() {
+        let text_before = &val[..start as usize];
+        mirror.set_text_content(Some(text_before));
+        let span = document.create_element("span").ok()?;
+        span.set_text_content(Some("|"));
+        mirror.append_child(&span).ok()?;
+        let span_el = span.dyn_into::<web_sys::HtmlElement>().ok()?;
+        Some((
+            span_el.offset_left() as f64 - scroll_left,
+            span_el.offset_top() as f64 + 20.0 - scroll_top
+        ))
+    } else {
+        None
     }
 }

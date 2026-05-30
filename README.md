@@ -14,9 +14,10 @@
   <img src="https://img.shields.io/github/issues/apon133/CodeDroid?style=for-the-badge" alt="GitHub Issues">
   <img src="https://img.shields.io/github/last-commit/apon133/CodeDroid?style=for-the-badge" alt="Last Commit">
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge" alt="PRs Welcome">
+  <img src="https://hits.sefy.io/v1?url=https://github.com/apon133/CodeDroid&label=Views&color=pink&style=for-the-badge" alt="Hits Badge">
 </p>
 
-> **Free, open-source mobile IDE and code execution engine** — write and run Python, Rust, Go, JavaScript, Java, C++, and 13+ languages directly on your Android or iOS device. No laptop needed.
+> **Free, open-source mobile IDE and code execution engine** — write, compile, run, and debug Python, Rust, Go, JavaScript, Java, C++, and 13+ languages directly on your Android or iOS device. No laptop needed, running with bare-metal performance.
 
 <p align="center">
   <a href="https://codedroid.netlify.app" target="_blank">
@@ -41,11 +42,31 @@
 
 ---
 
-## What is CodeDroid?
+## 📖 Table of Contents
+1. [What is CodeDroid?](#-what-is-codedroid)
+2. [Application Preview](#-application-preview)
+3. [Key Capabilities & Features](#-key-capabilities--features)
+4. [Ecosystem & Architectural Blueprints](#-ecosystem--architectural-blueprints)
+5. [Supported Languages & Setup Directory](#-supported-languages--setup-directory)
+6. [Smart Code Suggestions & AI Rule Engine](#-smart-code-suggestions--ai-rule-engine)
+7. [API Endpoint Specifications (No Code Payloads)](#-api-endpoint-specifications-no-code-payloads)
+8. [Termux Android Installation Details](#-termux-android-installation-details)
+9. [Cross-Device & iOS Network Connectivity](#-cross-device--ios-network-connectivity)
+10. [LSP Binary Executable Path Resolution](#-lsp-binary-executable-path-resolution)
+11. [Upcoming Features & Roadmap](#-upcoming-features--roadmap)
+12. [Contributing](#-contributing)
+13. [License](#-license)
 
-CodeDroid is a **mobile programming environment** built for developers who code everywhere. Under the hood, it's a high-performance HTTP API server written in **Rust (Axum)** that communicates with your device's actual compilers and runtimes — not a sandbox, not a toy.
+---
 
-It pairs with an integrated **Leptos-based Web IDE** (compiled to WASM) that delivers a desktop-class coding experience on mobile. You get IntelliSense, real package managers, and even web server previews — all running on your phone via **Termux**.
+## 🔍 What is CodeDroid?
+
+CodeDroid is a high-performance **mobile programming environment** that compiles and runs your code directly on-device with zero virtualization. It is built as two decoupled modules:
+
+1. **`codedroid_api` (Backend Engine)**: A lightweight, multi-threaded server written in **Rust (Axum)**. It directly invokes system compilers (`rustc`, `gcc`, `kotlinc`, `javac`, etc.), manages asynchronous execution streams, coordinates multiple concurrent Language Server Protocol (LSP) instances, and handles local dependency installation.
+2. **`codedroid_frontend` (Web IDE)**: A reactive, mobile-first IDE built using the **Leptos** web framework and compiled to **WebAssembly (WASM)**. It runs entirely inside any web browser (Safari, Chrome, Firefox) and utilizes high-performance code-rendering pipelines to provide syntax highlighting, bracket matching, file drawers, autocomplete drop-downs, and compiler error overlays.
+
+Unlike typical cloud-based sandboxes or emulated JS runtimes, CodeDroid exposes the *real* filesystem and *real* binaries of your host device (like a Termux Android shell or local macOS/Linux installation). 
 
 ---
 
@@ -65,159 +86,568 @@ It pairs with an integrated **Leptos-based Web IDE** (compiled to WASM) that del
 
 ---
 
-## ✨ Features
+## ✨ Key Capabilities & Features
 
-- **Mobile-First Responsive Layout** — Optimized interface for touch devices, viewport overlays, and smaller screen form factors (320px–768px). Features a slide-out file explorer overlay drawer, auto-collapsing sidebar upon opening files, persistent touch targets for closing tabs/deleting projects, and layouts utilizing CSS `100dvh` to handle virtual keyboards elegantly.
-- **Real-Time Execution Engine** — Runs code using actual system compilers (`rustc`, `gcc`, `python3`, `go`, `clang`, etc.). Real native execution with live output streams, stdout/stderr capture, and run process termination controls (PID-based).
-- **LSP-powered IntelliSense** — Floating completions, code diagnostics, hover documentation, and error overlays via system language servers (`rust-analyzer`, `typescript-language-server`, `gopls`, `clangd`, `pylsp`, etc.) running on-device. Optimized to auto-hide extra details panels on mobile screens to prevent viewport overflow.
-- **Save-Triggered Updates** — Supports `textDocument/didSave` notifications to automatically sync files to the local disk and instantly refresh compilation diagnostics.
-- **Comprehensive Web Technology Support** — Native LSP mapping and server initialization for web languages including HTML, CSS, JavaScript, TypeScript, JSX, TSX, Svelte, Vue, and Angular.
-- **Full Package Manager Integration** — Auto-detects and installs dependencies using `npm`, `pip3`, `cargo`, `pub`, `go get`, and custom package managers before run execution.
-- **Live Web Preview & Refresh** — Auto-detects dev server URLs (e.g. Vite, Webpack) from stdout logs, featuring an in-editor browser preview with manual/automatic refresh, and remote/iOS client accessibility via local network IP resolution.
-- **Standard Project Scaffolding Templates** — Bootstrap projects with pre-configured modern templates for React (Vite), Vue (Vite), Svelte (Vite), Next.js (App Router), Remix, and Angular.
-- **Advanced File Management & Sidebar Drawer** — Dynamic side drawer directory tree viewer with navigation, context-aware file actions (create, delete, copy, paste), and full **Rename & Move** support for both files and directories with LocalStorage synchronization.
-- **Bracket Matching & Typing Aids** — Automatic matching bracket insertion and paired deletion helpers in the Web IDE editor.
-- **Highly Configurable & Offline** — Works fully offline with local-first storage sync. Easily configure custom backend API endpoints with a built-in server connection test utility.
+*   **Mobile-First Touch Architecture**: Designed specifically for small touchscreens (320px–768px). Features a slide-out file explorer overlay drawer, auto-collapsing sidebar upon opening files, persistent touch targets for closing tabs, and custom layout controls utilizing CSS `100dvh` to prevent keyboard resize clipping.
+*   **Real native compilation and execution**: Captures raw `stdout` and `stderr` streams, compiles binaries using system tools, and includes process control signals to terminate long-running scripts or active backend servers (PID-based process termination).
+*   **LSP-powered IntelliSense**: Floating completion panels, in-line diagnostics, hover tooltips, definition lookups, and references. Automatically hides bloated metadata subpanels on narrow screens to prevent viewport clipping.
+*   **Save-Triggered Synchronization**: Supports immediate file-writing to the host disk on save, triggering automatic LSP change notifications (`textDocument/didChange` & `textDocument/didSave`) which instantly update error diagnostics.
+*   **Modern Web Framework Scaffolding**: Bootstrap web apps with optimized templates for React (Vite), Vue (Vite), Svelte (Vite), Next.js (App Router), Remix, and Angular.
+*   **Live Web Preview & Cross-Device Refresh**: Automatically scans development server stdout logs (e.g. Vite, Next.js) for local addresses, launches an in-IDE browser viewport with manual/auto reload, and translates local loops (127.0.0.1) into LAN IPs so iOS and tablet clients can access previews.
+*   **Advanced File Manager**: Create, copy, paste, delete, move, or rename files and directories. Full recursive operations synchronized instantly to local disk and LocalStorage states.
+*   **Offline Fallback Mode**: Works entirely offline with local-first file caching. If the LSP is unavailable, CodeDroid falls back to an internal regex token parser to provide syntax-matching autocomplete suggestions.
 
 ---
 
-## 🛠️ Supported Languages & IntelliSense
+## 🏗️ Ecosystem & Architectural Blueprints
 
-| Language | Runtime | Package Manager | LSP / IntelliSense |
-|---|---|---|---|
-| [**Rust**](./docs/languages/rust.md) | `cargo` / `rustc` | `cargo` | ✅ `rust-analyzer` |
-| [**Python**](./docs/languages/python.md) | `python3` | `pip3` | ✅ `pylsp` |
-| [**Go**](./docs/languages/go.md) | `go run` | `go get` | ✅ `gopls` |
-| [**JavaScript**](./docs/languages/javascript.md) / [**TS**](./docs/languages/typescript.md) | `node` / `tsx` | `npm` | ✅ `typescript-language-server` |
-| [**C**](./docs/languages/c.md) / [**C++**](./docs/languages/cpp.md) | `gcc` / `g++` / `clang` | `pkg install` | ✅ `clangd` |
-| [**Dart**](./docs/languages/dart.md) | `dart` | `pub` | ✅ `dart language-server` |
-| [**Java**](./docs/languages/java.md) | `javac` + `java` | Maven | ✅ `jdtls` |
-| [**Kotlin**](./docs/languages/kotlin.md) | `kotlinc` | — | ✅ `kotlin-language-server` |
-| [**Swift**](./docs/languages/swift.md) | `swift` | SPM | ✅ `sourcekit-lsp` |
-| [**C#**](./docs/languages/csharp.md) | `dotnet` | `nuget` | — |
-| [**Ruby**](./docs/languages/ruby.md) | `ruby` | `gem` | ✅ `solargraph` |
-| [**R**](./docs/languages/r.md) | `Rscript` | — | — |
-| [**Scala**](./docs/languages/scala.md) | `scala` | — | — |
-| [**Perl**](./docs/languages/perl.md) | `perl` | — | — |
-| [**Haskell**](./docs/languages/haskell.md) | `runhaskell` | — | — |
-| [**Pascal**](./docs/languages/pascal.md) | `fpc` | — | — |
+### Codebase Directory Structures & Module Overview
 
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Android device with [Termux](https://termux.dev) installed, **or** a Linux/macOS/Windows machine.
-- For the hosted Web IDE: any modern browser at **[codedroid.netlify.app](https://codedroid.netlify.app)**.
-
-### Mobile Setup (Android / Termux)
-
-Full step-by-step instructions: 👉 **[TERMUX_SETUP.md](./TERMUX_SETUP.md)**
-
----
-
-## 📡 API Reference
-
-CodeDroid exposes a simple HTTP API. All endpoints accept and return JSON.
-
-### `POST /run` — Execute Code
-
-Run code in any supported language. Returns `stdout`, `stderr`, and (for web projects) the live server URL.
-
-### `POST /complete` — Get Code Completions
-
-Returns LSP-powered code suggestions for the given cursor position.
-
-```json
-{
-  "code": "fn main() { pri",
-  "language": "rust",
-  "project_path": "/home/my_project",
-  "line": 0,
-  "character": 15
-}
-```
-
-### `POST /sync_file` — Sync File to Disk
-
-Creates or updates a file on the device. Required for LSP and multi-file projects.
-
-### `POST /stop` — Stop a Running Process
-
-Kills a long-running process (e.g., a dev server) by PID.
-
----
-
-## 🏗️ Architecture
+The CodeDroid architecture divides logical responsibilities across two modular crates. Below is a structural mapping of all modules and their roles:
 
 ```
-       [ Web IDE — Leptos / WASM ]
-                   │
-           HTTP / JSON Requests
-                   ▼
-    [ CodeDroid API Server — Rust / Axum ]
-          │                   │
-    [ LSP Servers ]     [ System Runtimes ]
-  (rust-analyzer,        (python3, cargo,
-   clangd, gopls…)        gcc, node, go…)
+CodeDroid Root
+ ├── codedroid_api (Backend Crate)
+ │    ├── src
+ │    │    ├── main.rs               # Server setup, routing tables, and CORS policies
+ │    │    ├── models.rs             # Parameter schema definitions & conversion methods
+ │    │    ├── handlers.rs           # Request interceptors mapping inputs to file system and compilers
+ │    │    ├── lsp.rs                # Custom JSON-RPC stdin/stdout manager for running LSPs
+ │    │    ├── runner.rs             # Shell executor engine coordinating processes per runtime
+ │    │    ├── error_suggestions.rs  # Rule-based diagnostic suggestions compiler
+ │    │    ├── diagnostics.rs        # Asynchronous polling coordinator waiting for LSP diagnostics
+ │    │    └── utils.rs              # Path, port, IP resolving & string manipulators
+ │    └── Cargo.toml                 # Backend rust configurations & dependencies
+ │
+ ├── codedroid_frontend (Frontend Crate)
+ │    ├── src
+ │    │    ├── main.rs               # Leptos hydration bootstrapping and entry points
+ │    │    ├── store.rs              # LocalStorage reactive store wrappers
+ │    │    ├── models.rs             # Client API data contract mirroring models
+ │    │    ├── api.rs                # Async web request client wrapping Gloo-Net
+ │    │    └── pages
+ │    │         ├── home.rs          # Project selection UI, metadata tables, templates builder
+ │    │         ├── settings.rs      # Port definitions, custom server URL forms
+ │    │         ├── docs.rs          # Reference manuals and language-specific instructions
+ │    │         └── editor (Editor Core Page)
+ │    │              ├── mod.rs      # Shell drawer, tabs manager, file navigators, previews
+ │    │              ├── code_area.rs# Autocomplete dropdowns, syntax triggers, scroll synchronizers
+ │    │              ├── search_bar.rs# Project-wide regex finder UI
+ │    │              ├── footer.rs   # Console drawer outputs and terminal triggers
+ │    │              └── utils.rs    # Syntect themes converter mapping styles
+ │    └── Cargo.toml                 # Frontend WASM configurations & packages
+```
+
+### Flow Diagram: Document Sync & Compilation Lifecycle
+
+```
+ ┌──────────────┐         1. Save (Ctrl+S / Save Button)          ┌────────────────┐
+ │  Web IDE     │────────────────────────────────────────────────>│  Axum Backend  │
+ │  (Client)    │<────────────────────────────────────────────────│  (Server)      │
+ └──────────────┘           4. Return JSON diagnostics            └────────────────┘
+        │                                                                  │
+        │ 2. notify_file_changed()                                         │ 3. Sync to disk
+        ▼                                                                  ▼
+ ┌──────────────┐                                                 ┌────────────────┐
+ │  LSP Client  │────────────────── JSON-RPC ────────────────────>│  Local File Sys│
+ │  (Stdio/RPC) │                                                 │  (/sdcard/...) │
+ └──────────────┘                                                 └────────────────┘
+```
+
+### Flow Diagram: Diagnostic Polling Loops
+
+```
+  Client (Web IDE)                  Axum Backend                   Target LSP
+         │                               │                              │
+         │─── POST /diagnostics ────────>│                              │
+         │    (Wait for version update)  │                              │
+         │                               │─── didChange / didSave ─────>│
+         │                               │                              │
+         │                               │◄── publishDiagnostics ───────│
+         │                               │    (Async stderr stream)     │
+         │                               │                              │
+         │◄── Return Diagnostics ────────│                              │
+         │    (JSON range & severity)    │                              │
 ```
 
 ---
 
-## 💻 Tech Stack
+## 📊 Supported Languages & Setup Directory
 
-| Layer | Technology |
-|---|---|
-| API Server | [Rust (Axum)](./codedroid_api/README.md) |
-| Web IDE | [Leptos (WASM)](./codedroid_frontend/README.md) |
-| IntelliSense | LSP (Language Server Protocol) |
-| Runtime | Termux (Android), Linux, macOS, Windows |
+This guide details exactly how to configure compilers, runtimes, and auto-suggestion language servers (LSP) for each language. All shell operations are to be run in your Termux or system shell.
 
 ---
 
-## 🔮 Upcoming Features / Roadmap
+### 🦀 Rust
+Get a full, desktop-grade Rust development environment on your phone.
+*   **Compiler & Tools**: Install `rust` and `cargo`:
+    ```bash
+    pkg install rust
+    ```
+*   **Language Server (LSP)**: Install `rust-analyzer` for real-time completions, diagnostics, and hover hints:
+    ```bash
+    pkg install rust-analyzer
+    ```
+*   **Enable Completions**: Start the API server, open any `.rs` file in the IDE, and start typing. CodeDroid automatically hooks into `rust-analyzer`.
 
-We are constantly improving CodeDroid to deliver a desktop-grade IDE experience on mobile. Here are the features planned for upcoming releases:
+---
 
-- **Browser-Only Mode (Offline-First PWA)**: Enable a lightweight execution fallback using WASM-based compilers (e.g., WebContainers or in-browser Python/JS runtimes) so you can run simple code snippets without setting up a backend.
-- **Local File System Access (OPFS / File System Access API)**: Allow the Web IDE to open, modify, and save directories directly on your device's filesystem without needing the backend bridge.
-- **Advanced LSP Actions**: Add support for Go to Definition, Find References, and Rename refactoring directly inside the editor UI.
-- **Git & GitHub Integration**: Integrated source control to clone repositories, track changes, view diffs, make commits, and push/pull directly from the editor.
-- **Interactive Terminal Emulator**: A fully interactive Web Terminal component (via `xterm.js`) connected to your device's shell (e.g., Termux bash/zsh), rather than just viewing static execution logs.
-- **Collaboration & Pair Programming**: Connect multiple frontend Web IDEs to a single backend session for real-time remote collaboration.
-- **Custom Themes & Extension Support**: Add VS Code-compatible custom themes and editor keybindings (such as Vim/Emacs keymaps).
+### 🐍 Python
+Set up Python script execution and IntelliSense formatting.
+*   **Python Runtime**: Install Python and pip:
+    ```bash
+    pkg install python
+    ```
+*   **Language Server (LSP)**: Install `python-lsp-server` (`pylsp`) via pip:
+    ```bash
+    pip install python-lsp-server
+    ```
+*   **Usage**: Create any `.py` file. CodeDroid automatically runs completions and highlights syntax.
+
+---
+
+### 🐹 Go
+Full Go compilation toolchain and suggestions on-device.
+*   **Go Compiler**: Install the Go programming toolset:
+    ```bash
+    pkg install golang
+    ```
+*   **Language Server (LSP)**: Install `gopls` (Go Please) to enable completions:
+    ```bash
+    pkg install gopls
+    ```
+*   **Usage**: Open any folder containing `go.mod`, edit `.go` files, and completions will populate.
+
+---
+
+### 🌐 JavaScript & TypeScript
+Supports Node.js tools, React, Vue, Svelte, and Next.js.
+*   **Runtime**: Install Node.js LTS:
+    ```bash
+    pkg install nodejs-lts
+    ```
+*   **Language Server (LSP)**: Install the TypeScript LSP globally using npm:
+    ```bash
+    npm install -g typescript-language-server typescript
+    ```
+*   **JS Projects**: Create a `jsconfig.json` or `tsconfig.json` at your project root to assist type-inference resolutions.
+
+---
+
+### 🧡 Svelte
+Scaffold and edit Svelte/Vite templates with custom diagnostics.
+*   **Language Server (LSP)**: Install Svelte tools:
+    ```bash
+    npm install -g svelte-language-server typescript
+    ```
+*   **Usage**: Open any `.svelte` file inside a Vite-scaffolded directory for autocomplete in markup, `<script>`, and `<style>` blocks.
+
+---
+
+### 💚 Vue
+Support Vue 3 SFC files.
+*   **Language Server (LSP)**: Install Volar Vue language tools:
+    ```bash
+    npm install -g @vue/language-server typescript
+    ```
+*   **Usage**: Create or open a `.vue` project. Hybrid type resolutions are managed automatically by the backend.
+
+---
+
+### ☕ Java
+Compile and run Java class hierarchies.
+*   **Java Runtime & Compiler**: Install the OpenJDK package:
+    ```bash
+    pkg install openjdk-17
+    ```
+*   **Language Server (LSP)**: Install the Eclipse JDT Language Server (`jdtls`):
+    ```bash
+    pkg install jdtls
+    ```
+*   **Usage**: Edit `.java` files; classes compile automatically inside CodeDroid's runner on run.
+
+---
+
+### 🛡️ C & C++
+High-performance native coding using LLVM tools.
+*   **Compiler Toolchain**: Install LLVM/Clang and make:
+    ```bash
+    pkg install clang build-essential
+    ```
+*   **Language Server (LSP)**: Install `clangd` for diagnostics and completions:
+    ```bash
+    pkg install clangd
+    ```
+*   **Usage**: Create a `.c` or `.cpp` file. `clangd` acts as the back-end analyzer.
+
+---
+
+### 🎯 Dart
+Build Dart CLI programs and scripts.
+*   **Runtime & Toolset**: Install Dart SDK:
+    ```bash
+    pkg install dart
+    ```
+*   **Language Server (LSP)**: Dart includes its language server inside the SDK. No separate installation required. CodeDroid resolves it automatically.
+
+---
+
+### 💎 Ruby
+Execute scripts and resolve Gems.
+*   **Ruby Runtime**: Install ruby:
+    ```bash
+    pkg install ruby
+    ```
+*   **Language Server (LSP)**: Install the Solargraph gem:
+    ```bash
+    gem install solargraph
+    ```
+
+---
+
+### 🍎 Swift
+Develop Swift scripts inside Termux.
+*   **Swift Runtime**: Install Swift:
+    ```bash
+    pkg install swift
+    ```
+*   **Language Server (LSP)**: Swift includes the `sourcekit-lsp` binary. Ensure Xcode default toolchains are active if hosting on macOS.
+
+---
+
+### 🧬 Kotlin
+Run compiled Kotlin bytecode.
+*   **Compiler**: Install Kotlin compiler packages:
+    ```bash
+    pkg install kotlin
+    ```
+*   **Language Server (LSP)**: Install `kotlin-language-server` from your system package manager.
+
+---
+
+### 🧪 Haskell, R, Perl, Pascal & Scala
+Other supported scripting languages compile and run using their default packages:
+*   **Haskell**: Run `pkg install ghc` to compile `.hs` scripts.
+*   **R**: Run `pkg install r-base` to execute `.R` formulas.
+*   **Perl**: Run `pkg install perl` to execute `.pl` files.
+*   **Pascal**: Run `pkg install fpc` to compile `.pas` code with the Free Pascal Compiler.
+*   **Scala**: Run `pkg install scala` to run JVM-based Scala programs.
+
+---
+
+## 🧠 Smart Code Suggestions & AI Rule Engine
+
+CodeDroid's suggestion engine in `error_suggestions.rs` parses compiler diagnostics and provides contextual explanations and code replacements.
+
+### Suggestions Rules Mapping
+
+| Rule Trigger | Matching Criteria | Code Replacements | Expected Result |
+| :--- | :--- | :--- | :--- |
+| **Rust E0384 (Mutability)** | `cannot mutate immutable variable`, `cannot assign to immutable` | Adds `mut` after the variable declaration `let` | Variable is marked mutable; compiler error resolves on save. |
+| **Rust Unused Variable** | `unused variable` | Prepends an underscore `_` to the identifier | Silences compiler warning flags. |
+| **Rust Type mismatch (String)** | `expected String, found &str` | Appends `.to_string()` or `.into()` | Casts string literal to owned String struct. |
+| **Rust Borrow String** | `expected &str, found String` | Prepends borrow operator `&` or appends `.as_str()` | Converts owned String reference to sliced slice. |
+| **Rust Integer mismatch** | Mismatches of `usize`/`u32`/`i32` | Appends `as usize` or `as _` | Casts number types dynamically. |
+| **Rust Missing Imports** | `cannot find type/struct in scope` for collections/sync | Inserts `use std::collections::*` or `use std::sync::*` at Line 0 | Resolves undefined scope structures. |
+| **Rust Move Violations** | `cannot move out of shared reference` | Appends `.clone()` | Creates owned duplicate data segment. |
+| **Python Indentation** | `IndentationError`, `unexpected indent` | Informational alignment warning | Alerts layout tabs vs spaces anomalies. |
+| **Python Scope Resolution**| `NameError: name is not defined` | Spell-checks declared symbols | Identifies typos or missing scope values. |
+| **JS / TS Scope Errors** | `cannot find name` | Identifies missing export tags | Flags typos and missing package imports. |
+
+---
+
+## 📡 API Endpoint Specifications (No Code Payloads)
+
+CodeDroid API runs locally on port `3000` (by default) to bridge your browser interface with the device's system compiler toolchains.
+
+---
+
+### `POST /run`
+Runs code in the specified runtime, capturing outputs and dev-server addresses.
+*   **Inputs**:
+    *   `code`: The raw string of code to execute.
+    *   `language`: The identifier matching the compiler profile (e.g. `rust`, `python`, `go`).
+    *   `project_path`: Path targeting local directory storage.
+    *   `cargo_toml`: Optional customization override flags.
+*   **Outputs**:
+    *   `output`: Captures execution prints and standard stdout logs.
+    *   `error`: Captures compiler failures and standard stderr logs.
+    *   `pid`: Spawns a background process ID (returns a number if running a live server).
+    *   `url`: The local network endpoint IP resolved from dev server logs (Vite, Next, etc.).
+
+---
+
+### `POST /stop`
+Terminates an active runtime process or development server.
+*   **Inputs**:
+    *   `pid`: The process ID identifier of the running instance.
+*   **Outputs**:
+    *   `output`: Confirmation string stating process termination details.
+    *   `error`: Standard errors if the process fails to terminate.
+
+---
+
+### `POST /sync_file`
+Synchronizes in-editor buffer state to physical disk storage.
+*   **Inputs**:
+    *   `path`: The absolute path where the file should be written.
+    *   `content`: The complete text representation of the file.
+*   **Outputs**: Returns a blank HTTP 200 OK status on success.
+
+---
+
+### `POST /add_package`
+Runs dependency installations and synchronizes configuration files.
+*   **Inputs**:
+    *   `package`: Name of the dependency/crate/library to download.
+    *   `language`: The target runtime language workspace.
+    *   `project_path`: Location of the project source.
+*   **Outputs**:
+    *   `output`: Standard setup stdout logs from package managers (npm, pip, cargo).
+    *   `error`: Errors if dependency resolution fails.
+    *   `dependency_file_name`: Configuration file updated (e.g. `Cargo.toml`, `package.json`).
+    *   `dependency_file_content`: Updated text content of the configuration file.
+
+---
+
+### `POST /complete`
+Fetches autocomplete recommendations from the active language server.
+*   **Inputs**:
+    *   `code`: File buffer content.
+    *   `language`: Target workspace language.
+    *   `project_path`: Root folder of the project.
+    *   `file_path`: Current active file path.
+    *   `line`: Cursor row line number (0-indexed).
+    *   `character`: Cursor character column position (0-indexed).
+*   **Outputs**:
+    *   `suggestions`: Array of objects containing completion lists, labels, insertion texts, documentation summaries, and signature details.
+
+---
+
+### `POST /definition`
+Finds the location of a symbol's definition.
+*   **Inputs**: Identical parameter structure as `/complete`.
+*   **Outputs**:
+    *   `locations`: Array of ranges and absolute file paths matching the symbol definition.
+
+---
+
+### `POST /references`
+Locates all references to a specific symbol in the workspace.
+*   **Inputs**: Identical parameter structure as `/complete`.
+*   **Outputs**:
+    *   `locations`: Array of absolute paths and range details showing where the symbol is referenced.
+
+---
+
+### `POST /hover`
+Retrieves markdown documentation tooltips for variables, methods, or structs.
+*   **Inputs**: Identical parameter structure as `/complete`.
+*   **Outputs**:
+    *   `contents`: Markdown documentation block matching the cursor position.
+    *   `error`: Errors if hover data is unavailable.
+
+---
+
+### `POST /diagnostics`
+Forces file synchronization and fetches static-analysis errors.
+*   **Inputs**: Identical parameter structure as `/complete`.
+*   **Outputs**:
+    *   `diagnostics`: Array of active compiler warnings, syntax errors, line ranges, severity grades, and compiler codes.
+
+---
+
+### `POST /error_suggestions`
+Analyzes a diagnostic payload and suggests quick-fixes.
+*   **Inputs**:
+    *   `code`: Raw file code string.
+    *   `language`: Matching compile runner format.
+    *   `diagnostic`: A single diagnostic model representing the target compiler error.
+*   **Outputs**:
+    *   `suggestions`: Array of suggestions, replacement strings, explanation descriptions, and line replacement ranges.
+
+---
+
+### `POST /format`
+Runs formatting tools on the current document.
+*   **Inputs**:
+    *   `code`: Text code to format.
+    *   `language`: Compiler formatter target.
+    *   `project_path`: Project folder containing formatting configurations.
+*   **Outputs**:
+    *   `formatted_code`: The reformatted code output text.
+    *   `error`: Standard errors if the formatting tool fails.
+
+---
+
+### `POST /delete_file`
+Deletes a target file or folder from the workspace.
+*   **Inputs**:
+    *   `path`: Location of the file/directory to delete.
+    *   `is_dir`: Flag denoting if target is a folder.
+*   **Outputs**: HTTP 200 OK status on success.
+
+---
+
+### `POST /copy_file`
+Copies a source file or directory to a destination.
+*   **Inputs**:
+    *   `src_path`: Absolute path of source.
+    *   `dest_path`: Destination path.
+    *   `is_dir`: Flag denoting if target is a directory.
+*   **Outputs**: HTTP 200 OK status on success.
+
+---
+
+### `POST /move_file`
+Renames or moves a file or directory.
+*   **Inputs**:
+    *   `src_path`: Target file or directory to move.
+    *   `dest_path`: Destination target path.
+*   **Outputs**: HTTP 200 OK status on success.
+
+---
+
+### `POST /create_dir`
+Creates a directory and any missing parent folders.
+*   **Inputs**:
+    *   `path`: Directory path to construct.
+*   **Outputs**: HTTP 200 OK status on success.
+
+---
+
+### `POST /read_file`
+Reads the content of a target file.
+*   **Inputs**:
+    *   `path`: Target file location.
+*   **Outputs**:
+    *   `content`: Full content of the read file.
+    *   `error`: File system read errors.
+
+---
+
+### `GET /ping`
+Checks backend status and responsiveness.
+*   **Outputs**: Returns plain string confirming active server state.
+
+---
+
+## 🛠️ Termux Android Installation Details
+
+Termux serves as the native runtime engine on Android. For detailed steps, see **[TERMUX_SETUP.md](./TERMUX_SETUP.md)**.
+
+1.  **F-Droid Repository**:
+    Do not download Termux from the Google Play Store (outdated packages and security warnings). Use F-Droid or direct APK download options.
+2.  **Base Setup**:
+    Initialize Termux packages:
+    ```bash
+    pkg update && pkg upgrade -y
+    ```
+3.  **Core Dependencies**:
+    ```bash
+    pkg install git rust clang build-essential nodejs-lts python go -y
+    ```
+4.  **Storage Integration**:
+    Connect storage paths to ensure files are visible inside download directories:
+    ```bash
+    termux-setup-storage
+    ```
+    This grants Termux filesystem read/write permissions to internal shared storage maps.
+
+---
+
+## 📡 Cross-Device & iOS Network Connectivity
+
+CodeDroid allows you to use your iPad or iPhone as a code editor screen, while using an Android tablet or local PC running Termux/Rust as the compiler server.
+
+```
+ ┌──────────────────────────┐         ┌────────────────────────────────┐
+ │  iPhone / iPad / Browser │──WiFi──▶│  PC or Android (Termux Host)   │
+ │                          │         │                                │
+ │  Open in Safari/Chrome:  │         │  codedroid_api  → port 3000    │
+ │  http://<HOST-IP>:8082   │         │  trunk serve    → port 8082    │
+ └──────────────────────────┘         └────────────────────────────────┘
+```
+
+For detailed configurations, see **[NETWORK_ACCESS.md](./docs/NETWORK_ACCESS.md)**.
+
+### Step-by-Step Device Bridging
+1.  **Start Services with Open Bindings**:
+    On your hosting PC or Android tablet, boot the API:
+    ```bash
+    cd codedroid_api && cargo run --release
+    ```
+    In another session, start the Trunk Web IDE specifying bindings:
+    ```bash
+    cd codedroid_frontend && trunk serve --port 8082 --address 0.0.0.0
+    ```
+2.  **Locate Local IP Address**:
+    Find the hosting device's local routing IP on the network:
+    *   *Android*: Run `ip addr show wlan0` (looks like `192.168.0.101`).
+    *   *macOS*: Run `ipconfig getifaddr en0`.
+    *   *Linux*: Run `hostname -I`.
+3.  **Connect Remote Client**:
+    Open Safari or Chrome on your secondary iPad/iPhone and go to `http://192.168.0.101:8082`.
+4.  **Configure API Routing**:
+    Open settings (⚙️) inside the Web IDE and set the **Backend Server** path to `http://192.168.0.101:3000`. Tap **Test** to establish connection.
+
+---
+
+## ⚙️ LSP Binary Executable Path Resolution
+
+The backend implements custom lookup logic inside `utils.rs` (`resolve_lsp_executable`) to resolve compiler LSPs.
+
+```
+                  Start LSP Request
+                          │
+            Does executable exist in PATH?
+                 (using which / where)
+                 ├── Yes ──► Return binary command name
+                 └── No
+                          │
+         Check Termux System Prefix ($PREFIX/bin/)
+                 ├── Yes ──► Return path to Termux binary
+                 └── No
+                          │
+       Check macOS Homebrew Binaries (/opt/homebrew/bin/)
+                 ├── Yes ──► Return Homebrew path
+                 └── No
+                          │
+        Check NPM Global Installations (~/.npm-global/bin/)
+                 ├── Yes ──► Return global NPM binary
+                 └── No
+                          │
+              Run default name fallback
+```
+
+---
+
+## 🔮 Upcoming Features & Roadmap
+
+We are expanding CodeDroid into a full-featured desktop-class editor on mobile:
+*   **Origin Private File System (OPFS)**: Integrate the File System Access API to edit local folders on your phone directly from the browser.
+*   **Integrated Git Console**: Stage files, view diffs, make commits, and manage remotes directly from the IDE sidebar.
+*   **Interactive Web Terminal**: Run shell commands directly using a fully connected terminal component (via `xterm.js` and WebSockets).
+*   **Collaborative Sessions**: Support multi-client peer-to-peer pairing over WebRTC for pair programming.
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome. Please read **[CONTRIBUTING.md](./CONTRIBUTING.md)** for guidelines on reporting bugs, suggesting features, and submitting pull requests.
+We welcome contributions to CodeDroid. Please check **[CONTRIBUTING.md](./CONTRIBUTING.md)** for details on making pull requests, code formatting (`cargo fmt`), and setting up your dev workspace.
 
 ---
 
 ## 📄 License
 
-GNU General Public License v3.0 — see [LICENSE](LICENSE) for full terms.
+CodeDroid is licensed under the [GNU General Public License v3.0](LICENSE).
 
 ---
 
-## 💬 Community & Support
-
-Join our community to chat with other developers, get help, and stay updated:
-
-- **Discord**: [Join our Discord Server](https://discord.gg/5srCEqsht) to chat, get support, and share feedback.
-- **Telegram**: [Subscribe to our Telegram Channel](https://t.me/codedroid133) for the latest news and updates.
-- **YouTube**: [Subscribe to our YouTube Channel](https://www.youtube.com/@CodeDroidYT) to watch video tutorials and feature previews.
+## 💬 Community Channels
+*   **Discord**: [Join our Community Server](https://discord.gg/5srCEqsht)
+*   **Telegram**: [Join Channel Updates](https://t.me/codedroid133)
+*   **YouTube**: [Watch Video Guides & Features](https://www.youtube.com/@CodeDroidYT)
 
 ---
-
-## 👤 Author
-
-**Md Apon Ahmed**
-GitHub: [@apon133](https://github.com/apon133)
-
----
-
 *CodeDroid — Because real developers code everywhere.*

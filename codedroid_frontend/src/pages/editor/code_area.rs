@@ -1,137 +1,12 @@
 use leptos::prelude::*;
 use crate::models::Settings;
-use crate::pages::editor::utils::*;
-use crate::pages::editor::components::apply_replacement;
+use super::utils::*;
 use crate::api;
-use crate::components::icon::LucideIcon;
 use wasm_bindgen_futures::spawn_local;
-use pulldown_cmark::{Parser, Options, html};
 
-fn markdown_to_html(markdown: &str) -> String {
-    use pulldown_cmark::{Event, Tag};
-    let mut options = Options::empty();
-    options.insert(Options::ENABLE_TABLES);
-    options.insert(Options::ENABLE_STRIKETHROUGH);
-    options.insert(Options::ENABLE_TASKLISTS);
-    
-    let parser = Parser::new_ext(markdown, options);
-    let mut new_events = Vec::new();
-    
-    let mut in_code_block = false;
-    let mut code_block_lang = String::new();
-    let mut code_block_content = String::new();
-    
-    for event in parser {
-        match event {
-            Event::Start(Tag::CodeBlock(ref kind)) => {
-                in_code_block = true;
-                code_block_lang = match kind {
-                    pulldown_cmark::CodeBlockKind::Fenced(lang) => lang.to_string(),
-                    pulldown_cmark::CodeBlockKind::Indented => String::new(),
-                };
-                code_block_content.clear();
-            }
-            Event::End(end_tag) => {
-                if in_code_block {
-                    in_code_block = false;
-                    let highlighted = highlight_code(&code_block_content, &code_block_lang);
-                    let html_block = format!("<div class=\"hover-code-block\">{}</div>", highlighted);
-                    new_events.push(Event::Html(html_block.into()));
-                } else {
-                    new_events.push(Event::End(end_tag));
-                }
-            }
-            Event::Text(text) => {
-                if in_code_block {
-                    code_block_content.push_str(&text);
-                } else {
-                    new_events.push(Event::Text(text));
-                }
-            }
-            other => {
-                if in_code_block {
-                    match &other {
-                        Event::SoftBreak | Event::HardBreak => {
-                            code_block_content.push('\n');
-                        }
-                        _ => {}
-                    }
-                } else {
-                    new_events.push(other);
-                }
-            }
-        }
-    }
-    
-    let mut html_output = String::new();
-    html::push_html(&mut html_output, new_events.into_iter());
-    html_output
-}
-
-fn build_hover_html(diagnostics: &[api::Diagnostic], hover_markdown: Option<&str>) -> String {
-    let mut html = String::new();
-    
-    // 1. Render diagnostics
-    if !diagnostics.is_empty() {
-        html.push_str("<div class=\"hover-diagnostics-container\">");
-        for diag in diagnostics {
-            let severity_val = diag.severity.unwrap_or(1);
-            let (sev_class, sev_label) = match severity_val {
-                1 => ("error", "Error"),
-                2 => ("warning", "Warning"),
-                3 => ("info", "Info"),
-                4 => ("hint", "Hint"),
-                _ => ("error", "Error"),
-            };
-            
-            let source_str = diag.source.as_deref().unwrap_or("LSP");
-            let code_str = diag.code.as_ref()
-                .and_then(|c| {
-                    if c.is_string() {
-                        c.as_str().map(|s| s.to_string())
-                    } else if c.is_number() {
-                        c.as_i64().map(|n| n.to_string())
-                    } else {
-                        None
-                    }
-                });
-                
-            let source_html = if let Some(code) = code_str {
-                format!("<span class=\"hover-diagnostic-source\">{}[{}]</span>", source_str, code)
-            } else {
-                format!("<span class=\"hover-diagnostic-source\">{}</span>", source_str)
-            };
-            
-            html.push_str(&format!(
-                "<div class=\"hover-diagnostic-item diag-{}\">\
-                    <div class=\"hover-diagnostic-header\">\
-                        <span class=\"hover-diagnostic-badge\">{}</span>\
-                        {}\
-                    </div>\
-                    <div class=\"hover-diagnostic-message\">{}</div>\
-                </div>",
-                sev_class,
-                sev_label,
-                source_html,
-                diag.message.replace('<', "&lt;").replace('>', "&gt;")
-            ));
-        }
-        html.push_str("</div>");
-    }
-    
-    // 2. Render divider if we have both
-    if !diagnostics.is_empty() && hover_markdown.is_some() {
-        html.push_str("<div class=\"hover-divider\"></div>");
-    }
-    
-    // 3. Render hover markdown
-    if let Some(md) = hover_markdown {
-        let md_html = markdown_to_html(md);
-        html.push_str(&format!("<div class=\"hover-markdown-content\">{}</div>", md_html));
-    }
-    
-    html
-}
+use super::hover::{HoverCard, build_hover_html};
+use super::suggestions::SuggestionsOverlay;
+use super::error_popover::ErrorPopover;
 
 #[component]
 pub fn EditorCodeArea(
@@ -261,26 +136,7 @@ pub fn EditorCodeArea(
                                     
                                     let active_file = active_tab.get_untracked();
                                     let diags = diagnostics_list.get_untracked();
-                                    let matching_diags: Vec<api::Diagnostic> = diags.into_iter()
-                                        .filter(|d| {
-                                            let file_matches = d.file.is_none() || d.file.as_ref() == active_file.as_ref();
-                                            if !file_matches { return false; }
-                                            
-                                            if l >= d.range.start.line && l <= d.range.end.line {
-                                                if l == d.range.start.line && l == d.range.end.line {
-                                                    c >= d.range.start.character && c <= d.range.end.character
-                                                } else if l == d.range.start.line {
-                                                    c >= d.range.start.character
-                                                } else if l == d.range.end.line {
-                                                    c <= d.range.end.character
-                                                } else {
-                                                    true
-                                                }
-                                            } else {
-                                                false
-                                            }
-                                        })
-                                        .collect();
+                                    let matching_diags = get_matching_diagnostics(&diags, active_file.as_ref(), l, c);
                                     
                                     let has_diags = !matching_diags.is_empty();
                                     
@@ -391,26 +247,7 @@ pub fn EditorCodeArea(
                             
                             let active_file = active_tab.get_untracked();
                             let diags = diagnostics_list.get_untracked();
-                            let matching_diags: Vec<api::Diagnostic> = diags.into_iter()
-                                .filter(|d| {
-                                    let file_matches = d.file.is_none() || d.file.as_ref() == active_file.as_ref();
-                                    if !file_matches { return false; }
-                                    
-                                    if line >= d.range.start.line && line <= d.range.end.line {
-                                        if line == d.range.start.line && line == d.range.end.line {
-                                            character >= d.range.start.character && character <= d.range.end.character
-                                        } else if line == d.range.start.line {
-                                            character >= d.range.start.character
-                                        } else if line == d.range.end.line {
-                                            character <= d.range.end.character
-                                        } else {
-                                            true
-                                        }
-                                    } else {
-                                        false
-                                    }
-                                })
-                                .collect();
+                            let matching_diags = get_matching_diagnostics(&diags, active_file.as_ref(), line, character);
                             
                             let has_diags = !matching_diags.is_empty();
                             
@@ -575,84 +412,30 @@ pub fn EditorCodeArea(
                                 move |_| close_hover()
                             }
                             on:beforeinput={
-                                 let close_hover_immediate = close_hover_immediate.clone();
-                                 move |input_ev: web_sys::InputEvent| {
-                                     close_hover_immediate();
-                                use wasm_bindgen::JsCast;
-                                if let Some(data) = input_ev.data() {
-                                    if data.chars().count() == 1 {
-                                        let ch = data.chars().next().unwrap();
-                                        let key = ch.to_string();
-                                        if key == "(" || key == "{" || key == "[" || key == "\"" || key == "'" {
-                                            input_ev.prevent_default();
+                                let close_hover_immediate = close_hover_immediate.clone();
+                                move |input_ev: web_sys::InputEvent| {
+                                    close_hover_immediate();
+                                    use wasm_bindgen::JsCast;
+                                    if let Some(data) = input_ev.data() {
+                                        if data.chars().count() == 1 {
                                             let target = input_ev.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
                                             let start = target.selection_start().unwrap().unwrap_or(0);
                                             let end = target.selection_end().unwrap().unwrap_or(0);
-                                            let val = js_sys::JsString::from(target.value());
-                                            
-                                            let close_char = match key.as_str() {
-                                                "(" => ")",
-                                                "{" => "}",
-                                                "[" => "]",
-                                                "\"" => "\"",
-                                                "'" => "'",
-                                                _ => "",
-                                            };
-                                            
-                                            if start != end {
-                                                let selected_text = val.substring(start, end);
-                                                let new_val = format!(
-                                                    "{}{}{}{}{}",
-                                                    String::from(val.substring(0, start)),
-                                                    key,
-                                                    String::from(selected_text),
-                                                    close_char,
-                                                    String::from(val.substring(end, val.length()))
-                                                );
-                                                code.set(new_val);
-                                                dirty.set(true);
-                                                let new_start = start + 1;
-                                                let new_end = end + 1;
+                                            let val = target.value();
+                                            if let Some((new_val, new_start, new_end)) = handle_auto_close_pairs(&val, start, end, &data) {
+                                                input_ev.prevent_default();
+                                                if val != new_val {
+                                                    code.set(new_val);
+                                                    dirty.set(true);
+                                                }
                                                 spawn_local(async move {
                                                     let _ = gloo_timers::future::sleep(std::time::Duration::from_millis(10)).await;
                                                     let _ = target.set_selection_range(new_start, new_end);
                                                 });
-                                            } else {
-                                                let new_val = format!(
-                                                    "{}{}{}{}",
-                                                    String::from(val.substring(0, start)),
-                                                    key,
-                                                    close_char,
-                                                    String::from(val.substring(end, val.length()))
-                                                );
-                                                code.set(new_val);
-                                                dirty.set(true);
-                                                let new_pos = start + 1;
-                                                spawn_local(async move {
-                                                    let _ = gloo_timers::future::sleep(std::time::Duration::from_millis(10)).await;
-                                                    let _ = target.set_selection_range(new_pos, new_pos);
-                                                });
-                                            }
-                                        }
-                                        else if key == ")" || key == "}" || key == "]" || key == "\"" || key == "'" {
-                                            let target = input_ev.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
-                                            let start = target.selection_start().unwrap().unwrap_or(0);
-                                            let end = target.selection_end().unwrap().unwrap_or(0);
-                                            if start == end {
-                                                let val = js_sys::JsString::from(target.value());
-                                                if start < val.length() {
-                                                    let next_char = val.substring(start, start + 1);
-                                                    if next_char == key {
-                                                        input_ev.prevent_default();
-                                                        let new_pos = start + 1;
-                                                        let _ = target.set_selection_range(new_pos, new_pos);
-                                                    }
-                                                }
                                             }
                                         }
                                     }
                                 }
-                            }
                             }
                             on:input={
                                  let close_hover_immediate = close_hover_immediate.clone();
@@ -670,14 +453,8 @@ pub fn EditorCodeArea(
                                     let start = target.selection_start().unwrap().unwrap_or(0);
                                     cursor_pos.set(start);
                                     
-                                    if let Some(mirror) = web_sys::window().unwrap().document().unwrap().get_element_by_id("cursor-mirror") {
-                                        let text_before = &val[..start as usize];
-                                        mirror.set_text_content(Some(text_before));
-                                        let span = web_sys::window().unwrap().document().unwrap().create_element("span").unwrap();
-                                        span.set_text_content(Some("|"));
-                                        let _ = mirror.append_child(&span);
-                                        let span_el = span.dyn_into::<web_sys::HtmlElement>().unwrap();
-                                        cursor_coords.set((span_el.offset_left() as f64, span_el.offset_top() as f64 + 20.0));
+                                    if let Some(coords) = update_cursor_coords(&val, start) {
+                                        cursor_coords.set(coords);
                                     }
 
                                     let (line, character) = {
@@ -764,129 +541,42 @@ pub fn EditorCodeArea(
                                         }
                                     });
                                 }
+                                use wasm_bindgen::JsCast;
+                                let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
+                                let start = target.selection_start().unwrap().unwrap_or(0);
+                                let end = target.selection_end().unwrap().unwrap_or(0);
+                                let val = target.value();
+
                                 if e.key() == "Tab" {
                                     e.prevent_default();
-                                    let spaces = " ".repeat(settings.get_untracked().tab_size);
-                                    use wasm_bindgen::JsCast;
-                                    let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
-                                    let start = target.selection_start().unwrap().unwrap_or(0);
-                                    let end = target.selection_end().unwrap().unwrap_or(0);
-                                    let val = js_sys::JsString::from(target.value());
-                                    let new_val = format!("{}{}{}", String::from(val.substring(0, start)), spaces, String::from(val.substring(end, val.length())));
+                                    let (new_val, new_pos) = handle_tab_insertion(&val, start, end, settings.get_untracked().tab_size);
                                     code.set(new_val);
                                     dirty.set(true);
-                                    let new_pos = start + spaces.len() as u32;
                                     spawn_local(async move {
                                         let _ = gloo_timers::future::sleep(std::time::Duration::from_millis(10)).await;
                                         let _ = target.set_selection_range(new_pos, new_pos);
                                     });
-                                }
-                                
-                                let key = e.key();
-                                if key == "(" || key == "{" || key == "[" || key == "\"" || key == "'" {
-                                    e.prevent_default();
-                                    use wasm_bindgen::JsCast;
-                                    let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
-                                    let start = target.selection_start().unwrap().unwrap_or(0);
-                                    let end = target.selection_end().unwrap().unwrap_or(0);
-                                    let val = js_sys::JsString::from(target.value());
-                                    
-                                    let close_char = match key.as_str() {
-                                        "(" => ")",
-                                        "{" => "}",
-                                        "[" => "]",
-                                        "\"" => "\"",
-                                        "'" => "'",
-                                        _ => "",
-                                    };
-                                    
-                                    if start != end {
-                                        let selected_text = val.substring(start, end);
-                                        let new_val = format!(
-                                            "{}{}{}{}{}",
-                                            String::from(val.substring(0, start)),
-                                            key,
-                                            String::from(selected_text),
-                                            close_char,
-                                            String::from(val.substring(end, val.length()))
-                                        );
-                                        code.set(new_val);
-                                        dirty.set(true);
-                                        let new_start = start + 1;
-                                        let new_end = end + 1;
+                                } else {
+                                    let key = e.key();
+                                    if let Some((new_val, new_start, new_end)) = handle_auto_close_pairs(&val, start, end, &key) {
+                                        e.prevent_default();
+                                        if val != new_val {
+                                            code.set(new_val);
+                                            dirty.set(true);
+                                        }
                                         spawn_local(async move {
                                             let _ = gloo_timers::future::sleep(std::time::Duration::from_millis(10)).await;
                                             let _ = target.set_selection_range(new_start, new_end);
                                         });
-                                    } else {
-                                        let new_val = format!(
-                                            "{}{}{}{}",
-                                            String::from(val.substring(0, start)),
-                                            key,
-                                            close_char,
-                                            String::from(val.substring(end, val.length()))
-                                        );
-                                        code.set(new_val);
-                                        dirty.set(true);
-                                        let new_pos = start + 1;
-                                        spawn_local(async move {
-                                            let _ = gloo_timers::future::sleep(std::time::Duration::from_millis(10)).await;
-                                            let _ = target.set_selection_range(new_pos, new_pos);
-                                        });
-                                    }
-                                }
-                                else if key == ")" || key == "}" || key == "]" || key == "\"" || key == "'" {
-                                    use wasm_bindgen::JsCast;
-                                    let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
-                                    let start = target.selection_start().unwrap().unwrap_or(0);
-                                    let end = target.selection_end().unwrap().unwrap_or(0);
-                                    if start == end {
-                                        let val = js_sys::JsString::from(target.value());
-                                        if start < val.length() {
-                                            let next_char = val.substring(start, start + 1);
-                                            if next_char == key {
-                                                e.prevent_default();
-                                                let new_pos = start + 1;
+                                    } else if key == "Backspace" {
+                                        if let Some((new_val, new_pos)) = handle_backspace_pairs(&val, start, end) {
+                                            e.prevent_default();
+                                            code.set(new_val);
+                                            dirty.set(true);
+                                            spawn_local(async move {
+                                                let _ = gloo_timers::future::sleep(std::time::Duration::from_millis(10)).await;
                                                 let _ = target.set_selection_range(new_pos, new_pos);
-                                            }
-                                        }
-                                    }
-                                }
-                                else if key == "Backspace" {
-                                    use wasm_bindgen::JsCast;
-                                    let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
-                                    let start = target.selection_start().unwrap().unwrap_or(0);
-                                    let end = target.selection_end().unwrap().unwrap_or(0);
-                                    if start == end && start > 0 {
-                                        let val = js_sys::JsString::from(target.value());
-                                        if start < val.length() {
-                                            let prev_char = val.substring(start - 1, start);
-                                            let next_char = val.substring(start, start + 1);
-                                            
-                                            let is_pair = match (String::from(prev_char).as_str(), String::from(next_char).as_str()) {
-                                                ("(", ")") => true,
-                                                ("{", "}") => true,
-                                                ("[", "]") => true,
-                                                ("\"", "\"") => true,
-                                                ("'", "'") => true,
-                                                _ => false,
-                                            };
-                                            
-                                            if is_pair {
-                                                e.prevent_default();
-                                                let new_val = format!(
-                                                    "{}{}",
-                                                    String::from(val.substring(0, start - 1)),
-                                                    String::from(val.substring(start + 1, val.length()))
-                                                );
-                                                code.set(new_val);
-                                                dirty.set(true);
-                                                let new_pos = start - 1;
-                                                spawn_local(async move {
-                                                    let _ = gloo_timers::future::sleep(std::time::Duration::from_millis(10)).await;
-                                                    let _ = target.set_selection_range(new_pos, new_pos);
-                                                });
-                                            }
+                                            });
                                         }
                                     }
                                 }
@@ -904,14 +594,8 @@ pub fn EditorCodeArea(
                                     cursor_pos.set(start);
                                     let val = target.value();
                                     
-                                    if let Some(mirror) = web_sys::window().unwrap().document().unwrap().get_element_by_id("cursor-mirror") {
-                                        let text_before = &val[..start as usize];
-                                        mirror.set_text_content(Some(text_before));
-                                        let span = web_sys::window().unwrap().document().unwrap().create_element("span").unwrap();
-                                        span.set_text_content(Some("|"));
-                                        let _ = mirror.append_child(&span);
-                                        let span_el = span.dyn_into::<web_sys::HtmlElement>().unwrap();
-                                        cursor_coords.set((span_el.offset_left() as f64, span_el.offset_top() as f64 + 20.0));
+                                    if let Some(coords) = update_cursor_coords(&val, start) {
+                                        cursor_coords.set(coords);
                                     }
 
                                     let (line, character) = {
@@ -939,14 +623,8 @@ pub fn EditorCodeArea(
                                     cursor_pos.set(start);
                                     let val = target.value();
                                     
-                                    if let Some(mirror) = web_sys::window().unwrap().document().unwrap().get_element_by_id("cursor-mirror") {
-                                        let text_before = &val[..start as usize];
-                                        mirror.set_text_content(Some(text_before));
-                                        let span = web_sys::window().unwrap().document().unwrap().create_element("span").unwrap();
-                                        span.set_text_content(Some("|"));
-                                        let _ = mirror.append_child(&span);
-                                        let span_el = span.dyn_into::<web_sys::HtmlElement>().unwrap();
-                                        cursor_coords.set((span_el.offset_left() as f64, span_el.offset_top() as f64 + 20.0));
+                                    if let Some(coords) = update_cursor_coords(&val, start) {
+                                        cursor_coords.set(coords);
                                     }
 
                                     let (line, character) = {
@@ -968,231 +646,44 @@ pub fn EditorCodeArea(
                                             .set_property("transform", &format!("translate({}px, {}px)", -scroll_left, -scroll_top));
                                     }
                                 }
+                                let start = textarea.selection_start().unwrap().unwrap_or(0);
+                                let val = textarea.value();
+                                if let Some(coords) = update_cursor_coords(&val, start) {
+                                    cursor_coords.set(coords);
+                                }
                             }
                         />
-                        {move || (!suggestions.get().is_empty()).then(|| {
-                            let coords = cursor_coords.get();
-                            let items = suggestions.get();
-                            let selected = selected_idx.get();
-                            let current_item = items.get(selected).cloned();
-                            view! {
-                                <div 
-                                    class="suggestions-floating" 
-                                    on:mousedown=move |e: web_sys::MouseEvent| { e.prevent_default(); }
-                                    style=format!("left:{}px; top:{}px", coords.0, coords.1)
-                                >
-                                    {move || suggestions.get().into_iter().enumerate().map(|(i, s)| {
-                                        let s2 = s.clone();
-                                        let s3 = s.clone();
-                                        view! {
-                                            <button 
-                                                class=move || if selected_idx.get() == i { "suggestion-item selected" } else { "suggestion-item" }
-                                                on:mousedown=move |e: web_sys::MouseEvent| { e.prevent_default(); }
-                                                on:mouseup=move |e: web_sys::MouseEvent| { e.prevent_default(); on_select.run(s2.clone()); }
-                                                on:click=move |e: web_sys::MouseEvent| { e.prevent_default(); }
-                                                on:touchstart=move |e: web_sys::TouchEvent| { e.prevent_default(); on_select.run(s3.clone()); }
-                                                on:mouseenter=move |_| selected_idx.set(i)
-                                            >
-                                                <span class="suggestion-kind">{kind_icon(s.kind)}</span>
-                                                <span class="suggestion-label">{s.label.clone()}</span>
-                                                {s.detail.map(|d| view! { <span class="suggestion-detail">{d}</span> })}
-                                            </button>
-                                        }
-                                    }).collect_view()}
-                                    {move || current_item.as_ref().and_then(|item| item.documentation.as_ref()).map(|docs| view! {
-                                        <div class="suggestion-docs">{docs.clone()}</div>
-                                    })}
-                                </div>
-                            }
-                        })}
-                        {move || {
-                            if !suggestions.get().is_empty() {
-                                return view! { "" }.into_any();
-                            }
-                            if let Some((diag, suggs, loading)) = active_error.get() {
-                                let coords = cursor_coords.get();
-                                let snack = show_snack;
-                                let code_sig = code;
-                                let active_error_sig = active_error;
-                                
-                                view! {
-                                    <div class="error-floating-popover" style=format!("left:{}px; top:{}px", coords.0, coords.1)>
-                                        <div class="error-floating-header">
-                                            <span class="error-floating-icon">"🔴"</span>
-                                            <span class="error-floating-title">{diag.message}</span>
-                                        </div>
-                                        
-                                        {move || {
-                                            if loading {
-                                                view! {
-                                                    <div class="error-floating-loading">
-                                                        <div class="spinner" style="width:12px;height:12px;border-width:1.5px;display:inline-block;vertical-align:middle;margin-right:6px" />
-                                                        "Finding Quick Fixes..."
-                                                    </div>
-                                                }.into_any()
-                                            } else if !suggs.is_empty() {
-                                                view! {
-                                                    <div class="error-floating-suggestions">
-                                                        {suggs.clone().into_iter().map(|sugg| {
-                                                            let title = sugg.title.clone();
-                                                            let replacement = sugg.replacement.clone();
-                                                            let range = sugg.range.clone();
-                                                            let snack_cb = snack;
-                                                            let code_cb = code_sig;
-                                                            let active_error_cb = active_error_sig;
-                                                            
-                                                            let has_fix = replacement.is_some() && range.is_some();
-                                                            
-                                                            let on_apply = move |_| {
-                                                                if let (Some(repl), Some(r)) = (&replacement, &range) {
-                                                                    let orig = code_cb.get_untracked();
-                                                                    let updated = apply_replacement(&orig, r, repl);
-                                                                    code_cb.set(updated);
-                                                                    snack_cb.run("Quick Fix applied successfully!".to_string());
-                                                                    active_error_cb.set(None);
-                                                                }
-                                                            };
-                                                            
-                                                            view! {
-                                                                <div class="error-floating-suggestion-item">
-                                                                    <span class="lightbulb-icon">"💡"</span>
-                                                                    <span class="suggestion-text">{title}</span>
-                                                                    {has_fix.then(|| view! {
-                                                                        <button class="btn btn-primary btn-xs" on:click=on_apply style="margin-left:auto;padding:2px 6px;font-size:10px">
-                                                                            "Fix"
-                                                                        </button>
-                                                                    })}
-                                                                </div>
-                                                            }
-                                                        }).collect_view()}
-                                                    </div>
-                                                }.into_any()
-                                            } else {
-                                                view! {
-                                                    <div class="error-floating-no-fix">
-                                                        "No quick fixes available."
-                                                    </div>
-                                                }.into_any()
-                                            }
-                                        }}
-                                    </div>
-                                }.into_any()
-                            } else {
-                                view! { "" }.into_any()
-                            }
-                        }}
+                        <SuggestionsOverlay
+                            cursor_coords=cursor_coords
+                            suggestions=suggestions
+                            selected_idx=selected_idx
+                            on_select=on_select
+                        />
+                        <ErrorPopover
+                            cursor_coords=cursor_coords
+                            active_error=active_error
+                            code=code
+                            show_snack=show_snack
+                        />
                         <div id="cursor-mirror" style=move || format!(
                             "width:100%;font-size:{}px;line-height:1.6;tab-size:{}",
                             settings.get().font_size,
                             settings.get().tab_size
                         ) />
-                        {move || hover_visible.get().then(|| {
-                            let coords = hover_coords.get();
-                            
-                            let is_mobile = web_sys::window()
-                                .and_then(|w| w.inner_width().ok())
-                                .and_then(|w| w.as_f64())
-                                .map(|w| w < 768.0)
-                                .unwrap_or(false);
-                                
-                            let hover_class = if is_mobile {
-                                "hover-bottom-sheet"
-                            } else {
-                                "hover-floating"
-                            };
-                            
-                            let style = if is_mobile {
-                                "".to_string()
-                            } else {
-                                format!("left:{}px; top:{}px", coords.0, coords.1)
-                            };
-                            
-                            let close_click = move |e: web_sys::MouseEvent| {
-                                e.prevent_default();
-                                e.stop_propagation();
-                                hover_visible.set(false);
-                            };
-                            
-                            let trigger_definition_c = trigger_definition.clone();
-                            let on_def_click = move |e: web_sys::MouseEvent| {
-                                e.prevent_default();
-                                e.stop_propagation();
-                                hover_visible.set(false);
-                                trigger_definition_c.run(());
-                            };
-                            
-                            let trigger_references_c = trigger_references.clone();
-                            let on_refs_click = move |e: web_sys::MouseEvent| {
-                                e.prevent_default();
-                                e.stop_propagation();
-                                hover_visible.set(false);
-                                trigger_references_c.run(());
-                            };
-                            
-                            view! {
-                                <div
-                                    class=hover_class
-                                    style=style
-                                    on:mouseenter={
-                                        let hover_card_active = hover_card_active.clone();
-                                        move |_| {
-                                            hover_card_active.set(true);
-                                        }
-                                    }
-                                    on:mouseleave={
-                                        let hover_card_active = hover_card_active.clone();
-                                        let close_hover = close_hover.clone();
-                                        move |_| {
-                                            hover_card_active.set(false);
-                                            close_hover();
-                                        }
-                                    }
-                                >
-                                    <div class="hover-header">
-                                        <span class="hover-header-title">"Documentation"</span>
-                                        <button class="hover-close-btn" on:click=close_click>
-                                            "✕"
-                                        </button>
-                                    </div>
-                                    <div class="hover-content">
-                                        {move || {
-                                            if hover_loading.get() {
-                                                view! {
-                                                    <div class="hover-loading-wrap">
-                                                        <div class="spinner" style="width:12px;height:12px;border-width:1.5px" />
-                                                        <span>"Loading docs..."</span>
-                                                    </div>
-                                                }.into_any()
-                                            } else if let Some(err) = hover_error.get() {
-                                                view! {
-                                                    <div class="hover-error-wrap">
-                                                        {format!("Error: {}", err)}
-                                                    </div>
-                                                }.into_any()
-                                            } else if let Some(html_content) = hover_content.get() {
-                                                view! {
-                                                    <div inner_html=html_content />
-                                                }.into_any()
-                                            } else {
-                                                view! {
-                                                    <div style="color:var(--text2)">"No documentation available."</div>
-                                                }.into_any()
-                                            }
-                                        }}
-                                    </div>
-                                    <div class="hover-footer">
-                                        <button class="hover-action-btn" on:click=on_def_click>
-                                            <LucideIcon name="locate-fixed" size="14" class="btn-icon" />
-                                            "Go to Definition"
-                                        </button>
-                                        <button class="hover-action-btn" on:click=on_refs_click>
-                                            <LucideIcon name="search-code" size="14" class="btn-icon" />
-                                            "Find References"
-                                        </button>
-                                    </div>
-                                </div>
-                            }
-                        })}
+                        <HoverCard
+                            hover_visible=hover_visible
+                            hover_coords=hover_coords
+                            hover_loading=hover_loading
+                            hover_error=hover_error
+                            hover_content=hover_content
+                            hover_card_active=hover_card_active
+                            close_hover=Callback::new({
+                                let close_hover = close_hover.clone();
+                                move |_| close_hover()
+                            })
+                            trigger_definition=trigger_definition
+                            trigger_references=trigger_references
+                        />
                     </div>
                 }
             }}

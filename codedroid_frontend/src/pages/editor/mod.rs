@@ -11,6 +11,7 @@ pub mod code_area;
 pub mod error_popover;
 pub mod hover;
 pub mod suggestions;
+pub mod operations;
 
 use utils::*;
 use components::*;
@@ -18,10 +19,10 @@ use code_area::EditorCodeArea;
 use preview::*;
 use footer::*;
 use search_bar::*;
+use operations::*;
 use crate::models::{Project, Settings, lang_icon};
 use crate::store;
 use crate::api;
-use gloo_storage::Storage;
 use crate::components::app_bar::AppBar;
 use crate::components::snackbar::Snackbar;
 use crate::components::icon::LucideIcon;
@@ -93,836 +94,168 @@ pub fn EditorPage() -> impl IntoView {
         }
     });
 
-    let trigger_diagnostics = Callback::new({
-        let ppath = project.path.clone();
-        let lang = project.language.clone();
-        let diagnostics_list = diagnostics_list.clone();
-        let last_diag_req = last_diag_req.clone();
-        let active_tab = active_tab.clone();
-        move |code_val: String| {
-            let filename = match active_tab.get_untracked() {
-                Some(f) => f,
-                None => {
-                    diagnostics_list.set(Vec::new());
-                    return;
-                }
-            };
-            if !is_project_source_file(&filename, &lang) {
-                diagnostics_list.set(Vec::new());
-                return;
-            }
-            let file_lang = file_to_lsp_lang(&filename);
-            let ppath = ppath.clone();
-            let req_id = last_diag_req.get_untracked() + 1;
-            last_diag_req.set(req_id);
-            let rel_file = filename.clone();
-            spawn_local(async move {
-                gloo_timers::future::TimeoutFuture::new(800).await;
-                if last_diag_req.get_untracked() == req_id {
-                    if let Ok(resp) = api::get_diagnostics_api(&code_val, &file_lang, &ppath, &rel_file).await {
-                        if last_diag_req.get_untracked() == req_id {
-                            diagnostics_list.set(resp.diagnostics);
-                        }
-                    }
-                }
-            });
-        }
-    });
+    let trigger_diagnostics = make_trigger_diagnostics(
+        project.path.clone(),
+        project.language.clone(),
+        diagnostics_list,
+        last_diag_req,
+        active_tab,
+    );
 
-    let check_error_at_cursor = Callback::new({
-        let code_sig = code;
-        let diagnostics_list = diagnostics_list.clone();
-        let project_lang_str = project_lang_str.clone();
-        let active_error = active_error.clone();
-        let active_tab = active_tab.clone();
-        move |(line, col): (u32, u32)| {
-            let diags = diagnostics_list.get_untracked();
-            let current_tab = active_tab.get_untracked();
-            
-            web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!(
-                "[check_error_at_cursor] Clicked/Cursor at line: {}, col: {}. Active Tab: {:?}. Total Diags: {}",
-                line, col, current_tab, diags.len()
-            )));
-
-            let diag_opt = diags.iter().find(|d| {
-                let file_matches = d.file.is_none() || d.file == current_tab;
-                if !file_matches { return false; }
-                
-                // Precise match: cursor is within the diagnostic range (lines and columns)
-                if line >= d.range.start.line && line <= d.range.end.line {
-                    if line == d.range.start.line && line == d.range.end.line {
-                        col >= d.range.start.character && col <= d.range.end.character
-                    } else if line == d.range.start.line {
-                        col >= d.range.start.character
-                    } else if line == d.range.end.line {
-                        col <= d.range.end.character
-                    } else {
-                        true
-                    }
-                } else {
-                    false
-                }
-            }).cloned().or_else(|| {
-                // Line-level fallback: cursor is on any line intersected by the diagnostic
-                diags.iter().find(|d| {
-                    let file_matches = d.file.is_none() || d.file == current_tab;
-                    file_matches && line >= d.range.start.line && line <= d.range.end.line
-                }).cloned()
-            });
-            
-            if let Some(diag) = diag_opt {
-                web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!(
-                    "[check_error_at_cursor] Matching diagnostic found: {}", diag.message
-                )));
-                
-                let current = active_error.get_untracked();
-                if let Some((curr_diag, _, _)) = &current {
-                    if curr_diag.message == diag.message && curr_diag.range.start.line == diag.range.start.line {
-                        web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(
-                            "[check_error_at_cursor] Diagnostic already active. Skipping fetch."
-                        ));
-                        return;
-                    }
-                }
-                
-                active_error.set(Some((diag.clone(), Vec::new(), true)));
-                
-                let code_val = code_sig.get_untracked();
-                let lang_val = project_lang_str.get_value();
-                
-                spawn_local(async move {
-                    web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(
-                        "[check_error_at_cursor] Fetching error suggestions from API..."
-                    ));
-                    if let Ok(resp) = api::get_error_suggestions_api(&code_val, &lang_val, &diag).await {
-                        web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!(
-                            "[check_error_at_cursor] API call success. Got {} suggestions.", resp.suggestions.len()
-                        )));
-                        active_error.set(Some((diag, resp.suggestions, false)));
-                    } else {
-                        web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(
-                            "[check_error_at_cursor] API call failed. Setting active_error with empty suggestions."
-                        ));
-                        active_error.set(Some((diag, Vec::new(), false)));
-                    }
-                });
-            } else {
-                web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(
-                    "[check_error_at_cursor] No matching diagnostic found. Setting active_error to None."
-                ));
-                active_error.set(None);
-            }
-        }
-    });
+    let check_error_at_cursor = make_check_error_at_cursor(
+        code,
+        diagnostics_list,
+        project.language.clone(),
+        active_error,
+        active_tab,
+    );
 
     let pid = project.id.clone();
     let ppath_val = project.path.clone();
-    let open_file = Callback::new({
-        let pid = pid.clone();
-        let ppath_val = ppath_val.clone();
-        let code = code.clone();
-        let active_tab = active_tab.clone();
-        let open_tabs = open_tabs.clone();
-        let dirty = dirty.clone();
-        let trigger_diag = trigger_diagnostics.clone();
-        move |name: String| {
-            let key = store::file_key(&pid, &name);
-            let content = store::load_file(&key);
-            open_tabs.update(|t| { if !t.contains(&name) { t.push(name.clone()); }});
-            active_tab.set(Some(name.clone()));
-            code.set(content.clone());
-            dirty.set(false);
-            trigger_diag.run(content.clone());
+    let open_file = make_open_file(
+        pid.clone(),
+        ppath_val.clone(),
+        code,
+        active_tab,
+        open_tabs,
+        dirty,
+        trigger_diagnostics.clone(),
+    );
 
-            let key_exists = gloo_storage::LocalStorage::get::<String>(&key).is_ok();
-            let is_absolute = is_absolute_path(&name);
-            if !key_exists || is_absolute || content.is_empty() {
-                let name_clone = name.clone();
-                let key_clone = key.clone();
-                let ppath_clone = ppath_val.clone();
-                let code_clone = code.clone();
-                let active_tab_clone = active_tab.clone();
-                let trigger_diag_clone = trigger_diag.clone();
-                
-                spawn_local(async move {
-                    let file_path = if name_clone.starts_with('/') {
-                        name_clone.clone()
-                    } else if name_clone.starts_with("Users/") || name_clone.starts_with("home/") || name_clone.starts_with("data/") {
-                        format!("/{}", name_clone)
-                    } else if is_absolute_path(&name_clone) {
-                        name_clone.clone()
-                    } else {
-                        format!("{}/{}", ppath_clone, name_clone)
-                    };
-                    
-                    if let Ok(resp) = api::read_file_api(&file_path).await {
-                        if resp.error.is_empty() {
-                            store::save_file(&key_clone, &resp.content);
-                            if active_tab_clone.get_untracked().as_ref() == Some(&name_clone) {
-                                code_clone.set(resp.content.clone());
-                                trigger_diag_clone.run(resp.content);
-                            }
-                        }
-                    }
-                });
-            }
-        }
-    });
 
-    let on_click_problem = Callback::new({
-        let open_file = open_file.clone();
-        let active_tab = active_tab.clone();
-        let code_signal = code;
-        let check_error = check_error_at_cursor.clone();
-        let cursor_coords = cursor_coords.clone();
-        move |(file_opt, line, character): (Option<String>, u32, u32)| {
-            let open_file_clone = open_file.clone();
-            let check_error_clone = check_error.clone();
-            let cursor_coords_clone = cursor_coords.clone();
-            let code_sig_clone = code_signal.clone();
-            let active_tab_clone = active_tab.clone();
-            
-            spawn_local(async move {
-                if let Some(ref filename) = file_opt {
-                    let current = active_tab_clone.get_untracked();
-                    if current.as_ref() != Some(filename) {
-                        open_file_clone.run(filename.clone());
-                        gloo_timers::future::TimeoutFuture::new(50).await;
-                    }
-                }
-                
-                use wasm_bindgen::JsCast;
-                if let Some(target) = web_sys::window()
-                    .and_then(|w| w.document())
-                    .and_then(|d| d.query_selector(".code-editor").ok().flatten())
-                {
-                    if let Ok(target) = target.dyn_into::<web_sys::HtmlTextAreaElement>() {
-                        let text = code_sig_clone.get_untracked();
-                        let index = pos_to_index(&text, line, character);
-                        let _ = target.focus();
-                        let _ = target.set_selection_range(index, index);
-                        
-                        if let Some(mirror) = web_sys::window().unwrap().document().unwrap().get_element_by_id("cursor-mirror") {
-                            let text_before = &text[..index as usize];
-                            mirror.set_text_content(Some(text_before));
-                            let span = web_sys::window().unwrap().document().unwrap().create_element("span").unwrap();
-                            span.set_text_content(Some("|"));
-                            let _ = mirror.append_child(&span);
-                            let span_el = span.dyn_into::<web_sys::HtmlElement>().unwrap();
-                            cursor_coords_clone.set((span_el.offset_left() as f64, span_el.offset_top() as f64 + 20.0));
-                        }
-                        
-                        check_error_clone.run((line, character));
-                    }
-                }
-            });
-        }
-    });
+
+    let on_click_problem = make_on_click_problem(
+        open_file.clone(),
+        active_tab,
+        code,
+        check_error_at_cursor.clone(),
+        cursor_coords.clone(),
+    );
 
     let ppath = project.path.clone();
-    let save_current = Callback::new({
-        let pid = pid.clone();
-        let ppath = ppath.clone();
-        let trigger_diag = trigger_diagnostics.clone();
-        move |_: ()| {
-            if let Some(tab) = active_tab.get_untracked() {
-                let key = store::file_key(&pid, &tab);
-                let content = code.get_untracked();
-                store::save_file(&key, &content);
-                dirty.set(false);
+    let save_current = make_save_current(
+        pid.clone(),
+        ppath.clone(),
+        code,
+        dirty,
+        active_tab,
+        trigger_diagnostics.clone(),
+    );
 
-                let base_path = ppath.clone();
-                let tab_name = tab.clone();
-                let trigger_diag_clone = trigger_diag.clone();
-                let content_clone = content.clone();
-                spawn_local(async move {
-                    let full_path = if tab_name.starts_with('/') {
-                        tab_name.clone()
-                    } else if tab_name.starts_with("Users/") || tab_name.starts_with("home/") || tab_name.starts_with("data/") {
-                        format!("/{}", tab_name)
-                    } else if is_absolute_path(&tab_name) {
-                        tab_name.clone()
-                    } else {
-                        format!("{}/{}", base_path, tab_name)
-                    };
-                    let _ = api::save_file_api(&full_path, &content_clone).await;
-                    trigger_diag_clone.run(content_clone);
-                });
-            }
-        }
-    });
+    let close_tab = make_close_tab(
+        pid.clone(),
+        code,
+        active_tab,
+        open_tabs,
+    );
 
-    let close_tab = Callback::new({
-        let pid = pid.clone();
-        move |name: String| {
-            open_tabs.update(|t| t.retain(|n| *n != name));
-            let tabs = open_tabs.get_untracked();
-            if active_tab.get_untracked().as_deref() == Some(&name) {
-                if let Some(first) = tabs.first() {
-                    let key = store::file_key(&pid, first);
-                    code.set(store::load_file(&key));
-                    active_tab.set(Some(first.clone()));
-                } else {
-                    active_tab.set(None);
-                    code.set(String::new());
-                }
-            }
-        }
-    });
+    let trigger_definition = make_trigger_definition(
+        pid.clone(),
+        code,
+        cursor_pos,
+        project_path_str.get_value(),
+        active_tab,
+        open_file.clone(),
+        references_list,
+        bottom_tab,
+        show_snack.clone(),
+        cursor_coords.clone(),
+        check_error_at_cursor.clone(),
+    );
 
-    let trigger_definition = Callback::new({
-        let pid = pid.clone();
-        let code = code.clone();
-        let cursor_pos = cursor_pos.clone();
-        let project_path_str = project_path_str.clone();
-        let active_tab = active_tab.clone();
-        let open_file = open_file.clone();
-        let references_list = references_list.clone();
-        let bottom_tab = bottom_tab.clone();
-        let show_snack = show_snack.clone();
-        let cursor_coords = cursor_coords.clone();
-        let check_error = check_error_at_cursor.clone();
-        move |_: ()| {
-            let active_file = match active_tab.get_untracked() {
-                Some(f) => f,
-                None => return,
-            };
-            let text = code.get_untracked();
-            let pos = cursor_pos.get_untracked();
-            
-            let pos_usize = pos as usize;
-            let text_len = text.len();
-            let safe_pos = if pos_usize > text_len { text_len } else { pos_usize };
-            let text_before = &text[..safe_pos];
-            let lines: Vec<&str> = text_before.split('\n').collect();
-            let line = lines.len().saturating_sub(1) as u32;
-            let character = lines.last().map(|l| l.chars().count()).unwrap_or(0) as u32;
-            
-            let lang = file_to_lsp_lang(&active_file);
-            let path = project_path_str.get_value();
-            
-            let pid_clone = pid.clone();
-            let open_file_cb = open_file.clone();
-            let code_sig = code.clone();
-            let check_error_cb = check_error.clone();
-            let cursor_coords_cb = cursor_coords.clone();
-            let show_snack_cb = show_snack.clone();
-            let ref_list_cb = references_list.clone();
-            let b_tab_cb = bottom_tab.clone();
-            let active_tab_cb = active_tab.clone();
-            let proj_path = path.clone();
-            
-            spawn_local(async move {
-                show_snack_cb.run("Looking up definition...".to_string());
-                match api::get_definition_api(&text, &lang, &path, &active_file, line, character).await {
-                    Ok(resp) => {
-                        let locations = resp.locations;
-                        if locations.is_empty() {
-                            show_snack_cb.run("No definition found".to_string());
-                        } else if locations.len() == 1 {
-                            let loc = &locations[0];
-                            let rel_path = uri_to_relative(&loc.uri, &proj_path);
-                            let target_line = loc.range.start.line;
-                            let target_char = loc.range.start.character;
-                            
-                            // Pre-fetch file from backend if not cached in LocalStorage
-                            let key = store::file_key(&pid_clone, &rel_path);
-                            let key_exists = gloo_storage::LocalStorage::get::<String>(&key).is_ok();
-                            let is_absolute = is_absolute_path(&rel_path);
-                            let content_is_empty = store::load_file(&key).is_empty();
-                            
-                            if !key_exists || is_absolute || content_is_empty {
-                                 let file_path = if rel_path.starts_with('/') {
-                                     rel_path.clone()
-                                 } else if rel_path.starts_with("Users/") || rel_path.starts_with("home/") || rel_path.starts_with("data/") {
-                                     format!("/{}", rel_path)
-                                 } else if is_absolute_path(&rel_path) {
-                                     rel_path.clone()
-                                 } else {
-                                     format!("{}/{}", proj_path, rel_path)
-                                 };
-                                
-                                if let Ok(resp) = api::read_file_api(&file_path).await {
-                                    if resp.error.is_empty() {
-                                        store::save_file(&key, &resp.content);
-                                    }
-                                }
-                            }
-                            
-                            let current = active_tab_cb.get_untracked();
-                            if current.as_ref() != Some(&rel_path) {
-                                open_file_cb.run(rel_path.clone());
-                                gloo_timers::future::TimeoutFuture::new(50).await;
-                            }
-                            
-                            use wasm_bindgen::JsCast;
-                            if let Some(target) = web_sys::window()
-                                .and_then(|w| w.document())
-                                .and_then(|d| d.query_selector(".code-editor").ok().flatten())
-                            {
-                                if let Ok(target) = target.dyn_into::<web_sys::HtmlTextAreaElement>() {
-                                    let current_code = code_sig.get_untracked();
-                                    let index = pos_to_index(&current_code, target_line, target_char);
-                                    let _ = target.focus();
-                                    let _ = target.set_selection_range(index, index);
-                                    
-                                    if let Some(mirror) = web_sys::window().unwrap().document().unwrap().get_element_by_id("cursor-mirror") {
-                                        let text_before = &current_code[..index as usize];
-                                        mirror.set_text_content(Some(text_before));
-                                        let span = web_sys::window().unwrap().document().unwrap().create_element("span").unwrap();
-                                        span.set_text_content(Some("|"));
-                                        let _ = mirror.append_child(&span);
-                                        let span_el = span.dyn_into::<web_sys::HtmlElement>().unwrap();
-                                        cursor_coords_cb.set((span_el.offset_left() as f64, span_el.offset_top() as f64 + 20.0));
-                                    }
-                                    check_error_cb.run((target_line, target_char));
-                                }
-                            }
-                            show_snack_cb.run(format!("Jumped to definition in {}", rel_path));
-                        } else {
-                            ref_list_cb.set(locations);
-                            b_tab_cb.set(2);
-                            show_snack_cb.run("Multiple definitions found".to_string());
-                        }
-                    }
-                    Err(e) => {
-                        show_snack_cb.run(format!("Error: {}", e));
-                    }
-                }
-            });
-        }
-    });
+    let trigger_references = make_trigger_references(
+        code,
+        cursor_pos,
+        project_path_str.get_value(),
+        active_tab,
+        references_list,
+        bottom_tab,
+        show_snack.clone(),
+    );
 
-    let trigger_references = Callback::new({
-        let code = code.clone();
-        let cursor_pos = cursor_pos.clone();
-        let project_path_str = project_path_str.clone();
-        let active_tab = active_tab.clone();
-        let references_list = references_list.clone();
-        let bottom_tab = bottom_tab.clone();
-        let show_snack = show_snack.clone();
-        move |_: ()| {
-            let active_file = match active_tab.get_untracked() {
-                Some(f) => f,
-                None => return,
-            };
-            let text = code.get_untracked();
-            let pos = cursor_pos.get_untracked();
-            
-            let pos_usize = pos as usize;
-            let text_len = text.len();
-            let safe_pos = if pos_usize > text_len { text_len } else { pos_usize };
-            let text_before = &text[..safe_pos];
-            let lines: Vec<&str> = text_before.split('\n').collect();
-            let line = lines.len().saturating_sub(1) as u32;
-            let character = lines.last().map(|l| l.chars().count()).unwrap_or(0) as u32;
-            
-            let lang = file_to_lsp_lang(&active_file);
-            let path = project_path_str.get_value();
-            
-            let show_snack_cb = show_snack.clone();
-            let ref_list_cb = references_list.clone();
-            let b_tab_cb = bottom_tab.clone();
-            
-            spawn_local(async move {
-                show_snack_cb.run("Finding references...".to_string());
-                match api::get_references_api(&text, &lang, &path, &active_file, line, character).await {
-                    Ok(resp) => {
-                        let locations = resp.locations;
-                        if locations.is_empty() {
-                            show_snack_cb.run("No references found".to_string());
-                        } else {
-                            ref_list_cb.set(locations.clone());
-                            b_tab_cb.set(2);
-                            show_snack_cb.run(format!("Found {} references", locations.len()));
-                        }
-                    }
-                    Err(e) => {
-                        show_snack_cb.run(format!("Error: {}", e));
-                    }
-                }
-            });
-        }
-    });
+    let on_click_reference = make_on_click_reference(
+        pid.clone(),
+        open_file.clone(),
+        active_tab,
+        code,
+        check_error_at_cursor.clone(),
+        cursor_coords.clone(),
+        project_path_str.get_value(),
+    );
 
-    let on_click_reference = Callback::new({
-        let pid = pid.clone();
-        let open_file = open_file.clone();
-        let active_tab = active_tab.clone();
-        let code_signal = code;
-        let check_error = check_error_at_cursor.clone();
-        let cursor_coords = cursor_coords.clone();
-        let project_path_str = project_path_str.clone();
-        move |loc: crate::api::Location| {
-            let pid_clone = pid.clone();
-            let open_file_clone = open_file.clone();
-            let check_error_clone = check_error.clone();
-            let cursor_coords_clone = cursor_coords.clone();
-            let code_sig_clone = code_signal.clone();
-            let active_tab_clone = active_tab.clone();
-            let proj_path = project_path_str.get_value();
-            
-            spawn_local(async move {
-                let rel_path = uri_to_relative(&loc.uri, &proj_path);
-                let line = loc.range.start.line;
-                let character = loc.range.start.character;
-                
-                // Pre-fetch file from backend if not cached in LocalStorage
-                let key = store::file_key(&pid_clone, &rel_path);
-                let key_exists = gloo_storage::LocalStorage::get::<String>(&key).is_ok();
-                let is_absolute = is_absolute_path(&rel_path);
-                let content_is_empty = store::load_file(&key).is_empty();
-                
-                if !key_exists || is_absolute || content_is_empty {
-                    let file_path = if rel_path.starts_with('/') {
-                        rel_path.clone()
-                    } else if rel_path.starts_with("Users/") || rel_path.starts_with("home/") || rel_path.starts_with("data/") {
-                        format!("/{}", rel_path)
-                    } else if is_absolute_path(&rel_path) {
-                        rel_path.clone()
-                    } else {
-                        format!("{}/{}", proj_path, rel_path)
-                    };
-                    
-                    if let Ok(resp) = api::read_file_api(&file_path).await {
-                        if resp.error.is_empty() {
-                            store::save_file(&key, &resp.content);
-                        }
-                    }
-                }
-                
-                let current = active_tab_clone.get_untracked();
-                if current.as_ref() != Some(&rel_path) {
-                    open_file_clone.run(rel_path.clone());
-                    gloo_timers::future::TimeoutFuture::new(50).await;
-                }
-                
-                use wasm_bindgen::JsCast;
-                if let Some(target) = web_sys::window()
-                    .and_then(|w| w.document())
-                    .and_then(|d| d.query_selector(".code-editor").ok().flatten())
-                {
-                    if let Ok(target) = target.dyn_into::<web_sys::HtmlTextAreaElement>() {
-                        let text = code_sig_clone.get_untracked();
-                        let index = pos_to_index(&text, line, character);
-                        let _ = target.focus();
-                        let _ = target.set_selection_range(index, index);
-                        
-                        if let Some(mirror) = web_sys::window().unwrap().document().unwrap().get_element_by_id("cursor-mirror") {
-                            let text_before = &text[..index as usize];
-                            mirror.set_text_content(Some(text_before));
-                            let span = web_sys::window().unwrap().document().unwrap().create_element("span").unwrap();
-                            span.set_text_content(Some("|"));
-                            let _ = mirror.append_child(&span);
-                            let span_el = span.dyn_into::<web_sys::HtmlElement>().unwrap();
-                            cursor_coords_clone.set((span_el.offset_left() as f64, span_el.offset_top() as f64 + 20.0));
-                        }
-                        check_error_clone.run((line, character));
-                    }
-                }
-            });
-        }
-    });
+    let run_code = make_run_code(
+        pid.clone(),
+        ppath.clone(),
+        project.language.clone(),
+        code,
+        is_running,
+        output,
+        is_error,
+        current_pid,
+        preview_url,
+        save_current.clone(),
+    );
 
-    let run_code = Callback::new({
-        let pid = pid.clone();
-        let ppath = ppath.clone();
-        let plang = project.language.clone();
-        move |_: ()| {
-            if is_running.get_untracked() { return; }
-            save_current.run(());
-            let current_code = code.get_untracked();
-            let lang = plang.clone();
-            let path = ppath.clone();
-            let pid2 = pid.clone();
+    let stop_code = make_stop_code(
+        current_pid,
+        output,
+        preview_url,
+        bottom_tab,
+    );
 
-            is_running.set(true);
-            output.set("Compiling and running...".to_string());
-            is_error.set(false);
+    let format_code = make_format_code(
+        ppath.clone(),
+        project.language.clone(),
+        code,
+        dirty,
+        is_running,
+        active_tab,
+        output,
+        is_error,
+        bottom_tab,
+        trigger_diagnostics.clone(),
+    );
 
-            let cargo_toml = if lang == "rust" {
-                let k = store::file_key(&pid2, "Cargo.toml");
-                let v = store::load_file(&k);
-                if v.is_empty() { None } else { Some(v) }
-            } else { None };
+    let add_dep = make_add_dep(
+        pid.clone(),
+        ppath.clone(),
+        project.language.clone(),
+        dep_input,
+        dep_output,
+        open_file.clone(),
+        file_tree_data.clone(),
+    );
 
-            spawn_local(async move {
-                let res = api::run_code(&current_code, &lang, &path, cargo_toml.as_deref()).await;
-                match res {
-                    Ok(r) => {
-                        let mut out = r.output.clone();
-                        if !r.error.is_empty() {
-                            if !out.is_empty() { out.push('\n'); }
-                            out.push_str(&r.error);
-                        }
-                        if out.is_empty() { out = "Code executed with no output.".to_string(); }
-                        output.set(out);
-                        is_error.set(!r.error.is_empty());
-                        current_pid.set(r.pid);
-                        if let Some(url) = r.url {
-                            preview_url.set(Some(url));
-                        }
-                    }
-                    Err(e) => {
-                        output.set(format!("❌ Error: Could not connect to API.\n{e}"));
-                        is_error.set(true);
-                    }
-                }
-                is_running.set(false);
-            });
-        }
-    });
+    let copy_code = make_copy_code(code, show_snack.clone());
 
-    let stop_code = Callback::new(move |_: ()| {
-        if let Some(pid_val) = current_pid.get_untracked() {
-            spawn_local(async move {
-                let _ = api::stop_process(pid_val).await;
-                output.update(|o| o.push_str("\n\n[Stopped by User]"));
-                current_pid.set(None);
-                preview_url.set(None);
-                bottom_tab.set(0);
-            });
-        }
-    });
-
-    let format_code = Callback::new({
-        let ppath = ppath.clone();
-        let plang = project.language.clone();
-        let trigger_diag = trigger_diagnostics.clone();
-        move |_: ()| {
-            if is_running.get_untracked() { return; }
-            let current_code = code.get_untracked();
-            if current_code.trim().is_empty() { return; }
-            
-            let lang = if let Some(ref filename) = active_tab.get_untracked() {
-                file_to_lsp_lang(filename)
-            } else {
-                plang.clone()
-            };
-            
-            let path = ppath.clone();
-            
-            spawn_local(async move {
-                let res = api::format_code_api(&current_code, &lang, &path).await;
-                match res {
-                    Ok(r) => {
-                        if let Some(err) = r.error {
-                            output.set(format!("⚠️ Formatting Warning/Error:\n{}", err));
-                            is_error.set(true);
-                            bottom_tab.set(0);
-                        } else {
-                            code.set(r.formatted_code.clone());
-                            trigger_diag.run(r.formatted_code);
-                            dirty.set(true);
-                        }
-                    }
-                    Err(e) => {
-                        output.set(format!("❌ Formatting connection error:\n{}", e));
-                        is_error.set(true);
-                        bottom_tab.set(0);
-                    }
-                }
-            });
-        }
-    });
-
-    let add_dep = Callback::new({
-        let pid = pid.clone();
-        let ppath = ppath.clone();
-        let plang = project.language.clone();
-        let open_file = open_file.clone();
-        let file_tree_data = file_tree_data.clone();
-        move |_: ()| {
-            let pkg = dep_input.get_untracked();
-            if pkg.trim().is_empty() { return; }
-            let path = ppath.clone();
-            let lang = plang.clone();
-            let pid_clone = pid.clone();
-            let open_file_clone = open_file.clone();
-            let file_tree_data_clone = file_tree_data.clone();
-            dep_output.set(format!("Installing {}...", pkg));
-            spawn_local(async move {
-                match api::add_package(&pkg, &lang, &path).await {
-                    Ok(r) => {
-                        dep_output.set(if r.error.is_empty() { r.output } else { r.error });
-                        if let (Some(filename), Some(content)) = (r.dependency_file_name, r.dependency_file_content) {
-                            let key = store::file_key(&pid_clone, &filename);
-                            store::save_file(&key, &content);
-                            file_tree_data_clone.set(build_file_tree(&pid_clone));
-                            open_file_clone.run(filename);
-                        }
-                    }
-                    Err(e) => dep_output.set(format!("Error: {e}")),
-                }
-            });
-        }
-    });
-
-    let copy_code = Callback::new({
-        let show_snack = show_snack.clone();
-        move |_: ()| {
-            let c = code.get_untracked();
-            if let Some(window) = web_sys::window() {
-                let _ = window.navigator().clipboard().write_text(&c);
-                show_snack.run("Code copied!".to_string());
-            }
-        }
-    });
-
-    let on_select = Callback::new(move |item: api::CompletionItem| {
-        let cpos = cursor_pos.get_untracked();
-        use wasm_bindgen::JsCast;
-        if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
-            if let Ok(Some(target)) = doc.query_selector(".code-editor") {
-                if let Ok(target) = target.dyn_into::<web_sys::HtmlTextAreaElement>() {
-                    let start = target.selection_start().unwrap().unwrap_or(cpos);
-                    let end = target.selection_end().unwrap().unwrap_or(cpos);
-                    let val = js_sys::JsString::from(target.value());
-                    let rust_val = String::from(val.clone());
-                    let mut word_start = start as usize;
-                    let chars_vec: Vec<char> = rust_val.chars().take(start as usize).collect();
-                    for (i, c) in chars_vec.into_iter().enumerate().rev() {
-                        if !c.is_alphanumeric() && c != '_' {
-                            word_start = i + 1;
-                            break;
-                        }
-                        if i == 0 { word_start = 0; }
-                    }
-                    let before = val.substring(0, word_start as u32);
-                    let after = val.substring(end, val.length());
-                    
-                    let (ins, cursor_offset) = resolve_completion(&item);
-                    
-                    let new_val = format!("{}{}{}", String::from(before), ins, String::from(after));
-                    let new_pos = if let Some(offset) = cursor_offset {
-                        word_start as u32 + offset as u32
-                    } else {
-                        word_start as u32 + ins.encode_utf16().count() as u32
-                    };
-                    
-                    code.set(new_val);
-                    dirty.set(true);
-                    suggestions.set(Vec::new());
-                    
-                    spawn_local(async move {
-                        if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
-                            if let Ok(Some(target)) = doc.query_selector(".code-editor") {
-                                if let Ok(target) = target.dyn_into::<web_sys::HtmlTextAreaElement>() {
-                                    let _ = target.focus();
-                                    target.set_selection_start(Some(new_pos)).unwrap();
-                                    target.set_selection_end(Some(new_pos)).unwrap();
-                                }
-                            }
-                        }
-                    });
-                }
-            }
-        }
-    });
+    let on_select = make_on_select(code, dirty, suggestions, cursor_pos);
 
     let copied_item: RwSignal<Option<FileEntry>> = RwSignal::new(None);
     let sidebar_open: RwSignal<bool> = RwSignal::new(false);
     let sidebar_mode: RwSignal<usize> = RwSignal::new(0); // 0=files, 1=search
 
-    let create_file = Callback::new({
-        let pid = pid.clone();
-        let ppath = ppath.clone();
-        let show_snack = show_snack.clone();
-        let open_file = open_file.clone();
-        let file_tree_data = file_tree_data.clone();
-        move |name: String| {
-            let key = store::file_key(&pid, &name);
-            store::save_file(&key, "// Start coding here...\n");
-            
-            // Sync to backend
-            let full_path = format!("{}/{}", ppath, name);
-            spawn_local(async move {
-                let _ = api::save_file_api(&full_path, "// Start coding here...\n").await;
-            });
+    let create_file = make_create_file(
+        pid.clone(),
+        ppath.clone(),
+        show_snack.clone(),
+        open_file.clone(),
+        file_tree_data.clone(),
+    );
 
-            // Refresh tree
-            file_tree_data.set(build_file_tree(&pid));
-            show_snack.run(format!("Created file: {}", name));
-            open_file.run(name);
-        }
-    });
+    let create_folder = make_create_folder(
+        pid.clone(),
+        ppath.clone(),
+        show_snack.clone(),
+        file_tree_data.clone(),
+    );
 
-    let create_folder = Callback::new({
-        let pid = pid.clone();
-        let ppath = ppath.clone();
-        let show_snack = show_snack.clone();
-        let file_tree_data = file_tree_data.clone();
-        move |name: String| {
-            let key = format!("codedroid_file_{}_{}/.codedroid_dir", pid, name);
-            store::save_file(&key, "");
-
-            // Sync to backend
-            let full_path = format!("{}/{}", ppath, name);
-            spawn_local(async move {
-                let _ = api::create_dir_api(&full_path).await;
-            });
-
-            // Refresh tree
-            file_tree_data.set(build_file_tree(&pid));
-            show_snack.run(format!("Created folder: {}", name));
-        }
-    });
-
-    let delete_entry = Callback::new({
-        let pid = pid.clone();
-        let ppath = ppath.clone();
-        let show_snack = show_snack.clone();
-        let close_tab = close_tab.clone();
-        let file_tree_data = file_tree_data.clone();
-        move |entry: FileEntry| {
-            let storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
-            
-            if entry.is_dir {
-                // Delete all keys in LocalStorage matching prefix
-                let len = storage.length().unwrap_or(0);
-                let dir_prefix = format!("codedroid_file_{}_{}/", pid, entry.name);
-                let placeholder_key = format!("codedroid_file_{}_{}/.codedroid_dir", pid, entry.name);
-                
-                let mut keys_to_remove = Vec::new();
-                for i in 0..len {
-                    if let Ok(Some(k)) = storage.key(i) {
-                        if k.starts_with(&dir_prefix) || k == placeholder_key {
-                            keys_to_remove.push(k.clone());
-                            // Also close tab for any files in that directory
-                            if let Some(rel) = k.strip_prefix(&format!("codedroid_file_{}_", pid)) {
-                                close_tab.run(rel.to_string());
-                            }
-                        }
-                    }
-                }
-                for k in keys_to_remove {
-                    let _ = storage.remove_item(&k);
-                }
-
-                // Sync to backend
-                let full_path = format!("{}/{}", ppath, entry.name);
-                spawn_local(async move {
-                    let _ = api::delete_file_api(&full_path, true).await;
-                });
-                show_snack.run(format!("Deleted folder: {}", entry.name));
-            } else {
-                // Remove single file key
-                let key = store::file_key(&pid, &entry.name);
-                let _ = storage.remove_item(&key);
-                close_tab.run(entry.name.clone());
-
-                // Sync to backend
-                let full_path = format!("{}/{}", ppath, entry.name);
-                spawn_local(async move {
-                    let _ = api::delete_file_api(&full_path, false).await;
-                });
-                show_snack.run(format!("Deleted file: {}", entry.name));
-            }
-
-            // Refresh tree
-            file_tree_data.set(build_file_tree(&pid));
-        }
-    });
+    let delete_entry = make_delete_entry(
+        pid.clone(),
+        ppath.clone(),
+        show_snack.clone(),
+        close_tab.clone(),
+        file_tree_data.clone(),
+    );
 
     let copy_entry = Callback::new({
         let show_snack = show_snack.clone();
@@ -932,246 +265,27 @@ pub fn EditorPage() -> impl IntoView {
         }
     });
 
-    let paste_entry = Callback::new({
-        let pid = pid.clone();
-        let ppath = ppath.clone();
-        let show_snack = show_snack.clone();
-        let open_file = open_file.clone();
-        let file_tree_data = file_tree_data.clone();
-        move |target_dir: Option<String>| {
-            if let Some(src_item) = copied_item.get_untracked() {
-                let storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
-                let target_folder = target_dir.unwrap_or_default();
-                
-                // Determine new path
-                let item_name = src_item.name.split('/').last().unwrap_or(&src_item.name);
-                let mut dest_name = if target_folder.is_empty() {
-                    item_name.to_string()
-                } else {
-                    format!("{}/{}", target_folder, item_name)
-                };
+    let paste_entry = make_paste_entry(
+        pid.clone(),
+        ppath.clone(),
+        show_snack.clone(),
+        open_file.clone(),
+        file_tree_data.clone(),
+        copied_item,
+    );
 
-                // Handle duplicates
-                if dest_name == src_item.name {
-                    if src_item.is_dir {
-                        dest_name = format!("{}_copy", dest_name);
-                    } else {
-                        if let Some(idx) = dest_name.rfind('.') {
-                            let (base, ext) = dest_name.split_at(idx);
-                            dest_name = format!("{}_copy{}", base, ext);
-                        } else {
-                            dest_name = format!("{}_copy", dest_name);
-                        }
-                    }
-                }
+    let move_entry = make_move_entry(
+        pid.clone(),
+        ppath.clone(),
+        show_snack.clone(),
+        file_tree_data.clone(),
+        active_tab,
+        open_tabs,
+    );
 
-                if src_item.is_dir {
-                    let len = storage.length().unwrap_or(0);
-                    let src_prefix = format!("codedroid_file_{}_{}/", pid, src_item.name);
-                    let mut copied_keys = Vec::new();
-                    
-                    for i in 0..len {
-                        if let Ok(Some(k)) = storage.key(i) {
-                            if k.starts_with(&src_prefix) {
-                                if let Some(sub) = k.strip_prefix(&src_prefix) {
-                                    if let Ok(Some(val)) = storage.get_item(&k) {
-                                        let new_k = format!("codedroid_file_{}_{}/{}", pid, dest_name, sub);
-                                        copied_keys.push((new_k, val));
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    for (k, v) in copied_keys {
-                        let _ = storage.set_item(&k, &v);
-                    }
-
-                    let src_marker = format!("codedroid_file_{}_{}/.codedroid_dir", pid, src_item.name);
-                    let dest_marker = format!("codedroid_file_{}_{}/.codedroid_dir", pid, dest_name);
-                    if let Ok(Some(_)) = storage.get_item(&src_marker) {
-                        let _ = storage.set_item(&dest_marker, "");
-                    }
-
-                    // Sync to backend
-                    let src_full = format!("{}/{}", ppath, src_item.name);
-                    let dest_full = format!("{}/{}", ppath, dest_name);
-                    spawn_local(async move {
-                        let _ = api::copy_file_api(&src_full, &dest_full, true).await;
-                    });
-                    show_snack.run(format!("Pasted folder as: {}", dest_name));
-                } else {
-                    let src_key = store::file_key(&pid, &src_item.name);
-                    if let Ok(Some(content)) = storage.get_item(&src_key) {
-                        let dest_key = store::file_key(&pid, &dest_name);
-                        let _ = storage.set_item(&dest_key, &content);
-
-                        // Sync to backend
-                        let src_full = format!("{}/{}", ppath, src_item.name);
-                        let dest_full = format!("{}/{}", ppath, dest_name);
-                        let open_file = open_file.clone();
-                        let dest_name_clone = dest_name.clone();
-                        spawn_local(async move {
-                            let _ = api::copy_file_api(&src_full, &dest_full, false).await;
-                            open_file.run(dest_name_clone);
-                        });
-                        show_snack.run(format!("Pasted file as: {}", dest_name));
-                    }
-                }
-
-                // Refresh tree
-                file_tree_data.set(build_file_tree(&pid));
-            }
-        }
-    });
-
-    let move_entry = Callback::new({
-        let pid = pid.clone();
-        let ppath = ppath.clone();
-        let show_snack = show_snack.clone();
-        let file_tree_data = file_tree_data.clone();
-        let active_tab = active_tab.clone();
-        let open_tabs = open_tabs.clone();
-        
-        move |(entry, new_name): (FileEntry, String)| {
-            let storage = web_sys::window().unwrap().local_storage().unwrap().unwrap();
-            let old_name = entry.name.clone();
-            
-            if old_name == new_name || new_name.trim().is_empty() { return; }
-            
-            if entry.is_dir {
-                // Moving a directory. Rename all keys in localstorage with matching prefix
-                let len = storage.length().unwrap_or(0);
-                let old_prefix = format!("codedroid_file_{}_{}/", pid, old_name);
-                let new_prefix = format!("codedroid_file_{}_{}/", pid, new_name);
-                let old_marker = format!("codedroid_file_{}_{}/.codedroid_dir", pid, old_name);
-                let new_marker = format!("codedroid_file_{}_{}/.codedroid_dir", pid, new_name);
-                
-                let mut keys_to_move = Vec::new();
-                for i in 0..len {
-                    if let Ok(Some(k)) = storage.key(i) {
-                        if k.starts_with(&old_prefix) {
-                            keys_to_move.push(k.clone());
-                        }
-                    }
-                }
-                
-                for k in keys_to_move {
-                    if let Ok(Some(val)) = storage.get_item(&k) {
-                        let sub = k.strip_prefix(&old_prefix).unwrap();
-                        let new_k = format!("{}{}", new_prefix, sub);
-                        let _ = storage.set_item(&new_k, &val);
-                        let _ = storage.remove_item(&k);
-                    }
-                }
-                
-                if let Ok(Some(_)) = storage.get_item(&old_marker) {
-                    let _ = storage.set_item(&new_marker, "");
-                    let _ = storage.remove_item(&old_marker);
-                }
-                
-                // Update open tabs
-                open_tabs.update(|t| {
-                    for tab in t.iter_mut() {
-                        if tab.starts_with(&format!("{}/", old_name)) {
-                            if let Some(sub) = tab.strip_prefix(&format!("{}/", old_name)) {
-                                *tab = format!("{}/{}", new_name, sub);
-                            }
-                        }
-                    }
-                });
-                
-                // If active tab has changed name, update active_tab
-                if let Some(active) = active_tab.get_untracked() {
-                    if active.starts_with(&format!("{}/", old_name)) {
-                        if let Some(sub) = active.strip_prefix(&format!("{}/", old_name)) {
-                            active_tab.set(Some(format!("{}/{}", new_name, sub)));
-                        }
-                    }
-                }
-                
-                // Sync to backend
-                let src_full = format!("{}/{}", ppath, old_name);
-                let dest_full = format!("{}/{}", ppath, new_name);
-                spawn_local(async move {
-                    let _ = api::move_file_api(&src_full, &dest_full).await;
-                });
-                
-                show_snack.run(format!("Moved folder to: {}", new_name));
-            } else {
-                // Moving a single file
-                let old_key = store::file_key(&pid, &old_name);
-                let new_key = store::file_key(&pid, &new_name);
-                
-                if let Ok(Some(content)) = storage.get_item(&old_key) {
-                    let _ = storage.set_item(&new_key, &content);
-                    let _ = storage.remove_item(&old_key);
-                }
-                
-                // Update open tabs
-                open_tabs.update(|t| {
-                    for tab in t.iter_mut() {
-                        if *tab == old_name {
-                            *tab = new_name.clone();
-                        }
-                    }
-                });
-                
-                // Update active tab
-                if active_tab.get_untracked().as_deref() == Some(&old_name) {
-                    active_tab.set(Some(new_name.clone()));
-                }
-                
-                // Sync to backend
-                let src_full = format!("{}/{}", ppath, old_name);
-                let dest_full = format!("{}/{}", ppath, new_name);
-                spawn_local(async move {
-                    let _ = api::move_file_api(&src_full, &dest_full).await;
-                });
-                
-                show_snack.run(format!("Moved file to: {}", new_name));
-            }
-            
-            // Refresh tree
-            file_tree_data.set(build_file_tree(&pid));
-        }
-    });
 
     // Sync all files from localStorage to backend filesystem on mount
-    let sync_pid = project.id.clone();
-    let sync_ppath = project.path.clone();
-    Effect::new(move |_| {
-        let p_id = sync_pid.clone();
-        let p_path = sync_ppath.clone();
-        spawn_local(async move {
-            if let Some(window) = web_sys::window() {
-                if let Ok(Some(storage)) = window.local_storage() {
-                    let len = storage.length().unwrap_or(0);
-                    let prefix = format!("codedroid_file_{}_", p_id);
-                    for i in 0..len {
-                        if let Ok(Some(k)) = storage.key(i) {
-                            if let Some(rel) = k.strip_prefix(&prefix) {
-                                if is_absolute_path(rel) {
-                                    continue;
-                                }
-                                if rel.ends_with("/.codedroid_dir") {
-                                    let dir_name = rel.trim_end_matches("/.codedroid_dir");
-                                    if !dir_name.is_empty() {
-                                        let full_dir_path = format!("{}/{}", p_path, dir_name);
-                                        let _ = api::create_dir_api(&full_dir_path).await;
-                                    }
-                                } else if !rel.is_empty() {
-                                    let content = store::load_file(&k);
-                                    let full_file_path = format!("{}/{}", p_path, rel);
-                                    let _ = api::save_file_api(&full_file_path, &content).await;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        });
-    });
+    sync_project(project.id.clone(), project.path.clone());
 
     // Open default file on mount
     Effect::new(move |_| {

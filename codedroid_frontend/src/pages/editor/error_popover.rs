@@ -20,11 +20,34 @@ pub fn ErrorPopover(
                 let code_sig = code;
                 let active_error_sig = active_error;
                 
+                let severity = diag.severity.unwrap_or(1);
+                let popover_class = match severity {
+                    1 => "error-floating-popover",
+                    2 => "error-floating-popover warning",
+                    3 => "error-floating-popover info",
+                    4 => "error-floating-popover hint",
+                    _ => "error-floating-popover",
+                };
+                let title_class = match severity {
+                    1 => "error-floating-title",
+                    2 => "error-floating-title warning",
+                    3 => "error-floating-title info",
+                    4 => "error-floating-title hint",
+                    _ => "error-floating-title",
+                };
+                let severity_icon = match severity {
+                    1 => "🔴",
+                    2 => "🟡",
+                    3 => "🔵",
+                    4 => "💡",
+                    _ => "🔴",
+                };
+                
                 view! {
-                    <div class="error-floating-popover" style=format!("left:{}px; top:{}px", coords.0, coords.1)>
+                    <div class=popover_class style=format!("left:{}px; top:{}px", coords.0, coords.1)>
                         <div class="error-floating-header">
-                            <span class="error-floating-icon">"🔴"</span>
-                            <span class="error-floating-title">{diag.message}</span>
+                            <span class="error-floating-icon">{severity_icon}</span>
+                            <span class=title_class>{diag.message}</span>
                         </div>
                         
                         {move || {

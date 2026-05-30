@@ -350,9 +350,12 @@ pub fn EditorCodeArea(
                     "code-container hide-line-numbers"
                 };
 
+                let raw_lines: Vec<String> = code.get().split('\n').map(|s| s.to_string()).collect();
+                let char_width = s.font_size as f64 * 0.6015;
+
                 view! {
                     <div class=container_class style=move || format!(
-                            "font-size:{}px;white-space:{};tab-size:{}",
+                             "font-size:{}px;white-space:{};tab-size:{}",
                             s.font_size,
                             if s.word_wrap { "pre-wrap" } else { "pre" },
                             s.tab_size,
@@ -360,9 +363,27 @@ pub fn EditorCodeArea(
                         <div class="code-layer code-highlight">
                             {highlighted_lines.into_iter().enumerate().map(|(idx, html_line)| {
                                 let n = idx + 1;
-                                let has_error = active_diags.iter().any(|d| d.range.start.line == (n - 1) as u32 && d.severity.unwrap_or(1) == 1);
-                                let has_warning = active_diags.iter().any(|d| d.range.start.line == (n - 1) as u32 && d.severity.unwrap_or(1) == 2);
+                                let raw_line = raw_lines.get(idx).cloned().unwrap_or_default();
+                                let raw_line_len = raw_line.chars().count();
+
+                                let line_diags: Vec<api::Diagnostic> = active_diags.iter()
+                                    .filter(|d| d.range.start.line == (n - 1) as u32)
+                                    .cloned()
+                                    .collect();
+
+                                // Find highest severity diagnostic (lowest numerical value, e.g. 1 = Error)
+                                let primary_diag = line_diags.iter().min_by_key(|d| d.severity.unwrap_or(1));
+                                let has_error = line_diags.iter().any(|d| d.severity.unwrap_or(1) == 1);
+                                let has_warning = line_diags.iter().any(|d| d.severity.unwrap_or(1) == 2);
                                 
+                                let line_class = match primary_diag.map(|d| d.severity.unwrap_or(1)) {
+                                    Some(1) => "editor-line has-error",
+                                    Some(2) => "editor-line has-warning",
+                                    Some(3) => "editor-line has-info",
+                                    Some(4) => "editor-line has-hint",
+                                    _ => "editor-line",
+                                };
+
                                 let gutter_class = if has_error {
                                     "line-number-item has-error"
                                 } else if has_warning {
@@ -380,7 +401,7 @@ pub fn EditorCodeArea(
                                 };
 
                                 view! {
-                                    <div class="editor-line">
+                                    <div class=line_class>
                                         {s.show_line_numbers.then(|| {
                                             view! {
                                                 <div class="line-number-gutter">
@@ -393,7 +414,57 @@ pub fn EditorCodeArea(
                                                 </div>
                                             }
                                         })}
-                                        <div class="line-content" inner_html=html_line></div>
+                                        <div class="line-content" style="position: relative;">
+                                            <div inner_html=html_line style="display: inline-block; min-width: 100%;"></div>
+                                            {line_diags.clone().into_iter().map(|d| {
+                                                let severity_val = d.severity.unwrap_or(1);
+                                                let squiggly_class = match severity_val {
+                                                    1 => "squiggly-error-line",
+                                                    2 => "squiggly-warning-line",
+                                                    3 => "squiggly-info-line",
+                                                    4 => "squiggly-hint-line",
+                                                    _ => "squiggly-error-line",
+                                                };
+                                                
+                                                let start_char = d.range.start.character as f64;
+                                                let mut end_char = d.range.end.character as f64;
+                                                
+                                                if d.range.end.line > d.range.start.line {
+                                                    end_char = raw_line_len as f64;
+                                                }
+                                                
+                                                let end_char = end_char.max(start_char + 1.0); // at least 1 char width
+                                                let left_px = start_char * char_width;
+                                                let width_px = (end_char - start_char) * char_width;
+                                                
+                                                view! {
+                                                    <div 
+                                                        class=squiggly_class 
+                                                        style=format!("left: calc(var(--line-padding) + {}px); width: {}px;", left_px, width_px)
+                                                    />
+                                                }
+                                            }).collect_view()}
+                                            {primary_diag.map(|d| {
+                                                let severity_val = d.severity.unwrap_or(1);
+                                                let msg_class = match severity_val {
+                                                    1 => "inline-diagnostic-msg error",
+                                                    2 => "inline-diagnostic-msg warning",
+                                                    3 => "inline-diagnostic-msg info",
+                                                    4 => "inline-diagnostic-msg hint",
+                                                    _ => "inline-diagnostic-msg error",
+                                                };
+                                                let msg_left = raw_line_len as f64 * char_width;
+                                                
+                                                view! {
+                                                    <span 
+                                                        class=msg_class
+                                                        style=format!("left: calc(var(--line-padding) + {}px + 24px);", msg_left)
+                                                    >
+                                                        {d.message.clone()}
+                                                    </span>
+                                                }
+                                            })}
+                                        </div>
                                     </div>
                                 }
                             }).collect_view()}

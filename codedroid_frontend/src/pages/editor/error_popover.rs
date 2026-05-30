@@ -44,7 +44,18 @@ pub fn ErrorPopover(
                 };
                 
                 view! {
-                    <div class=popover_class style=format!("left:{}px; top:{}px", coords.0, coords.1)>
+                    <div 
+                        class=popover_class 
+                        style=format!("left:{}px; top:{}px", coords.0, coords.1)
+                        on:mousedown=move |e: web_sys::MouseEvent| {
+                            e.prevent_default();
+                            e.stop_propagation();
+                        }
+                        on:click=move |e: web_sys::MouseEvent| {
+                            e.prevent_default();
+                            e.stop_propagation();
+                        }
+                    >
                         <div class="error-floating-header">
                             <span class="error-floating-icon">{severity_icon}</span>
                             <span class=title_class>{diag.message}</span>

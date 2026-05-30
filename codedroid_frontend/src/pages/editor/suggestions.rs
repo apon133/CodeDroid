@@ -25,6 +25,35 @@ pub fn SuggestionsOverlay(
         }
     });
 
+    Effect::new(move |_| {
+        let _idx = selected_idx.get();
+        let _sug_count = suggestions.get().len();
+        if let Some(window) = web_sys::window() {
+            if let Some(document) = window.document() {
+                if let Some(container) = document.query_selector(".suggestions-list-container").ok().flatten() {
+                    if let Some(selected_el) = document.query_selector(".suggestion-item.selected").ok().flatten() {
+                        use wasm_bindgen::JsCast;
+                        if let Some(el) = selected_el.dyn_ref::<web_sys::HtmlElement>() {
+                            if let Some(container_el) = container.dyn_ref::<web_sys::HtmlElement>() {
+                                let item_top = el.offset_top();
+                                let item_bottom = item_top + el.offset_height();
+                                let scroll_top = container_el.scroll_top();
+                                let client_height = container_el.client_height();
+                                let scroll_bottom = scroll_top + client_height;
+
+                                if item_top < scroll_top {
+                                    container_el.set_scroll_top(item_top);
+                                } else if item_bottom > scroll_bottom {
+                                    container_el.set_scroll_top(item_bottom - client_height);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
     view! {
         {move || {
             let items = suggestions.get();
@@ -47,9 +76,19 @@ pub fn SuggestionsOverlay(
                                 view! {
                                     <button 
                                         class=move || if selected_idx.get() == i { "suggestion-item selected" } else { "suggestion-item" }
-                                        on:mousedown=move |e: web_sys::MouseEvent| { e.prevent_default(); }
-                                        on:mouseup=move |e: web_sys::MouseEvent| { e.prevent_default(); on_select.run(s2.clone()); }
-                                        on:click=move |e: web_sys::MouseEvent| { e.prevent_default(); }
+                                        on:mousedown=move |e: web_sys::MouseEvent| {
+                                            e.prevent_default();
+                                            e.stop_propagation();
+                                            on_select.run(s2.clone());
+                                        }
+                                        on:mouseup=move |e: web_sys::MouseEvent| {
+                                            e.prevent_default();
+                                            e.stop_propagation();
+                                        }
+                                        on:click=move |e: web_sys::MouseEvent| {
+                                            e.prevent_default();
+                                            e.stop_propagation();
+                                        }
                                         on:touchstart=move |e: web_sys::TouchEvent| {
                                             if let Some(t) = e.touches().get(0) {
                                                 set_touch_start.set((t.client_x() as f64, t.client_y() as f64));

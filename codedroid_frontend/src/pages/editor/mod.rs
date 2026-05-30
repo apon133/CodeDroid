@@ -12,6 +12,7 @@ pub mod error_popover;
 pub mod hover;
 pub mod suggestions;
 pub mod operations;
+pub mod context_menu;
 
 use utils::*;
 use components::*;
@@ -71,7 +72,6 @@ pub fn EditorPage() -> impl IntoView {
     let snack_msg: RwSignal<Option<String>> = RwSignal::new(None);
     let file_tree_data: RwSignal<Vec<FileEntry>> = RwSignal::new(build_file_tree(&project.id));
     let show_deps: RwSignal<bool> = RwSignal::new(false);
-    let show_more_menu: RwSignal<bool> = RwSignal::new(false);
     let dep_input: RwSignal<String> = RwSignal::new(String::new());
     let dep_output: RwSignal<String> = RwSignal::new(String::new());
     let suggestions = RwSignal::new(Vec::<api::CompletionItem>::new());
@@ -389,89 +389,7 @@ pub fn EditorPage() -> impl IntoView {
                     }>
                     <LucideIcon name="replace" size="20" />
                 </button>
-                <button class="btn btn-icon desktop-only" title="Dependencies"
-                    on:click=move |_| show_deps.update(|v| *v = !*v)>
-                    <LucideIcon name="package" size="20" />
-                </button>
-                <button class="btn btn-icon desktop-only" title="Format Code (Shift+Alt+F)"
-                    on:click=move |_| format_code.run(())>
-                    <LucideIcon name="code" size="20" />
-                </button>
-                <button class="btn btn-icon desktop-only" title="Go to Definition (F12)"
-                    on:click=move |_| trigger_definition.run(())>
-                    <LucideIcon name="locate-fixed" size="20" />
-                </button>
-                <button class="btn btn-icon desktop-only" title="Find References (Shift+F12)"
-                    on:click=move |_| trigger_references.run(())>
-                    <LucideIcon name="search-code" size="20" />
-                </button>
-                <div class="more-menu-container mobile-only">
-                    <button class="btn btn-icon" title="More Options"
-                        on:click=move |e: web_sys::MouseEvent| {
-                            e.stop_propagation();
-                            show_more_menu.update(|v| *v = !*v);
-                        }>
-                        <LucideIcon name="more-vertical" size="20" />
-                    </button>
-                    {move || show_more_menu.get().then(|| view! {
-                        <>
-                        <div class="more-menu-backdrop" on:click=move |e: web_sys::MouseEvent| {
-                            e.stop_propagation();
-                            show_more_menu.set(false);
-                        } />
-                        <div class="more-menu-dropdown" on:click=move |e: web_sys::MouseEvent| e.stop_propagation()>
-                            <button class="more-menu-item"
-                                on:click=move |_| {
-                                    sidebar_mode.set(1);
-                                    sidebar_open.set(true);
-                                    show_more_menu.set(false);
-                                }>
-                                <LucideIcon name="replace" size="18" />
-                                <span>"Search / Replace"</span>
-                            </button>
-                            <button class="more-menu-item"
-                                on:click=move |_| {
-                                    show_deps.update(|v| *v = !*v);
-                                    show_more_menu.set(false);
-                                }>
-                                <LucideIcon name="package" size="18" />
-                                <span>"Dependencies"</span>
-                            </button>
-                            <button class="more-menu-item"
-                                on:click=move |_| {
-                                    format_code.run(());
-                                    show_more_menu.set(false);
-                                }>
-                                <LucideIcon name="code" size="18" />
-                                <span>"Format Code"</span>
-                            </button>
-                            <button class="more-menu-item"
-                                on:click=move |_| {
-                                    trigger_definition.run(());
-                                    show_more_menu.set(false);
-                                }>
-                                <LucideIcon name="locate-fixed" size="18" />
-                                <span>"Go to Definition"</span>
-                            </button>
-                            <button class="more-menu-item"
-                                on:click=move |_| {
-                                    trigger_references.run(());
-                                    show_more_menu.set(false);
-                                }>
-                                <LucideIcon name="search-code" size="18" />
-                                <span>"Find References"</span>
-                            </button>
-                        </div>
-                        </>
-                    })}
-                </div>
-                {move || dirty.get().then(|| view! {
-                    <button class="btn btn-icon" title="Save (Ctrl+S)"
-                        on:click=move |_| save_current.run(())
-                    >
-                        <LucideIcon name="save" size="20" />
-                    </button>
-                })}
+
                 {move || current_pid.get().map(|_| view! {
                     <button class="btn btn-danger" style="display:inline-flex; align-items:center; gap:6px;" on:click=move |_| stop_code.run(())>
                         <LucideIcon name="square" size="14" /> <span class="btn-text">"Stop"</span>
@@ -580,6 +498,7 @@ pub fn EditorPage() -> impl IntoView {
                         show_snack=show_snack
                         trigger_definition=trigger_definition
                         trigger_references=trigger_references
+                        show_deps=show_deps
                     />
 
                     <BottomPanel 

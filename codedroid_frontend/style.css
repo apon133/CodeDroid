@@ -2890,3 +2890,79 @@ body.dragging-preview iframe {
   overflow-x: auto;
   min-width: 0;
 }
+
+/* Custom Context Menu */
+.context-menu-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: transparent;
+  z-index: 9999;
+}
+
+.context-menu-floating {
+  position: fixed;
+  z-index: 10000;
+  background: #1e1e1e;
+  border: 1px solid #454545;
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  min-width: 220px;
+  padding: 6px 0;
+  display: flex;
+  flex-direction: column;
+  animation: contextMenuFadeIn 0.12s ease-out;
+}
+
+@keyframes contextMenuFadeIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.context-menu-item {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-ui), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  color: #cccccc;
+  text-align: left;
+  width: 100%;
+  transition: background 0.1s ease, color 0.1s ease;
+  gap: 10px;
+}
+
+.context-menu-item:hover {
+  background: #094771;
+  color: #ffffff;
+}
+
+.context-menu-item:active {
+  background: #0c5a8f;
+}
+
+.context-menu-label {
+  flex: 1;
+}
+
+.context-menu-shortcut {
+  font-size: 11px;
+  color: #858585;
+  font-family: var(--font-mono), monospace;
+}
+
+.context-menu-item:hover .context-menu-shortcut {
+  color: #c5c5c5;
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: #454545;
+  margin: 4px 0;
+}

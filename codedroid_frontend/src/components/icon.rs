@@ -7,10 +7,7 @@ pub fn LucideIcon(
     #[prop(optional, default = "16")] size: &'static str,
 ) -> impl IntoView {
     let svg_content = match name {
-        "compass" => view! {
-            <circle cx="12" cy="12" r="10" />
-            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 8.88 9.88 16.24 7.76" />
-        }.into_any(),
+
         "locate-fixed" => view! {
             <line x1="2" x2="5" y1="12" y2="12" />
             <line x1="19" x2="22" y1="12" y2="12" />
@@ -19,16 +16,7 @@ pub fn LucideIcon(
             <circle cx="12" cy="12" r="7" />
             <circle cx="12" cy="12" r="3" />
         }.into_any(),
-        "search-code" => view! {
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.3-4.3" />
-            <polyline points="9 8 7 11 9 14" />
-            <polyline points="13 8 15 11 13 14" />
-        }.into_any(),
-        "arrow-up-right" => view! {
-            <line x1="7" x2="17" y1="17" y2="7" />
-            <polyline points="7 7 17 7 17 17" />
-        }.into_any(),
+
         "folder" => view! {
             <path d="M20 20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2 3h6a2 2 0 0 1 2 2z" />
         }.into_any(),
@@ -40,18 +28,7 @@ pub fn LucideIcon(
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3" />
         }.into_any(),
-        "package" => view! {
-            <path d="M11 21.88a2 2 0 0 0 2 0l7.68-4.43a2 2 0 0 0 1-1.73V7.72a2 2 0 0 0-1-1.73L13 1.56a2 2 0 0 0-2 0L3.32 6a2 2 0 0 0-1 1.73v8a2 2 0 0 0 1 1.73Z" />
-            <path d="M12 22V12" />
-            <path d="m12 12 8.73-5.04" />
-            <path d="m12 12-8.73-5.04" />
-            <path d="M3.57 6.88 12 11.75l8.43-4.87" />
-        }.into_any(),
-        "save" => view! {
-            <path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
-            <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" />
-            <path d="M7 3v4a1 1 0 0 0 1 1h7" />
-        }.into_any(),
+
         "play" => view! {
             <polygon points="6 3 20 12 6 21 6 3" />
         }.into_any(),
@@ -129,10 +106,7 @@ pub fn LucideIcon(
             <path d="M9 14h6" />
             <path d="M12 11v6" />
         }.into_any(),
-        "terminal" => view! {
-            <polyline points="4 17 10 11 4 5" />
-            <line x1="12" x2="20" y1="19" y2="19" />
-        }.into_any(),
+
         "settings" => view! {
             <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" />
         }.into_any(),
@@ -155,11 +129,7 @@ pub fn LucideIcon(
             <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
             <path d="M2 12h20" />
         }.into_any(),
-        "menu" => view! {
-            <line x1="4" x2="20" y1="12" y2="12" />
-            <line x1="4" x2="20" y1="6" y2="6" />
-            <line x1="4" x2="20" y1="18" y2="18" />
-        }.into_any(),
+
         "code" => view! {
             <polyline points="16 18 22 12 16 6" />
             <polyline points="8 6 2 12 8 18" />
@@ -185,11 +155,7 @@ pub fn LucideIcon(
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
         }.into_any(),
-        "more-vertical" => view! {
-            <circle cx="12" cy="12" r="1" fill="currentColor" />
-            <circle cx="12" cy="5" r="1" fill="currentColor" />
-            <circle cx="12" cy="19" r="1" fill="currentColor" />
-        }.into_any(),
+
         _ => view! {
             <circle cx="12" cy="12" r="10" />
         }.into_any()

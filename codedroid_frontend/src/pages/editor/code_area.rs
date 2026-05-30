@@ -7,6 +7,11 @@ use wasm_bindgen_futures::spawn_local;
 use super::hover::{HoverCard, build_hover_html};
 use super::suggestions::SuggestionsOverlay;
 use super::error_popover::ErrorPopover;
+use super::context_menu::ContextMenu;
+
+struct ThreadSafeTimeout(Option<gloo_timers::callback::Timeout>);
+unsafe impl Send for ThreadSafeTimeout {}
+unsafe impl Sync for ThreadSafeTimeout {}
 
 #[component]
 pub fn EditorCodeArea(
@@ -32,6 +37,7 @@ pub fn EditorCodeArea(
     show_snack: Callback<String>,
     trigger_definition: Callback<()>,
     trigger_references: Callback<()>,
+    show_deps: RwSignal<bool>,
 ) -> impl IntoView {
     let hover_visible = RwSignal::new(false);
     let hover_content = RwSignal::new(None::<String>);
@@ -43,6 +49,15 @@ pub fn EditorCodeArea(
     let mouse_coords = RwSignal::new((0.0, 0.0));
     let hover_version = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
     let hover_card_active = RwSignal::new(false);
+
+    let show_context_menu = RwSignal::new(false);
+    let context_menu_coords = RwSignal::new((0.0, 0.0));
+    let touch_start = RwSignal::new(None::<((f64, f64), f64)>);
+    let long_press_timeout_id = StoredValue::new(ThreadSafeTimeout(None));
+    
+    let close_context_menu = move || {
+        show_context_menu.set(false);
+    };
 
     view! {
         <div class="code-area" style="flex:2">
@@ -484,8 +499,10 @@ pub fn EditorCodeArea(
                             }
                             on:beforeinput={
                                 let close_hover_immediate = close_hover_immediate.clone();
+                                let close_context_menu = close_context_menu.clone();
                                 move |input_ev: web_sys::InputEvent| {
                                     close_hover_immediate();
+                                    close_context_menu();
                                     use wasm_bindgen::JsCast;
                                     if let Some(data) = input_ev.data() {
                                         if data.chars().count() == 1 {
@@ -510,8 +527,10 @@ pub fn EditorCodeArea(
                             }
                             on:input={
                                  let close_hover_immediate = close_hover_immediate.clone();
+                                 let close_context_menu = close_context_menu.clone();
                                  move |e: web_sys::Event| {
                                      close_hover_immediate();
+                                     close_context_menu();
                                     use wasm_bindgen::JsCast;
                                     let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
                                     let val = target.value();
@@ -565,9 +584,18 @@ pub fn EditorCodeArea(
                             }
                             on:keydown={
                                  let close_hover_immediate = close_hover_immediate.clone();
+                                 let show_context_menu = show_context_menu.clone();
                                  move |e: web_sys::KeyboardEvent| {
                                      close_hover_immediate();
-                                if (e.ctrl_key() || e.meta_key()) && e.key() == "s" { e.prevent_default(); save_current.run(()); }
+                                     if show_context_menu.get() {
+                                         if e.key() == "Escape" {
+                                             e.prevent_default();
+                                             show_context_menu.set(false);
+                                             return;
+                                         }
+                                         show_context_menu.set(false);
+                                     }
+                                     if (e.ctrl_key() || e.meta_key()) && e.key() == "s" { e.prevent_default(); save_current.run(()); }
                                 if e.shift_key() && e.alt_key() && (e.key() == "f" || e.key() == "F") { e.prevent_default(); format_code.run(()); }
                                 if (e.ctrl_key() || e.meta_key()) && e.key() == "f" { e.prevent_default(); show_search.update(|v| *v = !*v); }
                                 if e.key() == "F12" { e.prevent_default(); trigger_definition.run(()); }
@@ -656,8 +684,10 @@ pub fn EditorCodeArea(
                             on:click={
                                  let close_hover_immediate = close_hover_immediate.clone();
                                  let trigger_hover_at_cursor = trigger_hover_at_cursor.clone();
+                                 let close_context_menu = close_context_menu.clone();
                                  move |e: web_sys::MouseEvent| {
                                      close_hover_immediate();
+                                     close_context_menu();
                                     suggestions.set(Vec::new());
                                     use wasm_bindgen::JsCast;
                                     let target = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
@@ -706,21 +736,112 @@ pub fn EditorCodeArea(
                                     check_error_at_cursor.run((line, character));
                                 }
                             }
-                            on:scroll=move |e: web_sys::Event| {
-                                use wasm_bindgen::JsCast;
-                                let textarea = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
-                                let scroll_top = textarea.scroll_top();
-                                let scroll_left = textarea.scroll_left();
-                                if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
-                                    if let Some(highlight) = doc.query_selector(".code-highlight").ok().flatten() {
-                                        let _ = highlight.unchecked_ref::<web_sys::HtmlElement>().style()
-                                            .set_property("transform", &format!("translate({}px, {}px)", -scroll_left, -scroll_top));
+                            on:scroll={
+                                let close_context_menu = close_context_menu.clone();
+                                move |e: web_sys::Event| {
+                                    close_context_menu();
+                                    use wasm_bindgen::JsCast;
+                                    let textarea = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
+                                    let scroll_top = textarea.scroll_top();
+                                    let scroll_left = textarea.scroll_left();
+                                    if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
+                                        if let Some(highlight) = doc.query_selector(".code-highlight").ok().flatten() {
+                                            let _ = highlight.unchecked_ref::<web_sys::HtmlElement>().style()
+                                                .set_property("transform", &format!("translate({}px, {}px)", -scroll_left, -scroll_top));
+                                        }
+                                    }
+                                    let start = textarea.selection_start().unwrap().unwrap_or(0);
+                                    let val = textarea.value();
+                                    if let Some(coords) = update_cursor_coords(&val, start) {
+                                        cursor_coords.set(coords);
                                     }
                                 }
-                                let start = textarea.selection_start().unwrap().unwrap_or(0);
-                                let val = textarea.value();
-                                if let Some(coords) = update_cursor_coords(&val, start) {
-                                    cursor_coords.set(coords);
+                            }
+                            on:contextmenu={
+                                let show_context_menu = show_context_menu.clone();
+                                let context_menu_coords = context_menu_coords.clone();
+                                move |e: web_sys::MouseEvent| {
+                                    e.prevent_default();
+                                    let cx = e.client_x() as f64;
+                                    let cy = e.client_y() as f64;
+                                    show_context_menu.set(true);
+                                    context_menu_coords.set((cx, cy));
+                                }
+                            }
+                            on:touchstart={
+                                let touch_start = touch_start.clone();
+                                let long_press_timeout_id = long_press_timeout_id.clone();
+                                let show_context_menu = show_context_menu.clone();
+                                let context_menu_coords = context_menu_coords.clone();
+                                move |e: web_sys::TouchEvent| {
+                                    if let Some(touch) = e.touches().get(0) {
+                                        let x = touch.client_x() as f64;
+                                        let y = touch.client_y() as f64;
+                                        let time = js_sys::Date::now();
+                                        touch_start.set(Some(((x, y), time)));
+
+                                        long_press_timeout_id.update_value(|opt| {
+                                            if let Some(t) = opt.0.take() {
+                                                t.cancel();
+                                            }
+                                        });
+
+                                        let touch_start_c = touch_start.clone();
+                                        let show_context_menu_c = show_context_menu.clone();
+                                        let context_menu_coords_c = context_menu_coords.clone();
+                                        let timeout = gloo_timers::callback::Timeout::new(600, move || {
+                                            if let Some(((tx, ty), _)) = touch_start_c.get() {
+                                                show_context_menu_c.set(true);
+                                                context_menu_coords_c.set((tx, ty));
+                                            }
+                                        });
+                                        long_press_timeout_id.set_value(ThreadSafeTimeout(Some(timeout)));
+                                    }
+                                }
+                            }
+                            on:touchmove={
+                                let touch_start = touch_start.clone();
+                                let long_press_timeout_id = long_press_timeout_id.clone();
+                                move |e: web_sys::TouchEvent| {
+                                    if let Some(touch) = e.touches().get(0) {
+                                        if let Some(((sx, sy), _)) = touch_start.get() {
+                                            let cx = touch.client_x() as f64;
+                                            let cy = touch.client_y() as f64;
+                                            let dist = ((cx - sx).powi(2) + (cy - sy).powi(2)).sqrt();
+                                            if dist > 10.0 {
+                                                long_press_timeout_id.update_value(|opt| {
+                                                    if let Some(t) = opt.0.take() {
+                                                        t.cancel();
+                                                    }
+                                                });
+                                                touch_start.set(None);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            on:touchend={
+                                let touch_start = touch_start.clone();
+                                let long_press_timeout_id = long_press_timeout_id.clone();
+                                move |_| {
+                                    long_press_timeout_id.update_value(|opt| {
+                                        if let Some(t) = opt.0.take() {
+                                            t.cancel();
+                                        }
+                                    });
+                                    touch_start.set(None);
+                                }
+                            }
+                            on:touchcancel={
+                                let touch_start = touch_start.clone();
+                                let long_press_timeout_id = long_press_timeout_id.clone();
+                                move |_| {
+                                    long_press_timeout_id.update_value(|opt| {
+                                        if let Some(t) = opt.0.take() {
+                                            t.cancel();
+                                        }
+                                    });
+                                    touch_start.set(None);
                                 }
                             }
                         />
@@ -754,6 +875,15 @@ pub fn EditorCodeArea(
                             })
                             trigger_definition=trigger_definition
                             trigger_references=trigger_references
+                        />
+                        <ContextMenu
+                            show_menu=show_context_menu
+                            menu_coords=context_menu_coords
+                            trigger_definition=trigger_definition
+                            trigger_references=trigger_references
+                            format_code=format_code
+                            save_document=save_current
+                            show_deps=show_deps
                         />
                     </div>
                 }

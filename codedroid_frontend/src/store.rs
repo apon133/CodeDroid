@@ -75,3 +75,12 @@ pub fn save_file(key: &str, content: &str) {
 pub fn file_key(project_id: &str, filename: &str) -> String {
     format!("codedroid_file_{}_{}", project_id, filename)
 }
+
+// ── Terminal Command History ──────────────────────────────────────────────
+pub fn load_terminal_history(project_id: &str) -> Vec<String> {
+    LocalStorage::get(&format!("codedroid_term_history_{}", project_id)).unwrap_or_default()
+}
+
+pub fn save_terminal_history(project_id: &str, history: &[String]) {
+    let _ = LocalStorage::set(&format!("codedroid_term_history_{}", project_id), history);
+}

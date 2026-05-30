@@ -730,7 +730,7 @@ body {
 .code-editor {
   background: transparent; 
   color: transparent; 
-  caret-color: #fff;
+  caret-color: #007acc;
   outline: none; 
   resize: none; 
   z-index: 2; 
@@ -741,7 +741,7 @@ body {
   padding-right: var(--line-padding) !important;
 }
 
-.code-editor::selection { background: rgba(99, 102, 241, 0.35); color: transparent; }
+.code-editor::selection { background: rgba(38, 79, 120, 0.5); color: transparent; }
 
 /* ── Inline Gutter Line Layout ── */
 .editor-line {
@@ -751,17 +751,32 @@ body {
   width: 100%;
 }
 
+.editor-line.active-line {
+  background: rgba(255, 255, 255, 0.035);
+}
+
 .line-number-gutter {
   width: var(--gutter-width);
-  background: rgba(0,0,0,0.1); 
-  border-right: 1px solid var(--border); 
+  background: transparent; 
+  border-right: none; 
   display: flex;
   justify-content: flex-end;
   align-items: flex-start;
-  padding-right: 10px;
+  padding-right: 14px;
   flex-shrink: 0;
   user-select: none;
   box-sizing: border-box;
+}
+
+.gutter-number-text {
+  color: #858585;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  transition: color 0.1s ease;
+}
+
+.editor-line.active-line .gutter-number-text {
+  color: #e0e0e0 !important;
 }
 
 .line-content {

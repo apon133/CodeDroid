@@ -568,15 +568,16 @@ pub fn BottomPanel(
     project_path: Signal<String>,
     project_id: String,
     file_tree_data: RwSignal<Vec<crate::pages::editor::utils::FileEntry>>,
+    terminal_session_id: RwSignal<Option<String>>,
+    is_running: RwSignal<bool>,
+    terminal_history: RwSignal<Vec<String>>,
 ) -> impl IntoView {
     let expanded_idx = RwSignal::new(Option::<usize>::None);
     let suggestions_state = RwSignal::new(Option::<Vec<crate::api::CodeSuggestion>>::None);
     let loading_suggestions = RwSignal::new(false);
     let project_id_stored = StoredValue::new(project_id);
     let command_input = RwSignal::new(String::new());
-    let terminal_history = RwSignal::new(Vec::<String>::new());
     let history_index = RwSignal::new(Option::<usize>::None);
-    let terminal_session_id = RwSignal::new(Option::<String>::None);
 
     let input_ref = NodeRef::<leptos::html::Input>::new();
     let output_area_ref = NodeRef::<leptos::html::Div>::new();
@@ -623,20 +624,33 @@ pub fn BottomPanel(
             let output_sig = output;
             let session_id_clone = session_id.clone();
             let terminal_session_id_clone = terminal_session_id.clone();
+            let is_running_clone = is_running;
             spawn_local(async move {
                 while terminal_session_id_clone.get_untracked() == Some(session_id_clone.clone()) {
                     gloo_timers::future::TimeoutFuture::new(150).await;
                     if let Ok((new_output, is_alive)) = crate::api::poll_terminal_output_api(&session_id_clone).await {
                         if !new_output.is_empty() {
-                            let mut current = output_sig.get_untracked();
-                            current.push_str(&new_output);
-                            output_sig.set(current);
+                            let mut clean_output = new_output.clone();
+                            let mut ended = false;
+                            if clean_output.contains("[CODE_RUN_ENDED]") {
+                                clean_output = clean_output.replace("[CODE_RUN_ENDED]", "");
+                                ended = true;
+                            }
+                            if !clean_output.is_empty() {
+                                let mut current = output_sig.get_untracked();
+                                current.push_str(&clean_output);
+                                output_sig.set(current);
+                            }
+                            if ended {
+                                is_running_clone.set(false);
+                            }
                         }
                         if !is_alive {
                             let mut current = output_sig.get_untracked();
                             current.push_str("\n[Process completed]\n");
                             output_sig.set(current);
                             terminal_session_id_clone.set(None);
+                            is_running_clone.set(false);
                             break;
                         }
                     } else {
@@ -656,44 +670,46 @@ pub fn BottomPanel(
     });
 
     let stop_command = move || {
-        if let Some(session_id) = terminal_session_id.get_untracked() {
-            let mut current = output.get_untracked();
-            current.push_str("\n[Restarting terminal session...]\n");
-            output.set(current);
+        let proj_id_clone = project_id_stored.get_value();
+        let proj_path_clone = project_path.get_untracked();
+        let file_tree_data_clone = file_tree_data.clone();
+        let terminal_session_id_clone = terminal_session_id.clone();
+        let output_clone = output;
 
-            let proj_id_clone = project_id_stored.get_value();
-            let proj_path_clone = project_path.get_untracked();
-            let file_tree_data_clone = file_tree_data.clone();
-            spawn_local(async move {
+        let mut current = output_clone.get_untracked();
+        current.push_str("\n[Initializing terminal session...]\n");
+        output_clone.set(current);
+
+        spawn_local(async move {
+            if let Some(session_id) = terminal_session_id_clone.get_untracked() {
                 let _ = crate::api::stop_terminal_api(&session_id).await;
-                terminal_session_id.set(None);
+                terminal_session_id_clone.set(None);
+            }
 
-                match crate::api::start_terminal_api(&proj_path_clone).await {
-                    Ok(new_id) => {
-                        terminal_session_id.set(Some(new_id));
-                    }
-                    Err(e) => {
-                        let mut current = output.get_untracked();
-                        current.push_str(&format!("❌ Failed to restart terminal session: {}\n", e));
-                        output.set(current);
-                    }
+            match crate::api::start_terminal_api(&proj_path_clone).await {
+                Ok(new_id) => {
+                    terminal_session_id_clone.set(Some(new_id));
+                    let mut current = output_clone.get_untracked();
+                    current.push_str("[Terminal session initialized]\n");
+                    output_clone.set(current);
                 }
-
-                let mut current = output.get_untracked();
-                current.push_str("[Terminal session restarted]\n");
-                output.set(current);
-
-                crate::pages::editor::operations::sync_from_disk(
-                    proj_id_clone,
-                    proj_path_clone,
-                    file_tree_data_clone,
-                );
-
-                if let Some(input) = input_ref.get() {
-                    let _ = input.focus();
+                Err(e) => {
+                    let mut current = output_clone.get_untracked();
+                    current.push_str(&format!("❌ Failed to initialize terminal session: {}\n", e));
+                    output_clone.set(current);
                 }
-            });
-        }
+            }
+
+            crate::pages::editor::operations::sync_from_disk(
+                proj_id_clone,
+                proj_path_clone,
+                file_tree_data_clone,
+            );
+
+            if let Some(input) = input_ref.get() {
+                let _ = input.focus();
+            }
+        });
     };
 
     let project_name = Signal::derive(move || {
@@ -732,12 +748,14 @@ pub fn BottomPanel(
 
             let proj_path = project_path.get_untracked();
             let proj_name = project_name.get_untracked();
+            let proj_id = project_id_stored.get_value();
 
             if cmd.trim() == "clear" || cmd.trim() == "cls" {
                 output.set(String::new());
                 let mut hist = terminal_history.get_untracked();
                 if hist.last() != Some(&cmd) {
                     hist.push(cmd.clone());
+                    crate::store::save_terminal_history(&proj_id, &hist);
                     terminal_history.set(hist);
                 }
                 return;
@@ -745,13 +763,14 @@ pub fn BottomPanel(
 
             // Append command echo to terminal output
             let mut current = output.get_untracked();
-            current.push_str(&format!("codedroid@system:{}$ {}\n", proj_name, cmd));
+            current.push_str(&format!("{} $ {}\n", proj_name, cmd));
             output.set(current);
 
             // Add to history
             let mut hist = terminal_history.get_untracked();
             if hist.last() != Some(&cmd) {
                 hist.push(cmd.clone());
+                crate::store::save_terminal_history(&proj_id, &hist);
                 terminal_history.set(hist);
             }
 
@@ -844,14 +863,12 @@ pub fn BottomPanel(
                 <div style="flex:1"/>
                 {move || (bottom_tab.get() == 0).then(|| view! {
                     <>
-                    {move || (terminal_session_id.get().is_some()).then(|| view! {
-                        <button class="btn" style="color:#ef4444;border:1px solid rgba(239, 68, 68, 0.4);font-size:11px;padding:2px 8px;margin-right:8px;border-radius:4px;display:flex;align-items:center;gap:4px"
-                            on:click=move |_| stop_command()
-                        >
-                            <LucideIcon name="square" size="12" />
-                            "Restart"
-                        </button>
-                    })}
+                    <button class="btn" style="color:#ef4444;border:1px solid rgba(239, 68, 68, 0.4);font-size:11px;padding:2px 8px;margin-right:8px;border-radius:4px;display:flex;align-items:center;gap:4px"
+                        on:click=move |_| stop_command()
+                    >
+                        <LucideIcon name="square" size="12" />
+                        "Restart"
+                    </button>
                     <button class="btn btn-icon" style="font-size:12px" title="Copy output"
                         on:click=move |_| {
                             let w = web_sys::window().unwrap();
@@ -1109,7 +1126,7 @@ pub fn BottomPanel(
                             </div>
                             <div class="terminal-input-line">
                                 <span class="terminal-prompt">
-                                    {move || format!("codedroid@system:{}$", project_name.get())}
+                                    {move || format!("{} $", project_name.get())}
                                 </span>
                                 <input
                                     type="text"

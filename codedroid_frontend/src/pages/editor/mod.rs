@@ -85,6 +85,8 @@ pub fn EditorPage() -> impl IntoView {
     let last_diag_req = RwSignal::new(0u64);
     let active_error =
         RwSignal::new(Option::<(api::Diagnostic, Vec<api::CodeSuggestion>, bool)>::None);
+    let terminal_session_id = RwSignal::new(Option::<String>::None);
+    let terminal_history = RwSignal::new(store::load_terminal_history(&project.id));
 
     // Callbacks
     let show_snack = Callback::new({
@@ -189,9 +191,15 @@ pub fn EditorPage() -> impl IntoView {
         current_pid,
         preview_url,
         save_current.clone(),
+        terminal_session_id,
+        bottom_tab,
+        active_tab.into(),
+        show_snack.clone(),
+        file_tree_data.clone(),
+        terminal_history,
     );
 
-    let stop_code = make_stop_code(current_pid, output, preview_url, bottom_tab);
+    let stop_code = make_stop_code(current_pid, output, preview_url, bottom_tab, terminal_session_id, is_running);
 
     let format_code = make_format_code(
         ppath.clone(),
@@ -415,11 +423,15 @@ pub fn EditorPage() -> impl IntoView {
                     <LucideIcon name="replace" size="20" />
                 </button>
 
-                {move || current_pid.get().map(|_| view! {
-                    <button class="btn btn-danger" style="display:inline-flex; align-items:center; gap:6px;" on:click=move |_| stop_code.run(())>
-                        <LucideIcon name="square" size="14" /> <span class="btn-text">"Stop"</span>
-                    </button>
-                })}
+                {move || if is_running.get() || current_pid.get().is_some() {
+                    view! {
+                        <button class="btn btn-danger" style="display:inline-flex; align-items:center; gap:6px;" on:click=move |_| stop_code.run(())>
+                            <LucideIcon name="square" size="14" /> <span class="btn-text">"Stop"</span>
+                        </button>
+                    }.into_any()
+                } else {
+                    view! { "" }.into_any()
+                }}
                 <button class="btn btn-success" style="display:inline-flex; align-items:center; gap:6px;" disabled=move || is_running.get()
                     on:click=move |_| run_code.run(())
                 >
@@ -541,6 +553,9 @@ pub fn EditorPage() -> impl IntoView {
                         project_path=Signal::derive(move || project_path_str.get_value())
                         project_id=project.id.clone()
                         file_tree_data=file_tree_data
+                        terminal_session_id=terminal_session_id
+                        is_running=is_running
+                        terminal_history=terminal_history
                     />
 
                 </div>

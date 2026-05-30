@@ -365,6 +365,22 @@ pub fn EditorCodeArea(
                     "code-container hide-line-numbers"
                 };
 
+                let active_line_number = {
+                    let text = content.clone();
+                    let pos = cursor_pos.get() as usize;
+                    let mut count = 0;
+                    let mut active_line = 0;
+                    for (idx, line) in text.split('\n').enumerate() {
+                        let line_len = line.chars().count();
+                        if pos >= count && pos <= count + line_len {
+                            active_line = idx;
+                            break;
+                        }
+                        count += line_len + 1;
+                    }
+                    active_line
+                };
+
                 let raw_lines: Vec<String> = code.get().split('\n').map(|s| s.to_string()).collect();
                 let char_width = s.font_size as f64 * 0.6015;
 
@@ -391,12 +407,13 @@ pub fn EditorCodeArea(
                                 let has_error = line_diags.iter().any(|d| d.severity.unwrap_or(1) == 1);
                                 let has_warning = line_diags.iter().any(|d| d.severity.unwrap_or(1) == 2);
 
+                                let is_active = idx == active_line_number;
                                 let line_class = match primary_diag.map(|d| d.severity.unwrap_or(1)) {
-                                    Some(1) => "editor-line has-error",
-                                    Some(2) => "editor-line has-warning",
-                                    Some(3) => "editor-line has-info",
-                                    Some(4) => "editor-line has-hint",
-                                    _ => "editor-line",
+                                    Some(1) => if is_active { "editor-line has-error active-line" } else { "editor-line has-error" },
+                                    Some(2) => if is_active { "editor-line has-warning active-line" } else { "editor-line has-warning" },
+                                    Some(3) => if is_active { "editor-line has-info active-line" } else { "editor-line has-info" },
+                                    Some(4) => if is_active { "editor-line has-hint active-line" } else { "editor-line has-hint" },
+                                    _ => if is_active { "editor-line active-line" } else { "editor-line" },
                                 };
 
                                 let gutter_class = if has_error {

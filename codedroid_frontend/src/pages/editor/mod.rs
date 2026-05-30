@@ -5,7 +5,6 @@ use wasm_bindgen_futures::spawn_local;
 pub mod utils;
 pub mod components;
 pub mod preview;
-pub mod footer;
 pub mod search_bar;
 pub mod code_area;
 pub mod error_popover;
@@ -18,7 +17,6 @@ use utils::*;
 use components::*;
 use code_area::EditorCodeArea;
 use preview::*;
-use footer::*;
 use search_bar::*;
 use operations::*;
 use crate::models::{Project, Settings, lang_icon};
@@ -226,7 +224,6 @@ pub fn EditorPage() -> impl IntoView {
         file_tree_data.clone(),
     );
 
-    let copy_code = make_copy_code(code, show_snack.clone());
 
     let on_select = make_on_select(code, dirty, suggestions, cursor_pos);
 
@@ -515,12 +512,6 @@ pub fn EditorPage() -> impl IntoView {
                         active_tab=active_tab.into()
                     />
 
-                    <EditorFooter
-                        code=code
-                        dirty=dirty
-                        settings=settings
-                        copy_code=copy_code
-                    />
                 </div>
 
                 <PreviewPanel

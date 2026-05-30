@@ -1,7 +1,6 @@
 pub mod create_file;
 pub mod create_folder;
 pub mod delete_entry;
-pub mod copy_code;
 pub mod format_code;
 pub mod add_dep;
 pub mod on_select;
@@ -23,7 +22,6 @@ pub mod sync_project;
 pub use create_file::make_create_file;
 pub use create_folder::make_create_folder;
 pub use delete_entry::make_delete_entry;
-pub use copy_code::make_copy_code;
 pub use format_code::make_format_code;
 pub use add_dep::make_add_dep;
 pub use on_select::make_on_select;

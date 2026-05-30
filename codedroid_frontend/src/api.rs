@@ -512,3 +512,82 @@ pub async fn scan_project_api(project_path: &str) -> Result<ScanProjectResponse,
         .await
         .map_err(|e| e.to_string())
 }
+
+#[derive(serde::Deserialize)]
+struct StartTerminalResponse {
+    session_id: String,
+}
+
+#[derive(serde::Deserialize)]
+struct TerminalOutputResponse {
+    output: String,
+    is_alive: bool,
+}
+
+#[derive(serde::Deserialize)]
+struct TerminalInputResponse {
+    success: bool,
+    error: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct StopTerminalResponse {
+    success: bool,
+}
+
+pub async fn start_terminal_api(project_path: &str) -> Result<String, String> {
+    let body = json!({ "project_path": project_path });
+    Request::post(&format!("{}/terminal/start", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<StartTerminalResponse>()
+        .await
+        .map(move |r| r.session_id)
+        .map_err(|e| e.to_string())
+}
+
+pub async fn poll_terminal_output_api(session_id: &str) -> Result<(String, bool), String> {
+    let body = json!({ "session_id": session_id });
+    Request::post(&format!("{}/terminal/output", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<TerminalOutputResponse>()
+        .await
+        .map(move |r| (r.output, r.is_alive))
+        .map_err(|e| e.to_string())
+}
+
+pub async fn send_terminal_input_api(session_id: &str, input: &str) -> Result<bool, String> {
+    let body = json!({ "session_id": session_id, "input": input });
+    Request::post(&format!("{}/terminal/input", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<TerminalInputResponse>()
+        .await
+        .map(move |r| r.success)
+        .map_err(|e| e.to_string())
+}
+
+pub async fn stop_terminal_api(session_id: &str) -> Result<bool, String> {
+    let body = json!({ "session_id": session_id });
+    Request::post(&format!("{}/terminal/stop", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<StopTerminalResponse>()
+        .await
+        .map(move |r| r.success)
+        .map_err(|e| e.to_string())
+}
+

@@ -10,6 +10,7 @@ mod handlers;
 mod lsp;
 mod models;
 mod runner;
+mod terminal;
 mod utils;
 
 use handlers::{
@@ -43,6 +44,7 @@ async fn main() {
             post(error_suggestions::get_error_suggestions_handler),
         )
         .route("/ping", get(|| async { "pong" }))
+        .nest("/terminal", terminal::router())
         .layer(CorsLayer::permissive());
 
     let addr = "0.0.0.0:3000";

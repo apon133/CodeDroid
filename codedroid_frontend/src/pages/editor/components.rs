@@ -573,12 +573,10 @@ pub fn BottomPanel(
     let suggestions_state = RwSignal::new(Option::<Vec<crate::api::CodeSuggestion>>::None);
     let loading_suggestions = RwSignal::new(false);
     let project_id_stored = StoredValue::new(project_id);
-
     let command_input = RwSignal::new(String::new());
     let terminal_history = RwSignal::new(Vec::<String>::new());
     let history_index = RwSignal::new(Option::<usize>::None);
-    let is_running_cmd = RwSignal::new(false);
-    let terminal_pid = RwSignal::new(Option::<u32>::None);
+    let terminal_session_id = RwSignal::new(Option::<String>::None);
 
     let input_ref = NodeRef::<leptos::html::Input>::new();
     let output_area_ref = NodeRef::<leptos::html::Div>::new();
@@ -600,22 +598,89 @@ pub fn BottomPanel(
         }
     });
 
+    // Effect to start terminal session when tab is selected
+    Effect::new(move |_| {
+        if bottom_tab.get() == 0 && terminal_session_id.get().is_none() {
+            let path = project_path.get_untracked();
+            spawn_local(async move {
+                match crate::api::start_terminal_api(&path).await {
+                    Ok(session_id) => {
+                        terminal_session_id.set(Some(session_id));
+                    }
+                    Err(e) => {
+                        let mut current = output.get_untracked();
+                        current.push_str(&format!("❌ Failed to initialize terminal session: {}\n", e));
+                        output.set(current);
+                    }
+                }
+            });
+        }
+    });
+
+    // Effect to poll terminal output
+    Effect::new(move |_| {
+        if let Some(session_id) = terminal_session_id.get() {
+            let output_sig = output;
+            let session_id_clone = session_id.clone();
+            let terminal_session_id_clone = terminal_session_id.clone();
+            spawn_local(async move {
+                while terminal_session_id_clone.get_untracked() == Some(session_id_clone.clone()) {
+                    gloo_timers::future::TimeoutFuture::new(150).await;
+                    if let Ok((new_output, is_alive)) = crate::api::poll_terminal_output_api(&session_id_clone).await {
+                        if !new_output.is_empty() {
+                            let mut current = output_sig.get_untracked();
+                            current.push_str(&new_output);
+                            output_sig.set(current);
+                        }
+                        if !is_alive {
+                            let mut current = output_sig.get_untracked();
+                            current.push_str("\n[Process completed]\n");
+                            output_sig.set(current);
+                            terminal_session_id_clone.set(None);
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+            });
+        }
+    });
+
+    on_cleanup(move || {
+        if let Some(session_id) = terminal_session_id.get_untracked() {
+            spawn_local(async move {
+                let _ = crate::api::stop_terminal_api(&session_id).await;
+            });
+        }
+    });
+
     let stop_command = move || {
-        if let Some(pid) = terminal_pid.get_untracked() {
+        if let Some(session_id) = terminal_session_id.get_untracked() {
             let mut current = output.get_untracked();
-            current.push_str("\n[Stopping command...]\n");
+            current.push_str("\n[Restarting terminal session...]\n");
             output.set(current);
 
             let proj_id_clone = project_id_stored.get_value();
             let proj_path_clone = project_path.get_untracked();
             let file_tree_data_clone = file_tree_data.clone();
             spawn_local(async move {
-                let _ = crate::api::stop_process(pid).await;
-                terminal_pid.set(None);
-                is_running_cmd.set(false);
+                let _ = crate::api::stop_terminal_api(&session_id).await;
+                terminal_session_id.set(None);
+
+                match crate::api::start_terminal_api(&proj_path_clone).await {
+                    Ok(new_id) => {
+                        terminal_session_id.set(Some(new_id));
+                    }
+                    Err(e) => {
+                        let mut current = output.get_untracked();
+                        current.push_str(&format!("❌ Failed to restart terminal session: {}\n", e));
+                        output.set(current);
+                    }
+                }
 
                 let mut current = output.get_untracked();
-                current.push_str("[Command stopped]\n");
+                current.push_str("[Terminal session restarted]\n");
                 output.set(current);
 
                 crate::pages::editor::operations::sync_from_disk(
@@ -643,15 +708,12 @@ pub fn BottomPanel(
     let on_keydown = move |e: web_sys::KeyboardEvent| {
         let key = e.key();
         if key == "c" && e.ctrl_key() {
-            if terminal_pid.get_untracked().is_some() {
+            if terminal_session_id.get_untracked().is_some() {
                 e.prevent_default();
                 stop_command();
             }
         } else if key == "Enter" {
-            if is_running_cmd.get_untracked() {
-                return;
-            }
-            let cmd = command_input.get_untracked().trim().to_string();
+            let cmd = command_input.get_untracked();
             command_input.set(String::new());
             history_index.set(None);
 
@@ -659,11 +721,27 @@ pub fn BottomPanel(
                 let mut current = output.get_untracked();
                 current.push_str("\n");
                 output.set(current);
+
+                if let Some(session_id) = terminal_session_id.get_untracked() {
+                    spawn_local(async move {
+                        let _ = crate::api::send_terminal_input_api(&session_id, "\n").await;
+                    });
+                }
                 return;
             }
 
             let proj_path = project_path.get_untracked();
             let proj_name = project_name.get_untracked();
+
+            if cmd.trim() == "clear" || cmd.trim() == "cls" {
+                output.set(String::new());
+                let mut hist = terminal_history.get_untracked();
+                if hist.last() != Some(&cmd) {
+                    hist.push(cmd.clone());
+                    terminal_history.set(hist);
+                }
+                return;
+            }
 
             // Append command echo to terminal output
             let mut current = output.get_untracked();
@@ -677,56 +755,22 @@ pub fn BottomPanel(
                 terminal_history.set(hist);
             }
 
-            if cmd == "clear" || cmd == "cls" {
-                output.set(String::new());
-                return;
+            if let Some(session_id) = terminal_session_id.get_untracked() {
+                let proj_id_clone = project_id_stored.get_value();
+                let file_tree_data_clone = file_tree_data.clone();
+                let cmd_clone = cmd.clone();
+                let proj_path_clone = proj_path.clone();
+                spawn_local(async move {
+                    let _ = crate::api::send_terminal_input_api(&session_id, &format!("{}\n", cmd_clone)).await;
+
+                    gloo_timers::future::TimeoutFuture::new(500).await;
+                    crate::pages::editor::operations::sync_from_disk(
+                        proj_id_clone,
+                        proj_path_clone,
+                        file_tree_data_clone,
+                    );
+                });
             }
-
-            is_running_cmd.set(true);
-
-            let proj_id_clone = project_id_stored.get_value();
-            let file_tree_data_clone = file_tree_data.clone();
-            spawn_local(async move {
-                let res = crate::api::run_command_api(&cmd, &proj_path).await;
-                let mut current = output.get_untracked();
-                match res {
-                    Ok(resp) => {
-                        if let Some(pid) = resp.pid {
-                            terminal_pid.set(Some(pid));
-                        }
-                        if !resp.output.is_empty() {
-                            current.push_str(&resp.output);
-                            if !resp.output.ends_with('\n') {
-                                current.push('\n');
-                            }
-                        }
-                        if !resp.error.is_empty() {
-                            current.push_str(&resp.error);
-                            if !resp.error.ends_with('\n') {
-                                current.push('\n');
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        current.push_str(&format!("❌ Failed to execute: {}\n", e));
-                    }
-                }
-                output.set(current);
-                if terminal_pid.get_untracked().is_none() {
-                    is_running_cmd.set(false);
-                }
-
-                crate::pages::editor::operations::sync_from_disk(
-                    proj_id_clone,
-                    proj_path.clone(),
-                    file_tree_data_clone,
-                );
-
-                // Re-focus input
-                if let Some(input) = input_ref.get() {
-                    let _ = input.focus();
-                }
-            });
         } else if key == "ArrowUp" {
             e.prevent_default();
             let hist = terminal_history.get_untracked();
@@ -800,12 +844,12 @@ pub fn BottomPanel(
                 <div style="flex:1"/>
                 {move || (bottom_tab.get() == 0).then(|| view! {
                     <>
-                    {move || (terminal_pid.get().is_some()).then(|| view! {
+                    {move || (terminal_session_id.get().is_some()).then(|| view! {
                         <button class="btn" style="color:#ef4444;border:1px solid rgba(239, 68, 68, 0.4);font-size:11px;padding:2px 8px;margin-right:8px;border-radius:4px;display:flex;align-items:center;gap:4px"
                             on:click=move |_| stop_command()
                         >
                             <LucideIcon name="square" size="12" />
-                            "Stop"
+                            "Restart"
                         </button>
                     })}
                     <button class="btn btn-icon" style="font-size:12px" title="Copy output"
@@ -1074,7 +1118,7 @@ pub fn BottomPanel(
                                     prop:value=move || command_input.get()
                                     on:input=move |e| command_input.set(event_target_value(&e))
                                     on:keydown=on_keydown
-                                    placeholder=move || if is_running_cmd.get() { "Running command..." } else { "Type command..." }
+                                    placeholder="Type command or input..."
                                 />
                             </div>
                         </div>

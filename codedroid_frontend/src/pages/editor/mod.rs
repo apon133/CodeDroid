@@ -235,7 +235,7 @@ pub fn EditorPage() -> impl IntoView {
             trigger_diag.run(content.clone());
 
             let key_exists = gloo_storage::LocalStorage::get::<String>(&key).is_ok();
-            let is_absolute = name.starts_with('/') || name.starts_with("Users/") || name.starts_with("home/") || name.starts_with("data/");
+            let is_absolute = is_absolute_path(&name);
             if !key_exists || is_absolute || content.is_empty() {
                 let name_clone = name.clone();
                 let key_clone = key.clone();
@@ -249,6 +249,8 @@ pub fn EditorPage() -> impl IntoView {
                         name_clone.clone()
                     } else if name_clone.starts_with("Users/") || name_clone.starts_with("home/") || name_clone.starts_with("data/") {
                         format!("/{}", name_clone)
+                    } else if is_absolute_path(&name_clone) {
+                        name_clone.clone()
                     } else {
                         format!("{}/{}", ppath_clone, name_clone)
                     };
@@ -334,7 +336,15 @@ pub fn EditorPage() -> impl IntoView {
                 let trigger_diag_clone = trigger_diag.clone();
                 let content_clone = content.clone();
                 spawn_local(async move {
-                    let full_path = format!("{}/{}", base_path, tab_name);
+                    let full_path = if tab_name.starts_with('/') {
+                        tab_name.clone()
+                    } else if tab_name.starts_with("Users/") || tab_name.starts_with("home/") || tab_name.starts_with("data/") {
+                        format!("/{}", tab_name)
+                    } else if is_absolute_path(&tab_name) {
+                        tab_name.clone()
+                    } else {
+                        format!("{}/{}", base_path, tab_name)
+                    };
                     let _ = api::save_file_api(&full_path, &content_clone).await;
                     trigger_diag_clone.run(content_clone);
                 });
@@ -418,17 +428,19 @@ pub fn EditorPage() -> impl IntoView {
                             // Pre-fetch file from backend if not cached in LocalStorage
                             let key = store::file_key(&pid_clone, &rel_path);
                             let key_exists = gloo_storage::LocalStorage::get::<String>(&key).is_ok();
-                            let is_absolute = rel_path.starts_with('/') || rel_path.starts_with("Users/") || rel_path.starts_with("home/") || rel_path.starts_with("data/");
+                            let is_absolute = is_absolute_path(&rel_path);
                             let content_is_empty = store::load_file(&key).is_empty();
                             
                             if !key_exists || is_absolute || content_is_empty {
-                                let file_path = if rel_path.starts_with('/') {
-                                    rel_path.clone()
-                                } else if rel_path.starts_with("Users/") || rel_path.starts_with("home/") || rel_path.starts_with("data/") {
-                                    format!("/{}", rel_path)
-                                } else {
-                                    format!("{}/{}", proj_path, rel_path)
-                                };
+                                 let file_path = if rel_path.starts_with('/') {
+                                     rel_path.clone()
+                                 } else if rel_path.starts_with("Users/") || rel_path.starts_with("home/") || rel_path.starts_with("data/") {
+                                     format!("/{}", rel_path)
+                                 } else if is_absolute_path(&rel_path) {
+                                     rel_path.clone()
+                                 } else {
+                                     format!("{}/{}", proj_path, rel_path)
+                                 };
                                 
                                 if let Ok(resp) = api::read_file_api(&file_path).await {
                                     if resp.error.is_empty() {
@@ -558,7 +570,7 @@ pub fn EditorPage() -> impl IntoView {
                 // Pre-fetch file from backend if not cached in LocalStorage
                 let key = store::file_key(&pid_clone, &rel_path);
                 let key_exists = gloo_storage::LocalStorage::get::<String>(&key).is_ok();
-                let is_absolute = rel_path.starts_with('/') || rel_path.starts_with("Users/") || rel_path.starts_with("home/") || rel_path.starts_with("data/");
+                let is_absolute = is_absolute_path(&rel_path);
                 let content_is_empty = store::load_file(&key).is_empty();
                 
                 if !key_exists || is_absolute || content_is_empty {
@@ -566,6 +578,8 @@ pub fn EditorPage() -> impl IntoView {
                         rel_path.clone()
                     } else if rel_path.starts_with("Users/") || rel_path.starts_with("home/") || rel_path.starts_with("data/") {
                         format!("/{}", rel_path)
+                    } else if is_absolute_path(&rel_path) {
+                        rel_path.clone()
                     } else {
                         format!("{}/{}", proj_path, rel_path)
                     };
@@ -1137,6 +1151,9 @@ pub fn EditorPage() -> impl IntoView {
                     for i in 0..len {
                         if let Ok(Some(k)) = storage.key(i) {
                             if let Some(rel) = k.strip_prefix(&prefix) {
+                                if is_absolute_path(rel) {
+                                    continue;
+                                }
                                 if rel.ends_with("/.codedroid_dir") {
                                     let dir_name = rel.trim_end_matches("/.codedroid_dir");
                                     if !dir_name.is_empty() {

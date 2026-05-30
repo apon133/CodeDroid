@@ -11,6 +11,11 @@ thread_local! {
     pub static THEME_SET: ThemeSet = ThemeSet::load_defaults();
 }
 
+pub fn is_absolute_path(path: &str) -> bool {
+    path.starts_with('/') || path.starts_with("Users/") || path.starts_with("home/") || path.starts_with("data/") ||
+    (path.len() >= 2 && path.chars().next().map_or(false, |c| c.is_ascii_alphabetic()) && path.chars().nth(1) == Some(':'))
+}
+
 #[allow(dead_code)]
 pub fn highlight_code(code: &str, ext: &str) -> String {
     let normalized = ext.to_lowercase();
@@ -405,6 +410,9 @@ pub fn build_file_tree(project_id: &str) -> Vec<FileEntry> {
     for i in 0..len {
         if let Ok(Some(k)) = storage.key(i) {
             if let Some(rel) = k.strip_prefix(&prefix) {
+                if is_absolute_path(rel) {
+                    continue;
+                }
                 if rel.ends_with("/.codedroid_dir") {
                     let dir_name = rel.trim_end_matches("/.codedroid_dir");
                     if !dir_name.is_empty() {

@@ -1,6 +1,5 @@
 use leptos::prelude::*;
 use crate::api;
-use crate::components::icon::LucideIcon;
 use pulldown_cmark::{Parser, Options, html};
 use super::utils::highlight_code;
 
@@ -65,63 +64,10 @@ pub fn markdown_to_html(markdown: &str) -> String {
     html_output
 }
 
-pub fn build_hover_html(diagnostics: &[api::Diagnostic], hover_markdown: Option<&str>) -> String {
+pub fn build_hover_html(_diagnostics: &[api::Diagnostic], hover_markdown: Option<&str>) -> String {
     let mut html = String::new();
     
-    // 1. Render diagnostics
-    if !diagnostics.is_empty() {
-        html.push_str("<div class=\"hover-diagnostics-container\">");
-        for diag in diagnostics {
-            let severity_val = diag.severity.unwrap_or(1);
-            let (sev_class, sev_label) = match severity_val {
-                1 => ("error", "Error"),
-                2 => ("warning", "Warning"),
-                3 => ("info", "Info"),
-                4 => ("hint", "Hint"),
-                _ => ("error", "Error"),
-            };
-            
-            let source_str = diag.source.as_deref().unwrap_or("LSP");
-            let code_str = diag.code.as_ref()
-                .and_then(|c| {
-                    if c.is_string() {
-                        c.as_str().map(|s| s.to_string())
-                    } else if c.is_number() {
-                        c.as_i64().map(|n| n.to_string())
-                    } else {
-                        None
-                    }
-                });
-                
-            let source_html = if let Some(code) = code_str {
-                format!("<span class=\"hover-diagnostic-source\">{}[{}]</span>", source_str, code)
-            } else {
-                format!("<span class=\"hover-diagnostic-source\">{}</span>", source_str)
-            };
-            
-            html.push_str(&format!(
-                "<div class=\"hover-diagnostic-item diag-{}\">\
-                    <div class=\"hover-diagnostic-header\">\
-                        <span class=\"hover-diagnostic-badge\">{}</span>\
-                        {}\
-                    </div>\
-                    <div class=\"hover-diagnostic-message\">{}</div>\
-                </div>",
-                sev_class,
-                sev_label,
-                source_html,
-                diag.message.replace('<', "&lt;").replace('>', "&gt;")
-            ));
-        }
-        html.push_str("</div>");
-    }
-    
-    // 2. Render divider if we have both
-    if !diagnostics.is_empty() && hover_markdown.is_some() {
-        html.push_str("<div class=\"hover-divider\"></div>");
-    }
-    
-    // 3. Render hover markdown
+    // Render hover markdown only (removing diagnostic error details from documentation tooltip)
     if let Some(md) = hover_markdown {
         let md_html = markdown_to_html(md);
         html.push_str(&format!("<div class=\"hover-markdown-content\">{}</div>", md_html));
@@ -164,27 +110,8 @@ pub fn HoverCard(
                 format!("left:{}px; top:{}px", coords.0, coords.1)
             };
             
-            let close_click = move |e: web_sys::MouseEvent| {
-                e.prevent_default();
-                e.stop_propagation();
-                hover_visible.set(false);
-            };
-            
-            let trigger_definition_c = trigger_definition.clone();
-            let on_def_click = move |e: web_sys::MouseEvent| {
-                e.prevent_default();
-                e.stop_propagation();
-                hover_visible.set(false);
-                trigger_definition_c.run(());
-            };
-            
-            let trigger_references_c = trigger_references.clone();
-            let on_refs_click = move |e: web_sys::MouseEvent| {
-                e.prevent_default();
-                e.stop_propagation();
-                hover_visible.set(false);
-                trigger_references_c.run(());
-            };
+            let _ = trigger_definition;
+            let _ = trigger_references;
             
             view! {
                 <div
@@ -205,12 +132,6 @@ pub fn HoverCard(
                         }
                     }
                 >
-                    <div class="hover-header">
-                        <span class="hover-header-title">"Documentation"</span>
-                        <button class="hover-close-btn" on:click=close_click>
-                            "✕"
-                        </button>
-                    </div>
                     <div class="hover-content">
                         {move || {
                             if hover_loading.get() {
@@ -236,16 +157,6 @@ pub fn HoverCard(
                                 }.into_any()
                             }
                         }}
-                    </div>
-                    <div class="hover-footer">
-                        <button class="hover-action-btn" on:click=on_def_click>
-                            <LucideIcon name="locate-fixed" size="14" class="btn-icon" />
-                            "Go to Definition"
-                        </button>
-                        <button class="hover-action-btn" on:click=on_refs_click>
-                            <LucideIcon name="search-code" size="14" class="btn-icon" />
-                            "Find References"
-                        </button>
                     </div>
                 </div>
             }

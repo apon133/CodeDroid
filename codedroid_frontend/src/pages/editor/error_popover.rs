@@ -63,6 +63,7 @@ pub fn ErrorPopover(
                                     <div class="error-floating-suggestions">
                                         {suggs.clone().into_iter().map(|sugg| {
                                             let title = sugg.title.clone();
+                                            let explanation = sugg.explanation.clone();
                                             let replacement = sugg.replacement.clone();
                                             let range = sugg.range.clone();
                                             let snack_cb = snack;
@@ -70,8 +71,10 @@ pub fn ErrorPopover(
                                             let active_error_cb = active_error_sig;
                                             
                                             let has_fix = replacement.is_some() && range.is_some();
+                                            let show_expl = RwSignal::new(false);
                                             
-                                            let on_apply = move |_| {
+                                            let on_apply = move |e: web_sys::MouseEvent| {
+                                                e.stop_propagation();
                                                 if let (Some(repl), Some(r)) = (&replacement, &range) {
                                                     let orig = code_cb.get_untracked();
                                                     let updated = apply_replacement(&orig, r, repl);
@@ -81,14 +84,29 @@ pub fn ErrorPopover(
                                                 }
                                             };
                                             
+                                            let toggle_expl = move |_| {
+                                                show_expl.update(|v| *v = !*v);
+                                            };
+                                            
                                             view! {
-                                                <div class="error-floating-suggestion-item">
-                                                    <span class="lightbulb-icon">"💡"</span>
-                                                    <span class="suggestion-text">{title}</span>
-                                                    {has_fix.then(|| view! {
-                                                        <button class="btn btn-primary btn-xs" on:click=on_apply style="margin-left:auto;padding:2px 6px;font-size:10px">
-                                                            "Fix"
-                                                        </button>
+                                                <div class="error-floating-suggestion-wrapper" style="display:flex; flex-direction:column;">
+                                                    <div 
+                                                        class="error-floating-suggestion-item" 
+                                                        on:click=toggle_expl
+                                                        style="cursor:pointer;"
+                                                    >
+                                                        <span class="lightbulb-icon">"💡"</span>
+                                                        <span class="suggestion-text">{title}</span>
+                                                        {has_fix.then(|| view! {
+                                                            <button class="btn btn-primary btn-xs" on:click=on_apply style="margin-left:auto;padding:2px 6px;font-size:10px">
+                                                                "Fix"
+                                                            </button>
+                                                        })}
+                                                    </div>
+                                                    {move || show_expl.get().then(|| view! {
+                                                        <div class="error-floating-suggestion-explanation" style="padding: 4px 8px 6px 22px; font-size: 10px; color: #a5a5a5; line-height: 1.4; border-top: 1px solid rgba(255,255,255,0.03);">
+                                                            {explanation.clone()}
+                                                        </div>
                                                     })}
                                                 </div>
                                             }

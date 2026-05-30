@@ -1,12 +1,17 @@
 use axum::Json;
 use std::fs;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::io::Read;
+use std::time::Duration;
 use crate::models::{
     CodeRequest, CodeResponse, StopRequest, PackageRequest, SyncRequest,
     CompletionRequest, CompletionResponse, DeleteRequest, CopyRequest, CreateDirRequest,
     MoveRequest, FormatRequest, FormatResponse, PackageResponse,
     DefinitionRequest, DefinitionResponse, ReferencesRequest, ReferencesResponse,
-    ReadFileRequest, ReadFileResponse, HoverRequest, HoverResponse
+    ReadFileRequest, ReadFileResponse, HoverRequest, HoverResponse,
+    CommandRequest, CommandResponse
 };
 use crate::utils::resolve_project_dir;
 use crate::runner::*;
@@ -1199,6 +1204,102 @@ pub async fn get_hover(Json(payload): Json<HoverRequest>) -> Json<HoverResponse>
     }
 
     Json(HoverResponse { contents, error })
+}
+
+pub async fn run_command(Json(payload): Json<CommandRequest>) -> Json<CommandResponse> {
+    let dir = resolve_project_dir(&payload.project_path);
+    let (shell, arg) = if cfg!(windows) {
+        ("cmd", "/c")
+    } else {
+        ("sh", "-c")
+    };
+    
+    let mut cmd = Command::new(shell);
+    cmd.arg(arg)
+       .arg(&payload.command)
+       .current_dir(&dir)
+       .stdout(Stdio::piped())
+       .stderr(Stdio::piped());
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            return Json(CommandResponse {
+                output: String::new(),
+                error: format!("Failed to spawn command: {}", e),
+                success: false,
+                pid: None,
+            });
+        }
+    };
+
+    let pid = child.id();
+    let mut stdout = child.stdout.take().unwrap();
+    let mut stderr = child.stderr.take().unwrap();
+
+    let stdout_buf = Arc::new(Mutex::new(String::new()));
+    let stderr_buf = Arc::new(Mutex::new(String::new()));
+
+    let s_out = stdout_buf.clone();
+    thread::spawn(move || {
+        let mut buffer = [0; 1024];
+        while let Ok(n) = stdout.read(&mut buffer) {
+            if n == 0 { break; }
+            let mut buf = s_out.lock().unwrap();
+            buf.push_str(&String::from_utf8_lossy(&buffer[..n]));
+        }
+    });
+
+    let s_err = stderr_buf.clone();
+    thread::spawn(move || {
+        let mut buffer = [0; 1024];
+        while let Ok(n) = stderr.read(&mut buffer) {
+            if n == 0 { break; }
+            let mut buf = s_err.lock().unwrap();
+            buf.push_str(&String::from_utf8_lossy(&buffer[..n]));
+        }
+    });
+
+    // Wait up to 3 seconds for quick completion
+    let start = std::time::Instant::now();
+    let mut status = None;
+    while start.elapsed() < Duration::from_secs(3) {
+        if let Ok(Some(s)) = child.try_wait() {
+            status = Some(s);
+            break;
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+
+    // Give pipes a short moment to flush
+    thread::sleep(Duration::from_millis(100));
+
+    let out = stdout_buf.lock().unwrap().clone();
+    let err = stderr_buf.lock().unwrap().clone();
+
+    if status.is_none() {
+        // Still running after 3 seconds, return pid so frontend can stop it
+        Json(CommandResponse {
+            output: out,
+            error: err,
+            success: true,
+            pid: Some(pid),
+        })
+    } else {
+        let success = status.unwrap().success();
+        Json(CommandResponse {
+            output: out,
+            error: err,
+            success,
+            pid: None,
+        })
+    }
 }
 
 #[cfg(test)]

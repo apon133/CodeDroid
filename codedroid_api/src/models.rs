@@ -152,4 +152,16 @@ pub struct HoverResponse {
     pub error: String,
 }
 
+#[derive(Deserialize)]
+pub struct CommandRequest {
+    pub command: String,
+    pub project_path: String,
+}
 
+#[derive(Serialize)]
+pub struct CommandResponse {
+    pub output: String,
+    pub error: String,
+    pub success: bool,
+    pub pid: Option<u32>,
+}

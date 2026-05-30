@@ -54,7 +54,7 @@ pub fn EditorPage() -> impl IntoView {
     let active_tab: RwSignal<Option<String>> = RwSignal::new(None);
     let code: RwSignal<String> = RwSignal::new(String::new());
     let dirty: RwSignal<bool> = RwSignal::new(false);
-    let output: RwSignal<String> = RwSignal::new("// Output will appear here...".to_string());
+    let output: RwSignal<String> = RwSignal::new("Welcome to CodeDroid Terminal\nType commands below (e.g. ls, cargo test, git status)\n\n".to_string());
     let is_error: RwSignal<bool> = RwSignal::new(false);
     let is_running: RwSignal<bool> = RwSignal::new(false);
     let current_pid: RwSignal<Option<u32>> = RwSignal::new(None);
@@ -500,8 +500,8 @@ pub fn EditorPage() -> impl IntoView {
 
                     <BottomPanel 
                         bottom_tab=bottom_tab
-                        output=output.into()
-                        is_error=is_error.into()
+                        output=output
+                        _is_error=is_error.into()
                         show_snack=show_snack
                         diagnostics_list=diagnostics_list.into()
                         on_click_problem=on_click_problem
@@ -510,6 +510,7 @@ pub fn EditorPage() -> impl IntoView {
                         references_list=references_list
                         on_click_reference=on_click_reference
                         active_tab=active_tab.into()
+                        project_path=Signal::derive(move || project_path_str.get_value())
                     />
 
                 </div>

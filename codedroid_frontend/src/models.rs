@@ -149,3 +149,12 @@ pub struct PackageResponse {
     pub dependency_file_name: Option<String>,
     pub dependency_file_content: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandResponse {
+    pub output: String,
+    pub error: String,
+    pub success: bool,
+    pub pid: Option<u32>,
+}
+

@@ -15,7 +15,7 @@ pub fn get_api_url() -> String {
 
 use gloo_net::http::Request;
 use serde_json::json;
-use crate::models::{RunResponse, PackageResponse};
+use crate::models::{RunResponse, PackageResponse, CommandResponse};
 
 pub async fn run_code(
     code: &str,
@@ -441,6 +441,25 @@ pub async fn hover_api(
         .await
         .map_err(|e| e.to_string())?
         .json::<HoverResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn run_command_api(
+    command: &str,
+    project_path: &str,
+) -> Result<CommandResponse, String> {
+    let body = json!({
+        "command": command,
+        "project_path": project_path,
+    });
+    Request::post(&format!("{}/run_command", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<CommandResponse>()
         .await
         .map_err(|e| e.to_string())
 }

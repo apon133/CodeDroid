@@ -553,7 +553,7 @@ pub fn apply_replacement(code: &str, range: &crate::api::Range, replacement: &st
 pub fn BottomPanel(
     bottom_tab: RwSignal<usize>,
     output: RwSignal<String>,
-    is_error: Signal<bool>,
+    _is_error: Signal<bool>,
     show_snack: Callback<String>,
     diagnostics_list: Signal<Vec<crate::api::Diagnostic>>,
     on_click_problem: Callback<(Option<String>, u32, u32)>,
@@ -562,10 +562,176 @@ pub fn BottomPanel(
     references_list: RwSignal<Vec<crate::api::Location>>,
     on_click_reference: Callback<crate::api::Location>,
     active_tab: Signal<Option<String>>,
+    project_path: Signal<String>,
 ) -> impl IntoView {
     let expanded_idx = RwSignal::new(Option::<usize>::None);
     let suggestions_state = RwSignal::new(Option::<Vec<crate::api::CodeSuggestion>>::None);
     let loading_suggestions = RwSignal::new(false);
+
+    let command_input = RwSignal::new(String::new());
+    let terminal_history = RwSignal::new(Vec::<String>::new());
+    let history_index = RwSignal::new(Option::<usize>::None);
+    let is_running_cmd = RwSignal::new(false);
+    let terminal_pid = RwSignal::new(Option::<u32>::None);
+    
+    let input_ref = NodeRef::<leptos::html::Input>::new();
+    let output_area_ref = NodeRef::<leptos::html::Div>::new();
+    
+    // Auto-scroll effect
+    Effect::new(move |_| {
+        let _ = output.get();
+        if let Some(div) = output_area_ref.get() {
+            div.set_scroll_top(div.scroll_height());
+        }
+    });
+
+    // Auto-focus when tab is active
+    Effect::new(move |_| {
+        if bottom_tab.get() == 0 {
+            if let Some(input) = input_ref.get() {
+                let _ = input.focus();
+            }
+        }
+    });
+
+    let stop_command = move || {
+        if let Some(pid) = terminal_pid.get_untracked() {
+            let mut current = output.get_untracked();
+            current.push_str("\n[Stopping command...]\n");
+            output.set(current);
+            
+            spawn_local(async move {
+                let _ = crate::api::stop_process(pid).await;
+                terminal_pid.set(None);
+                is_running_cmd.set(false);
+                
+                let mut current = output.get_untracked();
+                current.push_str("[Command stopped]\n");
+                output.set(current);
+                
+                if let Some(input) = input_ref.get() {
+                    let _ = input.focus();
+                }
+            });
+        }
+    };
+
+    let project_name = Signal::derive(move || {
+        let path = project_path.get();
+        if let Some(last_slash) = path.rfind('/') {
+            path[last_slash + 1..].to_string()
+        } else {
+            path
+        }
+    });
+
+    let on_keydown = move |e: web_sys::KeyboardEvent| {
+        let key = e.key();
+        if key == "c" && e.ctrl_key() {
+            if terminal_pid.get_untracked().is_some() {
+                e.prevent_default();
+                stop_command();
+            }
+        } else if key == "Enter" {
+            if is_running_cmd.get_untracked() {
+                return;
+            }
+            let cmd = command_input.get_untracked().trim().to_string();
+            command_input.set(String::new());
+            history_index.set(None);
+
+            if cmd.is_empty() {
+                let mut current = output.get_untracked();
+                current.push_str("\n");
+                output.set(current);
+                return;
+            }
+
+            let proj_path = project_path.get_untracked();
+            let proj_name = project_name.get_untracked();
+
+            // Append command echo to terminal output
+            let mut current = output.get_untracked();
+            current.push_str(&format!("codedroid@system:{}$ {}\n", proj_name, cmd));
+            output.set(current);
+
+            // Add to history
+            let mut hist = terminal_history.get_untracked();
+            if hist.last() != Some(&cmd) {
+                hist.push(cmd.clone());
+                terminal_history.set(hist);
+            }
+
+            if cmd == "clear" || cmd == "cls" {
+                output.set(String::new());
+                return;
+            }
+
+            is_running_cmd.set(true);
+
+            spawn_local(async move {
+                let res = crate::api::run_command_api(&cmd, &proj_path).await;
+                let mut current = output.get_untracked();
+                match res {
+                    Ok(resp) => {
+                        if let Some(pid) = resp.pid {
+                            terminal_pid.set(Some(pid));
+                        }
+                        if !resp.output.is_empty() {
+                            current.push_str(&resp.output);
+                            if !resp.output.ends_with('\n') {
+                                current.push('\n');
+                            }
+                        }
+                        if !resp.error.is_empty() {
+                            current.push_str(&resp.error);
+                            if !resp.error.ends_with('\n') {
+                                current.push('\n');
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        current.push_str(&format!("❌ Failed to execute: {}\n", e));
+                    }
+                }
+                output.set(current);
+                if terminal_pid.get_untracked().is_none() {
+                    is_running_cmd.set(false);
+                }
+                
+                // Re-focus input
+                if let Some(input) = input_ref.get() {
+                    let _ = input.focus();
+                }
+            });
+        } else if key == "ArrowUp" {
+            e.prevent_default();
+            let hist = terminal_history.get_untracked();
+            if !hist.is_empty() {
+                let next_idx = match history_index.get_untracked() {
+                    None => hist.len() - 1,
+                    Some(idx) => if idx > 0 { idx - 1 } else { 0 },
+                };
+                history_index.set(Some(next_idx));
+                command_input.set(hist[next_idx].clone());
+            }
+        } else if key == "ArrowDown" {
+            e.prevent_default();
+            let hist = terminal_history.get_untracked();
+            if !hist.is_empty() {
+                if let Some(idx) = history_index.get_untracked() {
+                    if idx + 1 < hist.len() {
+                        let next_idx = idx + 1;
+                        history_index.set(Some(next_idx));
+                        command_input.set(hist[next_idx].clone());
+                    } else {
+                        history_index.set(None);
+                        command_input.set(String::new());
+                    }
+                }
+            }
+        }
+    };
 
     view! {
         <div class="bottom-panel">
@@ -605,6 +771,14 @@ pub fn BottomPanel(
                 <div style="flex:1"/>
                 {move || (bottom_tab.get() == 0).then(|| view! {
                     <>
+                    {move || (terminal_pid.get().is_some()).then(|| view! {
+                        <button class="btn" style="color:#ef4444;border:1px solid rgba(239, 68, 68, 0.4);font-size:11px;padding:2px 8px;margin-right:8px;border-radius:4px;display:flex;align-items:center;gap:4px"
+                            on:click=move |_| stop_command()
+                        >
+                            <LucideIcon name="square" size="12" />
+                            "Stop"
+                        </button>
+                    })}
                     <button class="btn btn-icon" style="font-size:12px" title="Copy output"
                         on:click=move |_| {
                             let w = web_sys::window().unwrap();
@@ -637,148 +811,149 @@ pub fn BottomPanel(
                 if bottom_tab.get() == 1 {
                     let diags = diagnostics_list.get();
                     if diags.is_empty() {
-                        return view! {
+                        view! {
                             <div class="problems-container empty">
                                 "No problems have been detected in the workspace so far."
                             </div>
-                        }.into_any();
-                    }
-                    return view! {
-                        <div class="problems-container">
-                            {diags.into_iter().enumerate().map(|(idx, diag)| {
-                                let severity_class = match diag.severity.unwrap_or(1) {
-                                    1 => "problem-item error",
-                                    2 => "problem-item warning",
-                                    3 => "problem-item info",
-                                    4 => "problem-item hint",
-                                    _ => "problem-item error",
-                                };
-                                let severity_icon = match diag.severity.unwrap_or(1) {
-                                    1 => "🔴",
-                                    2 => "🟡",
-                                    3 => "🔵",
-                                    4 => "⚪",
-                                    _ => "🔴",
-                                };
-                                let file_name = diag.file.clone();
-                                let line = diag.range.start.line;
-                                let col = diag.range.start.character;
-                                let msg = diag.message.clone();
-                                let source = diag.source.clone().unwrap_or_default();
-                                let code_val = diag.code.as_ref().map(|c| {
-                                    match c {
-                                        serde_json::Value::String(s) => format!(" [{}]", s),
-                                        serde_json::Value::Number(n) => format!(" [{}]", n),
-                                        _ => String::new(),
-                                    }
-                                }).unwrap_or_default();
-                                
-                                let diag_clone = diag.clone();
-                                let on_click_problem_cb = on_click_problem;
-                                let show_snack_cb = show_snack;
-                                let file_name_clone = file_name.clone();
-                                view! {
-                                    <div class="problem-wrapper">
-                                        <div class=severity_class on:click=move |_| {
-                                            on_click_problem_cb.run((file_name_clone.clone(), line, col));
-                                            let current_idx = expanded_idx.get_untracked();
-                                            if current_idx == Some(idx) {
-                                                expanded_idx.set(None);
-                                                suggestions_state.set(None);
-                                            } else {
-                                                expanded_idx.set(Some(idx));
-                                                suggestions_state.set(None);
-                                                loading_suggestions.set(true);
-                                                
-                                                let code_val = code.get_untracked();
-                                                let lang_val = language.get_untracked();
-                                                let diag_val = diag_clone.clone();
-                                                
-                                                spawn_local(async move {
-                                                    if let Ok(resp) = crate::api::get_error_suggestions_api(&code_val, &lang_val, &diag_val).await {
-                                                        suggestions_state.set(Some(resp.suggestions));
-                                                    }
-                                                    loading_suggestions.set(false);
-                                                });
-                                            }
-                                        }>
-                                            <span class="problem-icon">{severity_icon}</span>
-                                            <span class="problem-message">{msg}{code_val}</span>
-                                            {if !source.is_empty() { view! { <span class="problem-source">"["{source}"]"</span> }.into_any() } else { view! { "" }.into_any() }}
-                                            <span class="problem-location">
-                                                {if let Some(ref f) = file_name {
-                                                    format!("{}: Ln {}, Col {}", f, line + 1, col + 1)
+                        }.into_any()
+                    } else {
+                        view! {
+                            <div class="problems-container">
+                                {diags.into_iter().enumerate().map(|(idx, diag)| {
+                                    let severity_class = match diag.severity.unwrap_or(1) {
+                                        1 => "problem-item error",
+                                        2 => "problem-item warning",
+                                        3 => "problem-item info",
+                                        4 => "problem-item hint",
+                                        _ => "problem-item error",
+                                    };
+                                    let severity_icon = match diag.severity.unwrap_or(1) {
+                                        1 => "🔴",
+                                        2 => "🟡",
+                                        3 => "🔵",
+                                        4 => "⚪",
+                                        _ => "🔴",
+                                    };
+                                    let file_name = diag.file.clone();
+                                    let line = diag.range.start.line;
+                                    let col = diag.range.start.character;
+                                    let msg = diag.message.clone();
+                                    let source = diag.source.clone().unwrap_or_default();
+                                    let code_val = diag.code.as_ref().map(|c| {
+                                        match c {
+                                            serde_json::Value::String(s) => format!(" [{}]", s),
+                                            serde_json::Value::Number(n) => format!(" [{}]", n),
+                                            _ => String::new(),
+                                        }
+                                    }).unwrap_or_default();
+                                    
+                                    let diag_clone = diag.clone();
+                                    let on_click_problem_cb = on_click_problem;
+                                    let show_snack_cb = show_snack;
+                                    let file_name_clone = file_name.clone();
+                                    view! {
+                                        <div class="problem-wrapper">
+                                            <div class=severity_class on:click=move |_| {
+                                                on_click_problem_cb.run((file_name_clone.clone(), line, col));
+                                                let current_idx = expanded_idx.get_untracked();
+                                                if current_idx == Some(idx) {
+                                                    expanded_idx.set(None);
+                                                    suggestions_state.set(None);
                                                 } else {
-                                                    format!("Ln {}, Col {}", line + 1, col + 1)
-                                                }}
-                                            </span>
-                                        </div>
-                                        {move || {
-                                            if expanded_idx.get() == Some(idx) {
-                                                view! {
-                                                    <div class="problem-expansion">
-                                                        {move || {
-                                                            if loading_suggestions.get() {
-                                                                view! {
-                                                                    <div class="suggestion-loading">
-                                                                        <div class="spinner" style="width:14px;height:14px;border-width:1.5px;display:inline-block;vertical-align:middle;margin-right:8px" />
-                                                                        "Analyzing error and finding suggestions..."
-                                                                    </div>
-                                                                }.into_any()
-                                                            } else if let Some(suggs) = suggestions_state.get() {
-                                                                view! {
-                                                                    <div class="suggestions-list">
-                                                                        {suggs.into_iter().map(|sugg| {
-                                                                            let title = sugg.title.clone();
-                                                                            let explanation = sugg.explanation.clone();
-                                                                            let replacement = sugg.replacement.clone();
-                                                                            let range = sugg.range.clone();
-                                                                            
-                                                                            let code_sig = code;
-                                                                            let snack = show_snack_cb;
-                                                                            let has_fix = replacement.is_some() && range.is_some();
-                                                                            
-                                                                            let on_apply_fix = move |_| {
-                                                                                if let (Some(repl), Some(r)) = (&replacement, &range) {
-                                                                                    let orig = code_sig.get_untracked();
-                                                                                    let updated = apply_replacement(&orig, r, repl);
-                                                                                    code_sig.set(updated);
-                                                                                    snack.run("Quick Fix applied successfully!".to_string());
-                                                                                }
-                                                                            };
-                                                                            
-                                                                            view! {
-                                                                                <div class="suggestion-card">
-                                                                                    <div class="suggestion-card-header">
-                                                                                        <span class="suggestion-card-icon">"💡"</span>
-                                                                                        <span class="suggestion-card-title">{title}</span>
+                                                    expanded_idx.set(Some(idx));
+                                                    suggestions_state.set(None);
+                                                    loading_suggestions.set(true);
+                                                    
+                                                    let code_val = code.get_untracked();
+                                                    let lang_val = language.get_untracked();
+                                                    let diag_val = diag_clone.clone();
+                                                    
+                                                    spawn_local(async move {
+                                                        if let Ok(resp) = crate::api::get_error_suggestions_api(&code_val, &lang_val, &diag_val).await {
+                                                            suggestions_state.set(Some(resp.suggestions));
+                                                        }
+                                                        loading_suggestions.set(false);
+                                                    });
+                                                }
+                                            }>
+                                                <span class="problem-icon">{severity_icon}</span>
+                                                <span class="problem-message">{msg}{code_val}</span>
+                                                {if !source.is_empty() { view! { <span class="problem-source">"["{source}"]"</span> }.into_any() } else { view! { "" }.into_any() }}
+                                                <span class="problem-location">
+                                                    {if let Some(ref f) = file_name {
+                                                        format!("{}: Ln {}, Col {}", f, line + 1, col + 1)
+                                                    } else {
+                                                        format!("Ln {}, Col {}", line + 1, col + 1)
+                                                    }}
+                                                </span>
+                                            </div>
+                                            {move || {
+                                                if expanded_idx.get() == Some(idx) {
+                                                    view! {
+                                                        <div class="problem-expansion">
+                                                            {move || {
+                                                                if loading_suggestions.get() {
+                                                                    view! {
+                                                                        <div class="suggestion-loading">
+                                                                            <div class="spinner" style="width:14px;height:14px;border-width:1.5px;display:inline-block;vertical-align:middle;margin-right:8px" />
+                                                                            "Analyzing error and finding suggestions..."
+                                                                        </div>
+                                                                    }.into_any()
+                                                                } else if let Some(suggs) = suggestions_state.get() {
+                                                                    view! {
+                                                                        <div class="suggestions-list">
+                                                                            {suggs.into_iter().map(|sugg| {
+                                                                                let title = sugg.title.clone();
+                                                                                let explanation = sugg.explanation.clone();
+                                                                                let replacement = sugg.replacement.clone();
+                                                                                let range = sugg.range.clone();
+                                                                                
+                                                                                let code_sig = code;
+                                                                                let snack = show_snack_cb;
+                                                                                let has_fix = replacement.is_some() && range.is_some();
+                                                                                
+                                                                                let on_apply_fix = move |_| {
+                                                                                    if let (Some(repl), Some(r)) = (&replacement, &range) {
+                                                                                        let orig = code_sig.get_untracked();
+                                                                                        let updated = apply_replacement(&orig, r, repl);
+                                                                                        code_sig.set(updated);
+                                                                                        snack.run("Quick Fix applied successfully!".to_string());
+                                                                                    }
+                                                                                };
+                                                                                
+                                                                                view! {
+                                                                                    <div class="suggestion-card">
+                                                                                        <div class="suggestion-card-header">
+                                                                                            <span class="suggestion-card-icon">"💡"</span>
+                                                                                            <span class="suggestion-card-title">{title}</span>
+                                                                                        </div>
+                                                                                        <div class="suggestion-card-explanation">{explanation}</div>
+                                                                                        {has_fix.then(|| view! {
+                                                                                            <button class="btn btn-primary btn-sm" on:click=on_apply_fix style="margin-top:8px">
+                                                                                                "Apply Quick Fix"
+                                                                                            </button>
+                                                                                        })}
                                                                                     </div>
-                                                                                    <div class="suggestion-card-explanation">{explanation}</div>
-                                                                                    {has_fix.then(|| view! {
-                                                                                        <button class="btn btn-primary btn-sm" on:click=on_apply_fix style="margin-top:8px">
-                                                                                            "Apply Quick Fix"
-                                                                                        </button>
-                                                                                    })}
-                                                                                </div>
-                                                                            }
-                                                                        }).collect_view()}
-                                                                    </div>
-                                                                }.into_any()
-                                                            } else {
-                                                                view! { "" }.into_any()
-                                                            }
-                                                        }}
-                                                    </div>
-                                                }.into_any()
-                                            } else {
-                                                view! { "" }.into_any()
-                                            }
-                                        }}
-                                    </div>
-                                }
-                            }).collect_view()}
-                        </div>
-                    }.into_any()
+                                                                                }
+                                                                            }).collect_view()}
+                                                                        </div>
+                                                                    }.into_any()
+                                                                } else {
+                                                                    view! { "" }.into_any()
+                                                                }
+                                                            }}
+                                                        </div>
+                                                    }.into_any()
+                                                } else {
+                                                    view! { "" }.into_any()
+                                                }
+                                            }}
+                                        </div>
+                                    }
+                                }).collect_view()}
+                            </div>
+                        }.into_any()
+                    }
                 } else if bottom_tab.get() == 2 {
                     let refs = references_list.get();
                     if refs.is_empty() {
@@ -809,7 +984,6 @@ pub fn BottomPanel(
                                     let line = loc.range.start.line;
                                     let col = loc.range.start.character;
                                     
-                                    // Check if the reference's uri points to the current active file
                                     let is_active_file = active.as_ref().map(|act| {
                                         let suffix = format!("/{}", act);
                                         loc.uri.ends_with(&suffix)
@@ -852,10 +1026,28 @@ pub fn BottomPanel(
                     }
                 } else {
                     view! {
-                        <div
-                            class=move || if is_error.get() { "terminal error" } else { "terminal" }
-                        >
-                            {move || output.get()}
+                        <div class="terminal-container" on:click=move |_| {
+                            if let Some(input) = input_ref.get() {
+                                let _ = input.focus();
+                            }
+                        }>
+                            <div class="terminal-output-area" node_ref=output_area_ref>
+                                {move || output.get()}
+                            </div>
+                            <div class="terminal-input-line">
+                                <span class="terminal-prompt">
+                                    {move || format!("codedroid@system:{}$", project_name.get())}
+                                </span>
+                                <input
+                                    type="text"
+                                    class="terminal-input"
+                                    node_ref=input_ref
+                                    prop:value=move || command_input.get()
+                                    on:input=move |e| command_input.set(event_target_value(&e))
+                                    on:keydown=on_keydown
+                                    placeholder=move || if is_running_cmd.get() { "Running command..." } else { "Type command..." }
+                                />
+                            </div>
                         </div>
                     }.into_any()
                 }

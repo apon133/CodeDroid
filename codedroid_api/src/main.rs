@@ -12,13 +12,14 @@ mod error_suggestions;
 use handlers::{
     run_code, stop_process, add_package, sync_file, get_completions, 
     delete_file, copy_file, create_dir, move_file, format_code,
-    get_definition, get_references, read_file, get_hover
+    get_definition, get_references, read_file, get_hover, run_command
 };
 
 #[tokio::main]
 async fn main() {
     let app = Router::new()
         .route("/run", post(run_code))
+        .route("/run_command", post(run_command))
         .route("/stop", post(stop_process))
         .route("/add_package", post(add_package))
         .route("/sync_file", post(sync_file))

@@ -813,6 +813,54 @@ body {
   border-bottom-color: var(--accent); 
   background: rgba(255,255,255,0.01);
 }
+.terminal-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: #07090e;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.terminal-output-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 18px 4px 18px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.6;
+  color: #a7f3d0;
+}
+
+.terminal-input-line {
+  display: flex;
+  align-items: center;
+  padding: 4px 18px 14px 18px;
+  background: #07090e;
+}
+
+.terminal-prompt {
+  color: #34d399;
+  font-weight: 600;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.terminal-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #a7f3d0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 0;
+  margin: 0;
+}
+
 .terminal {
   flex: 1; 
   background: #07090e; 

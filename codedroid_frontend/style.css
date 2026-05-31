@@ -1582,13 +1582,87 @@ select.input { width: auto; min-width: 160px; }
 }
 
 .file-item-actions {
-  display: flex;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-  pointer-events: auto;
+  display: none !important;
 }
-.file-item:hover .file-item-actions {
-  opacity: 1;
+
+/* Custom VS Code-like Context Menu */
+.vscode-context-menu-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  background: transparent;
+  cursor: default;
+}
+
+.vscode-context-menu {
+  position: fixed;
+  background: #181825;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+  min-width: 170px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--font-ui);
+  animation: contextMenuFadeIn 0.1s ease-out;
+}
+
+@keyframes contextMenuFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text2);
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.context-menu-item:hover:not(:disabled) {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.context-menu-item.danger {
+  color: #ff453a;
+}
+
+.context-menu-item.danger:hover:not(:disabled) {
+  background: #ff453a;
+  color: #ffffff;
+}
+
+.context-menu-item:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
 }
 
 .btn-tree-action-header {
@@ -1603,15 +1677,6 @@ select.input { width: auto; min-width: 160px; }
   color: var(--text);
 }
 
-.btn-tree-action {
-  transition: transform 0.15s ease, opacity 0.15s ease;
-  color: var(--text2);
-}
-.btn-tree-action:hover {
-  opacity: 1 !important;
-  transform: scale(1.2);
-  color: var(--text);
-}
 
 @media (max-width: 768px) {
   .btn-menu {
@@ -1635,9 +1700,7 @@ select.input { width: auto; min-width: 160px; }
     transform: translateX(0);
   }
 
-  .file-item-actions {
-    opacity: 0.8;
-  }
+
   
   .editor-layout {
     position: relative;

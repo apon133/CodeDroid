@@ -2,7 +2,14 @@ use crate::components::icon::LucideIcon;
 use crate::pages::editor::utils::*;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
-use web_sys::{Event, KeyboardEvent, MouseEvent};
+use web_sys::{Event, KeyboardEvent, MouseEvent, TouchEvent};
+
+#[derive(Clone, PartialEq)]
+pub struct ContextMenuState {
+    pub x: f64,
+    pub y: f64,
+    pub entry: FileEntry,
+}
 
 #[component]
 pub fn FileTree(
@@ -28,9 +35,11 @@ pub fn FileTree(
     let (show_rename, set_show_rename) = signal(Option::<FileEntry>::None);
     let (rename_name, set_rename_name) = signal(String::new());
 
+    let (context_menu, set_context_menu) = signal(Option::<ContextMenuState>::None);
     let (press_id, set_press_id) = signal(0i32);
     let (collapsed_dirs, set_collapsed_dirs) = signal(std::collections::HashSet::<String>::new());
     let (selected_path, set_selected_path) = signal(Option::<String>::None);
+    
     let get_target_dir = move || {
         selected_path
             .get()
@@ -50,15 +59,15 @@ pub fn FileTree(
     };
 
     let start_long_press = Callback::new({
-        let paste_entry = paste_entry.clone();
-        move |target_dir: Option<String>| {
+        let set_context_menu = set_context_menu.clone();
+        move |(x, y, entry): (f64, f64, FileEntry)| {
             let next_id = press_id.get_untracked() + 1;
             set_press_id.set(next_id);
-            let paste_entry = paste_entry.clone();
+            let set_context_menu = set_context_menu.clone();
             spawn_local(async move {
                 gloo_timers::future::TimeoutFuture::new(500).await;
                 if press_id.get_untracked() == next_id {
-                    paste_entry.run(target_dir);
+                    set_context_menu.set(Some(ContextMenuState { x, y, entry }));
                 }
             });
         }
@@ -78,19 +87,13 @@ pub fn FileTree(
             on:mousedown=move |e| {
                 if e.target() == e.current_target() {
                     set_selected_path.set(None);
-                    start_long_press.run(None);
                 }
             }
-            on:mouseup=move |_| cancel_long_press.run(())
-            on:mouseleave=move |_| cancel_long_press.run(())
             on:touchstart=move |e| {
                 if e.target() == e.current_target() {
                     set_selected_path.set(None);
-                    start_long_press.run(None);
                 }
             }
-            on:touchend=move |_| cancel_long_press.run(())
-            on:touchcancel=move |_| cancel_long_press.run(())
         >
             <div class="sidebar-tabs">
                 <button
@@ -285,15 +288,13 @@ pub fn FileTree(
                         })
                         .map(|f| {
                             let fname_click = f.name.clone();
-                            let fname_mousedown = f.name.clone();
-                            let fname_touchstart = f.name.clone();
                             let fname_active = f.name.clone();
                             let fname_lang = f.name.clone();
 
                             let f_click = f.clone();
-                            let f_copy_btn = f.clone();
-                            let f_delete_btn = f.clone();
-                            let f_rename_btn = f.clone();
+                            let f_click_context = f_click.clone();
+                            let f_click_mouse = f_click.clone();
+                            let f_click_touch = f_click.clone();
 
                             let depth = path_depth(&f.name);
                             let indent = depth * 16;
@@ -331,10 +332,32 @@ pub fn FileTree(
                                             });
                                         }
                                     }
-                                    on:mousedown=move |_| start_long_press.run(if f_click.is_dir { Some(fname_mousedown.clone()) } else { None })
+                                    on:contextmenu=move |e: MouseEvent| {
+                                        e.prevent_default();
+                                        e.stop_propagation();
+                                        set_context_menu.set(Some(ContextMenuState {
+                                            x: e.client_x() as f64,
+                                            y: e.client_y() as f64,
+                                            entry: f_click_context.clone(),
+                                        }));
+                                    }
+                                    on:mousedown=move |e: MouseEvent| {
+                                        if e.button() == 0 { // left click only
+                                            let x = e.client_x() as f64;
+                                            let y = e.client_y() as f64;
+                                            start_long_press.run((x, y, f_click_mouse.clone()));
+                                        }
+                                    }
                                     on:mouseup=move |_| cancel_long_press.run(())
                                     on:mouseleave=move |_| cancel_long_press.run(())
-                                    on:touchstart=move |_| start_long_press.run(if f_click.is_dir { Some(fname_touchstart.clone()) } else { None })
+                                    on:touchstart=move |e: TouchEvent| {
+                                        if let Some(touch) = e.touches().get(0) {
+                                            let x = touch.client_x() as f64;
+                                            let y = touch.client_y() as f64;
+                                            start_long_press.run((x, y, f_click_touch.clone()));
+                                        }
+                                    }
+                                    on:touchmove=move |_| cancel_long_press.run(())
                                     on:touchend=move |_| cancel_long_press.run(())
                                     on:touchcancel=move |_| cancel_long_press.run(())
                                 >
@@ -369,68 +392,6 @@ pub fn FileTree(
                                             })}
                                         </span>
                                     </div>
-
-                                    <div class="file-item-actions" style="display:flex; gap:6px; flex-shrink:0; align-items:center">
-                                        {
-                                            let target_dir_outer = fname_click.clone();
-                                            move || {
-                                                let is_dir = f_click.is_dir;
-                                                let target_dir = target_dir_outer.clone();
-                                                let paste_entry = paste_entry.clone();
-                                                (is_dir && copied_item.get().is_some()).then(|| view! {
-                                                    <button
-                                                        class="btn-tree-action"
-                                                        style="background:transparent; border:none; color:var(--accent2); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center;"
-                                                        title="Paste here"
-                                                        on:click=move |e| {
-                                                            e.stop_propagation();
-                                                            paste_entry.run(Some(target_dir.clone()));
-                                                        }
-                                                    >
-                                                        <LucideIcon name="clipboard" size="13" />
-                                                    </button>
-                                                })
-                                            }
-                                        }
-                                        <button
-                                            class="btn-tree-action"
-                                            style="background:transparent; border:none; color:var(--text2); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center; opacity: 0.6;"
-                                            title="Rename/Move"
-                                            on:click=move |e| {
-                                                e.stop_propagation();
-                                                let rename_target = f_rename_btn.clone();
-                                                let path = rename_target.name.clone();
-                                                set_show_rename.set(Some(rename_target));
-                                                set_rename_name.set(path);
-                                                set_show_new_file.set(false);
-                                                set_show_new_folder.set(false);
-                                            }
-                                        >
-                                            <LucideIcon name="edit" size="13" />
-                                        </button>
-                                        <button
-                                            class="btn-tree-action"
-                                            style="background:transparent; border:none; color:var(--text2); cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center; opacity: 0.6;"
-                                            title="Copy"
-                                            on:click=move |e| {
-                                                e.stop_propagation();
-                                                copy_entry.run(f_copy_btn.clone());
-                                            }
-                                        >
-                                            <LucideIcon name="copy" size="13" />
-                                        </button>
-                                        <button
-                                            class="btn-tree-action"
-                                            style="background:transparent; border:none; color:#ff453a; cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center; opacity: 0.6;"
-                                            title="Delete"
-                                            on:click=move |e| {
-                                                e.stop_propagation();
-                                                delete_entry.run(f_delete_btn.clone());
-                                            }
-                                        >
-                                            <LucideIcon name="trash" size="13" />
-                                        </button>
-                                    </div>
                                 </div>
                             }
                         }).collect_view()
@@ -442,6 +403,86 @@ pub fn FileTree(
                     <div><strong>"📋 Copied: "</strong> {item.name}</div>
                     <div style="opacity: 0.7">"Long-press folder/tree to paste"</div>
                 </div>
+            })}
+
+            {move || context_menu.get().map(|menu| {
+                let entry_rename = menu.entry.clone();
+                let entry_copy = menu.entry.clone();
+                let entry_delete = menu.entry.clone();
+                let entry_paste = menu.entry.clone();
+                let is_dir = menu.entry.is_dir;
+                let has_copied = copied_item.get().is_some();
+                let set_context_menu = set_context_menu.clone();
+                let copy_entry = copy_entry.clone();
+                let delete_entry = delete_entry.clone();
+                let paste_entry = paste_entry.clone();
+                let set_show_rename = set_show_rename.clone();
+                let set_rename_name = set_rename_name.clone();
+                let set_show_new_file = set_show_new_file.clone();
+                let set_show_new_folder = set_show_new_folder.clone();
+                
+                view! {
+                    <div 
+                        class="vscode-context-menu-overlay"
+                        on:click=move |_| set_context_menu.set(None)
+                        on:contextmenu=move |e| {
+                            e.prevent_default();
+                            set_context_menu.set(None);
+                        }
+                    >
+                        <div 
+                            class="vscode-context-menu"
+                            style=format!("top: {}px; left: {}px;", menu.y, menu.x)
+                            on:click=move |e| e.stop_propagation()
+                        >
+                            <button class="context-menu-item" on:click=move |_| {
+                                set_context_menu.set(None);
+                                let path = entry_rename.name.clone();
+                                set_show_rename.set(Some(entry_rename.clone()));
+                                set_rename_name.set(path);
+                                set_show_new_file.set(false);
+                                set_show_new_folder.set(false);
+                            }>
+                                <LucideIcon name="edit" size="14" />
+                                <span>"Rename / Move..."</span>
+                            </button>
+                            <button class="context-menu-item" on:click=move |_| {
+                                set_context_menu.set(None);
+                                copy_entry.run(entry_copy.clone());
+                            }>
+                                <LucideIcon name="copy" size="14" />
+                                <span>"Copy"</span>
+                            </button>
+                            {if is_dir {
+                                let entry_paste = entry_paste.clone();
+                                let paste_entry = paste_entry.clone();
+                                view! {
+                                    <button 
+                                        class=format!("context-menu-item {}", if has_copied { "" } else { "disabled" })
+                                        disabled=!has_copied
+                                        on:click=move |_| {
+                                            set_context_menu.set(None);
+                                            paste_entry.run(Some(entry_paste.name.clone()));
+                                        }
+                                    >
+                                        <LucideIcon name="clipboard" size="14" />
+                                        <span>"Paste Into Folder"</span>
+                                    </button>
+                                }.into_any()
+                            } else {
+                                view! { "" }.into_any()
+                            }}
+                            <div class="context-menu-divider"></div>
+                            <button class="context-menu-item danger" on:click=move |_| {
+                                set_context_menu.set(None);
+                                delete_entry.run(entry_delete.clone());
+                            }>
+                                <LucideIcon name="trash" size="14" />
+                                <span>"Delete"</span>
+                            </button>
+                        </div>
+                    </div>
+                }
             })}
         </div>
     }

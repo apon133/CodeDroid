@@ -29,6 +29,8 @@ pub fn FileTree(
     sidebar_open: Signal<bool>,
     toggle_sidebar: Callback<()>,
     sidebar_mode: RwSignal<usize>,
+    project_path: String,
+    terminal_trigger: RwSignal<Option<String>>,
 ) -> impl IntoView {
     let (show_new_file, set_show_new_file) = signal(false);
     let (show_new_folder, set_show_new_folder) = signal(false);
@@ -474,6 +476,33 @@ pub fn FileTree(
                                 view! { "" }.into_any()
                             }}
                             <div class="context-menu-divider"></div>
+                            <button class="context-menu-item" on:click={
+                                let entry = menu.entry.clone();
+                                let project_path = project_path.clone();
+                                let terminal_trigger = terminal_trigger.clone();
+                                move |_| {
+                                    set_context_menu.set(None);
+                                    let relative_dir = if entry.is_dir {
+                                        entry.name.clone()
+                                    } else {
+                                        if let Some(pos) = entry.name.rfind('/') {
+                                            entry.name[..pos].to_string()
+                                        } else {
+                                            String::new()
+                                        }
+                                    };
+                                    let target_dir = if relative_dir.is_empty() {
+                                        project_path.clone()
+                                    } else {
+                                        format!("{}/{}", project_path, relative_dir)
+                                    };
+                                    terminal_trigger.set(Some(target_dir));
+                                }
+                            }>
+                                <LucideIcon name="terminal" size="14" />
+                                <span>"Open in Integrated Terminal"</span>
+                            </button>
+                            <div class="context-menu-divider"></div>
                             <button class="context-menu-item danger" on:click=move |_| {
                                 set_context_menu.set(None);
                                 delete_entry.run(entry_delete.clone());
@@ -599,6 +628,8 @@ pub struct SessionState {
     pub id: String,
     pub name: String,
     pub output: String,
+    #[serde(default)]
+    pub path: Option<String>,
 }
 
 #[component]
@@ -620,6 +651,7 @@ pub fn BottomPanel(
     terminal_session_id: RwSignal<Option<String>>,
     is_running: RwSignal<bool>,
     terminal_history: RwSignal<Vec<String>>,
+    terminal_trigger: RwSignal<Option<String>>,
 ) -> impl IntoView {
     let expanded_idx = RwSignal::new(Option::<usize>::None);
     let suggestions_state = RwSignal::new(Option::<Vec<crate::api::CodeSuggestion>>::None);
@@ -771,6 +803,69 @@ pub fn BottomPanel(
         });
     };
 
+    // Effect to handle external open-in-terminal triggers
+    let terminal_trigger_clone = terminal_trigger;
+    Effect::new({
+        let sessions = sessions.clone();
+        let active_idx = active_idx.clone();
+        let terminal_session_id = terminal_session_id.clone();
+        let output = output.clone();
+        let start_polling = start_polling.clone();
+        move |_| {
+            if let Some(dir_path) = terminal_trigger_clone.get() {
+                // Reset trigger immediately so it can fire again
+                terminal_trigger_clone.set(None);
+                
+                // Switch tab to Terminal (index 0)
+                bottom_tab.set(0);
+                
+                let sessions_clone = sessions;
+                let active_idx_clone = active_idx;
+                let terminal_session_id_clone = terminal_session_id;
+                let output_clone = output;
+                let start_polling_clone = start_polling.clone();
+                
+                // Save current session output first
+                let current_active_idx = active_idx_clone.get_untracked();
+                let current_out = output_clone.get_untracked();
+                sessions_clone.update(|s_list| {
+                    if current_active_idx < s_list.len() {
+                        s_list[current_active_idx].output = current_out;
+                    }
+                });
+                
+                let folder_name = dir_path.split('/').last().unwrap_or("sh").to_string();
+                let name = if folder_name.is_empty() { "sh".to_string() } else { format!("sh: {}", folder_name) };
+                
+                spawn_local(async move {
+                    match crate::api::start_terminal_api(&dir_path).await {
+                        Ok(session_id) => {
+                            let new_sess = SessionState {
+                                id: session_id.clone(),
+                                name,
+                                output: "Welcome to CodeDroid Terminal\n\n".to_string(),
+                                path: Some(dir_path.clone()),
+                            };
+                            
+                            sessions_clone.update(|s| s.push(new_sess));
+                            let new_idx = sessions_clone.get_untracked().len() - 1;
+                            active_idx_clone.set(new_idx);
+                            
+                            output_clone.set("Welcome to CodeDroid Terminal\n\n".to_string());
+                            terminal_session_id_clone.set(Some(session_id.clone()));
+                            start_polling_clone(session_id);
+                        }
+                        Err(e) => {
+                            let mut current = output_clone.get_untracked();
+                            current.push_str(&format!("❌ Failed to initialize terminal session: {}\n", e));
+                            output_clone.set(current);
+                        }
+                    }
+                });
+            }
+        }
+    });
+
     // Start polling existing sessions loaded from storage
     for s in sessions.get_untracked() {
         start_polling(s.id.clone());
@@ -794,6 +889,7 @@ pub fn BottomPanel(
                             id: session_id.clone(),
                             name: "sh (1)".to_string(),
                             output: initial_out.clone(),
+                            path: Some(path.clone()),
                         };
                         sessions_clone.set(vec![new_sess]);
                         active_idx_clone.set(0);
@@ -824,6 +920,7 @@ pub fn BottomPanel(
                     id: session_id.clone(),
                     name,
                     output: initial_out,
+                    path: Some(project_path.get_untracked()),
                 };
                 sessions.update(|s| s.push(new_sess));
                 active_idx.set(sessions.get_untracked().len() - 1);
@@ -890,6 +987,7 @@ pub fn BottomPanel(
                         id: session_id.clone(),
                         name,
                         output: "Welcome to CodeDroid Terminal\n\n".to_string(),
+                        path: Some(proj_path.clone()),
                     };
                     
                     sessions_clone.update(|s| s.push(new_sess));
@@ -967,7 +1065,6 @@ pub fn BottomPanel(
         let output_clone = output;
         let sessions_clone = sessions;
         let active_idx_clone = active_idx;
-        let is_running_clone = is_running;
 
         let mut current = output_clone.get_untracked();
         current.push_str("\n[Initializing terminal session...]\n");
@@ -975,7 +1072,7 @@ pub fn BottomPanel(
 
         spawn_local(async move {
             let active = active_idx_clone.get_untracked();
-            let mut list = sessions_clone.get_untracked();
+            let list = sessions_clone.get_untracked();
             
             if active < list.len() {
                 let old_id = list[active].id.clone();
@@ -996,6 +1093,7 @@ pub fn BottomPanel(
                             id: new_id.clone(),
                             name,
                             output: "Welcome to CodeDroid Terminal\n\n".to_string(),
+                            path: Some(proj_path_clone.clone()),
                         };
                         sessions_clone.update(|s| s.push(new_sess));
                         active_idx_clone.set(sessions_clone.get_untracked().len() - 1);
@@ -1630,7 +1728,30 @@ pub fn BottomPanel(
                             
                             <div class="terminal-input-line">
                                 <span class="terminal-prompt">
-                                    {move || format!("{} $", project_name.get())}
+                                    {move || {
+                                        let list = sessions.get();
+                                        let idx = active_idx.get();
+                                        if idx < list.len() {
+                                            if let Some(ref path) = list[idx].path {
+                                                let clean_path = if path.starts_with("/Codedroid_Projects/") {
+                                                    &path["/Codedroid_Projects/".len()..]
+                                                } else if path.starts_with("/Codedroid_Projects") {
+                                                    &path["/Codedroid_Projects".len()..]
+                                                } else {
+                                                    path.as_str()
+                                                };
+                                                if clean_path.is_empty() {
+                                                    format!("{} $", project_name.get())
+                                                } else {
+                                                    format!("{} $", clean_path)
+                                                }
+                                            } else {
+                                                format!("{} $", project_name.get())
+                                            }
+                                        } else {
+                                            format!("{} $", project_name.get())
+                                        }
+                                    }}
                                 </span>
                                 <input
                                     type="text"

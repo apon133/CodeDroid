@@ -87,6 +87,7 @@ pub fn EditorPage() -> impl IntoView {
         RwSignal::new(Option::<(api::Diagnostic, Vec<api::CodeSuggestion>, bool)>::None);
     let terminal_session_id = RwSignal::new(Option::<String>::None);
     let terminal_history = RwSignal::new(store::load_terminal_history(&project.id));
+    let terminal_trigger = RwSignal::new(Option::<String>::None);
 
     // Callbacks
     let show_snack = Callback::new({
@@ -471,6 +472,8 @@ pub fn EditorPage() -> impl IntoView {
                                 sidebar_open=sidebar_open.into()
                                 toggle_sidebar=Callback::new(move |_: ()| sidebar_open.set(false))
                                 sidebar_mode=sidebar_mode
+                                project_path=ppath.clone()
+                                terminal_trigger=terminal_trigger
                             />
                         }.into_any()
                     } else {
@@ -556,6 +559,7 @@ pub fn EditorPage() -> impl IntoView {
                         terminal_session_id=terminal_session_id
                         is_running=is_running
                         terminal_history=terminal_history
+                        terminal_trigger=terminal_trigger
                     />
 
                 </div>

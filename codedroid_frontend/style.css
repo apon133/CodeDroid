@@ -910,6 +910,71 @@ body {
   background: rgba(239, 68, 68, 0.2);
   color: #f87171;
 }
+.terminal-tabs-desktop {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 4px;
+  height: 24px;
+}
+.terminal-tab-desktop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text2);
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  height: 18px;
+}
+.terminal-tab-desktop:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+.terminal-tab-desktop.active {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.terminal-tab-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text2);
+  padding: 0;
+  cursor: pointer;
+  border-radius: 2px;
+  width: 12px;
+  height: 12px;
+  transition: all 0.15s ease;
+}
+.terminal-tab-close-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.terminal-session-select-wrapper {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .terminal-tabs-desktop {
+    display: none;
+  }
+  .terminal-session-select-wrapper {
+    display: block;
+  }
+}
 
 /* ── Terminal mobile touch auxiliary keys row ── */
 .terminal-mobile-keys {

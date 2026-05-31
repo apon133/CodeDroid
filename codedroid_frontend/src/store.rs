@@ -41,6 +41,8 @@ pub fn delete_project(projects: &RwSignal<Vec<Project>>, id: &str) {
     projects.update(|v| v.retain(|p| p.id != id));
     save_projects(&projects.get_untracked());
     clear_project_files_from_local_storage(id);
+    let _ = LocalStorage::delete(&format!("codedroid_term_sessions_{}", id));
+    let _ = LocalStorage::delete(&format!("codedroid_term_active_idx_{}", id));
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────

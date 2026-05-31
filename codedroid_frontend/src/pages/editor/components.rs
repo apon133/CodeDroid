@@ -3,6 +3,7 @@ use crate::pages::editor::utils::*;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use web_sys::{Event, KeyboardEvent, MouseEvent, TouchEvent};
+use gloo_storage::Storage;
 
 #[derive(Clone, PartialEq)]
 pub struct ContextMenuState {
@@ -593,7 +594,7 @@ pub fn apply_replacement(code: &str, range: &crate::api::Range, replacement: &st
     result
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SessionState {
     pub id: String,
     pub name: String,
@@ -631,9 +632,46 @@ pub fn BottomPanel(
     let output_area_ref = NodeRef::<leptos::html::Div>::new();
 
     // Multi-session state
-    let sessions = RwSignal::new(Vec::<SessionState>::new());
-    let active_idx = RwSignal::new(0usize);
+    let project_id_for_load = project_id_stored.get_value();
+    let loaded_sessions: Vec<SessionState> = gloo_storage::LocalStorage::get(&format!("codedroid_term_sessions_{}", project_id_for_load))
+        .unwrap_or_default();
+    
+    let loaded_active_idx: usize = gloo_storage::LocalStorage::get(&format!("codedroid_term_active_idx_{}", project_id_for_load))
+        .unwrap_or(0);
+
+    let sessions = RwSignal::new(loaded_sessions);
+    let active_idx = RwSignal::new(loaded_active_idx);
     let is_maximized = RwSignal::new(false);
+
+    // Initialize output and terminal_session_id from loaded state if not empty
+    let sessions_list = sessions.get_untracked();
+    if !sessions_list.is_empty() {
+        let active = active_idx.get_untracked();
+        if active < sessions_list.len() {
+            output.set(sessions_list[active].output.clone());
+            terminal_session_id.set(Some(sessions_list[active].id.clone()));
+        }
+    }
+
+    // Effect to automatically save sessions to local storage
+    let project_id_for_save = project_id_stored.get_value();
+    let output_clone_for_save = output;
+    Effect::new(move |_| {
+        let mut sess_list = sessions.get();
+        let idx = active_idx.get();
+        let current_out = output_clone_for_save.get();
+        if idx < sess_list.len() {
+            sess_list[idx].output = current_out;
+        }
+        let _ = gloo_storage::LocalStorage::set(&format!("codedroid_term_sessions_{}", project_id_for_save), &sess_list);
+    });
+
+    // Effect to automatically save active index to local storage
+    let project_id_for_idx_save = project_id_stored.get_value();
+    Effect::new(move |_| {
+        let idx = active_idx.get();
+        let _ = gloo_storage::LocalStorage::set(&format!("codedroid_term_active_idx_{}", project_id_for_idx_save), &idx);
+    });
 
     let active_session_name = Signal::derive(move || {
         let list = sessions.get();
@@ -732,6 +770,11 @@ pub fn BottomPanel(
             }
         });
     };
+
+    // Start polling existing sessions loaded from storage
+    for s in sessions.get_untracked() {
+        start_polling(s.id.clone());
+    }
 
     // Effect to start initial terminal session when tab is selected
     Effect::new(move |_| {
@@ -867,13 +910,10 @@ pub fn BottomPanel(
         });
     };
 
-    let kill_active_session = move |_| {
+    let kill_session_by_index = move |target_idx: usize| {
         let list = sessions.get_untracked();
-        if list.is_empty() { return; }
-        
-        let current_idx = active_idx.get_untracked();
-        if current_idx < list.len() {
-            let session_id = list[current_idx].id.clone();
+        if target_idx < list.len() {
+            let session_id = list[target_idx].id.clone();
             let sessions_clone = sessions;
             let active_idx_clone = active_idx;
             let terminal_session_id_clone = terminal_session_id;
@@ -883,8 +923,8 @@ pub fn BottomPanel(
                 let _ = crate::api::stop_terminal_api(&session_id).await;
                 
                 sessions_clone.update(|s_list| {
-                    if current_idx < s_list.len() {
-                        s_list.remove(current_idx);
+                    if target_idx < s_list.len() {
+                        s_list.remove(target_idx);
                     }
                 });
                 
@@ -894,7 +934,17 @@ pub fn BottomPanel(
                     output_clone.set("[No active terminal sessions]\n".to_string());
                     active_idx_clone.set(0);
                 } else {
-                    let new_idx = if current_idx > 0 { current_idx - 1 } else { 0 };
+                    let current_active = active_idx_clone.get_untracked();
+                    let new_idx = if current_active >= updated_list.len() {
+                        updated_list.len() - 1
+                    } else if current_active == target_idx {
+                        if target_idx > 0 { target_idx - 1 } else { 0 }
+                    } else if current_active > target_idx {
+                        current_active - 1
+                    } else {
+                        current_active
+                    };
+                    
                     active_idx_clone.set(new_idx);
                     let target_s = &updated_list[new_idx];
                     output_clone.set(target_s.output.clone());
@@ -902,6 +952,11 @@ pub fn BottomPanel(
                 }
             });
         }
+    };
+
+    let kill_active_session = move |_| {
+        let current_idx = active_idx.get_untracked();
+        kill_session_by_index(current_idx);
     };
 
     let stop_command = move || {
@@ -1018,12 +1073,12 @@ pub fn BottomPanel(
 
         let mut current = output.get_untracked();
         current.push_str(&format!("{} $ {}\n", proj_name, cmd));
-        output.set(current);
+        output.set(current.clone());
         
         sessions.update(|s_list| {
             let active = active_idx.get_untracked();
             if active < s_list.len() {
-                s_list[active].output = format!("{} $ {}\n", proj_name, cmd);
+                s_list[active].output = current;
             }
         });
 
@@ -1457,18 +1512,46 @@ pub fn BottomPanel(
                                     <span class="terminal-active-name">{move || active_session_name.get()}</span>
                                 </div>
                                 <div class="terminal-toolbar-right">
-                                    <select class="terminal-session-select" on:change=on_session_change>
+                                    // Desktop VS Code-like horizontal tabs
+                                    <div class="terminal-tabs-desktop">
                                         {move || {
                                             sessions.get().iter().enumerate().map(|(idx, s)| {
                                                 let is_selected = idx == active_idx.get();
+                                                let switch_cb = move |_| switch_to_session(idx);
+                                                let close_cb = move |e: MouseEvent| {
+                                                    e.stop_propagation();
+                                                    kill_session_by_index(idx);
+                                                };
                                                 view! {
-                                                    <option value=idx.to_string() prop:selected=is_selected>
-                                                        {format!("{}: {}", idx + 1, s.name)}
-                                                    </option>
+                                                    <button
+                                                        class=move || if is_selected { "terminal-tab-desktop active" } else { "terminal-tab-desktop" }
+                                                        on:click=switch_cb
+                                                    >
+                                                        <span>{s.name.clone()}</span>
+                                                        <span class="terminal-tab-close-btn" on:click=close_cb>
+                                                            <LucideIcon name="x" size="10" />
+                                                        </span>
+                                                    </button>
                                                 }
                                             }).collect_view()
                                         }}
-                                    </select>
+                                    </div>
+
+                                    // Mobile select dropdown wrapper
+                                    <div class="terminal-session-select-wrapper">
+                                        <select class="terminal-session-select" on:change=on_session_change>
+                                            {move || {
+                                                sessions.get().iter().enumerate().map(|(idx, s)| {
+                                                    let is_selected = idx == active_idx.get();
+                                                    view! {
+                                                        <option value=idx.to_string() prop:selected=is_selected>
+                                                            {format!("{}: {}", idx + 1, s.name)}
+                                                        </option>
+                                                    }
+                                                }).collect_view()
+                                            }}
+                                        </select>
+                                    </div>
                                     <button class="terminal-toolbar-btn" on:click=add_new_session title="New Terminal">
                                         <LucideIcon name="plus" size="14" />
                                     </button>

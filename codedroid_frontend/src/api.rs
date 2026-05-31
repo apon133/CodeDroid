@@ -13,7 +13,7 @@ pub fn get_api_url() -> String {
     DEFAULT_API_URL.to_string()
 }
 
-use crate::models::{CommandResponse, PackageResponse, RunResponse};
+use crate::models::{PackageResponse, RunResponse};
 use gloo_net::http::Request;
 use serde_json::json;
 
@@ -465,22 +465,6 @@ pub async fn hover_api(
         .map_err(|e| e.to_string())
 }
 
-pub async fn run_command_api(command: &str, project_path: &str) -> Result<CommandResponse, String> {
-    let body = json!({
-        "command": command,
-        "project_path": project_path,
-    });
-    Request::post(&format!("{}/run_command", get_api_url()))
-        .json(&body)
-        .map_err(|e| e.to_string())?
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .json::<CommandResponse>()
-        .await
-        .map_err(|e| e.to_string())
-}
-
 #[derive(serde::Serialize)]
 pub struct ScanProjectRequest {
     pub project_path: String,
@@ -527,6 +511,7 @@ struct TerminalOutputResponse {
 #[derive(serde::Deserialize)]
 struct TerminalInputResponse {
     success: bool,
+    #[allow(dead_code)]
     error: Option<String>,
 }
 

@@ -576,3 +576,212 @@ pub async fn stop_terminal_api(session_id: &str) -> Result<bool, String> {
         .map_err(|e| e.to_string())
 }
 
+#[derive(serde::Serialize)]
+pub struct GitRequest {
+    pub project_path: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct GitFileRequest {
+    pub project_path: String,
+    pub file_path: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct GitCommitRequest {
+    pub project_path: String,
+    pub message: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct GitCloneRequest {
+    pub clone_url: String,
+    pub project_name: String,
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct GitStatusFile {
+    pub path: String,
+    pub status: String,
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct GitStatusResponse {
+    pub branch: String,
+    pub files: Vec<GitStatusFile>,
+    pub error: Option<String>,
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct GitCommandResponse {
+    pub success: bool,
+    pub output: String,
+    pub error: Option<String>,
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct GitDiffLinesResponse {
+    pub added: Vec<usize>,
+    pub modified: Vec<usize>,
+    pub deleted: Vec<usize>,
+}
+
+pub async fn git_status_api(project_path: &str) -> Result<GitStatusResponse, String> {
+    let body = GitRequest { project_path: project_path.to_string() };
+    Request::post(&format!("{}/git/status", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitStatusResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_stage_api(project_path: &str, file_path: &str) -> Result<GitCommandResponse, String> {
+    let body = GitFileRequest { project_path: project_path.to_string(), file_path: file_path.to_string() };
+    Request::post(&format!("{}/git/stage", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitCommandResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_unstage_api(project_path: &str, file_path: &str) -> Result<GitCommandResponse, String> {
+    let body = GitFileRequest { project_path: project_path.to_string(), file_path: file_path.to_string() };
+    Request::post(&format!("{}/git/unstage", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitCommandResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_discard_api(project_path: &str, file_path: &str) -> Result<GitCommandResponse, String> {
+    let body = GitFileRequest { project_path: project_path.to_string(), file_path: file_path.to_string() };
+    Request::post(&format!("{}/git/discard", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitCommandResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_commit_api(project_path: &str, message: &str) -> Result<GitCommandResponse, String> {
+    let body = GitCommitRequest { project_path: project_path.to_string(), message: message.to_string() };
+    Request::post(&format!("{}/git/commit", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitCommandResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_push_api(project_path: &str) -> Result<GitCommandResponse, String> {
+    let body = GitRequest { project_path: project_path.to_string() };
+    Request::post(&format!("{}/git/push", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitCommandResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_pull_api(project_path: &str) -> Result<GitCommandResponse, String> {
+    let body = GitRequest { project_path: project_path.to_string() };
+    Request::post(&format!("{}/git/pull", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitCommandResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_diff_lines_api(project_path: &str, file_path: &str) -> Result<GitDiffLinesResponse, String> {
+    let body = GitFileRequest { project_path: project_path.to_string(), file_path: file_path.to_string() };
+    Request::post(&format!("{}/git/diff_lines", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitDiffLinesResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_diff_text_api(project_path: &str, file_path: &str) -> Result<GitCommandResponse, String> {
+    let body = GitFileRequest { project_path: project_path.to_string(), file_path: file_path.to_string() };
+    Request::post(&format!("{}/git/diff_text", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitCommandResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_clone_api(clone_url: &str, project_name: &str) -> Result<GitCommandResponse, String> {
+    let body = GitCloneRequest { clone_url: clone_url.to_string(), project_name: project_name.to_string() };
+    Request::post(&format!("{}/git/clone", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitCommandResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct GitCommitInfo {
+    pub hash: String,
+    pub subject: String,
+    pub refs: String,
+    pub author_name: String,
+    pub relative_date: String,
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct GitLogResponse {
+    pub commits: Vec<GitCommitInfo>,
+    pub error: Option<String>,
+}
+
+pub async fn git_log_api(project_path: &str) -> Result<GitLogResponse, String> {
+    let body = GitRequest { project_path: project_path.to_string() };
+    Request::post(&format!("{}/git/log", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitLogResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+

@@ -189,11 +189,13 @@ pub fn HomePage() -> impl IntoView {
                 framework: result.framework.clone(),
             };
 
-            // Store default files in localStorage
-            let files = default_files(&result.lang, &result.framework, &result.name);
-            for (filename, content) in &files {
-                let key = store::file_key(&project.id, filename);
-                store::save_file(&key, content);
+            // Store default files in localStorage (only for non-cloned template projects)
+            if result.lang != "auto" {
+                let files = default_files(&result.lang, &result.framework, &result.name);
+                for (filename, content) in &files {
+                    let key = store::file_key(&project.id, filename);
+                    store::save_file(&key, content);
+                }
             }
 
             let pid = project.id.clone();

@@ -6,6 +6,7 @@ use tower_http::cors::CorsLayer;
 
 mod diagnostics;
 mod error_suggestions;
+mod git;
 mod handlers;
 mod lsp;
 mod models;
@@ -45,6 +46,7 @@ async fn main() {
         )
         .route("/ping", get(|| async { "pong" }))
         .nest("/terminal", terminal::router())
+        .nest("/git", git::router())
         .layer(CorsLayer::permissive());
 
     let addr = "0.0.0.0:3000";

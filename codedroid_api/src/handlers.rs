@@ -17,8 +17,92 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-pub async fn run_code(Json(payload): Json<CodeRequest>) -> Json<CodeResponse> {
+fn detect_language_from_files(project_dir: &str) -> String {
+    // 1. Direct configuration files / specific project structure indicators
+    if fs::metadata(format!("{}/package.json", project_dir)).is_ok() {
+        return "javascript".to_string();
+    }
+    if fs::metadata(format!("{}/index.html", project_dir)).is_ok() {
+        return "javascript".to_string();
+    }
+    if fs::metadata(format!("{}/Cargo.toml", project_dir)).is_ok() {
+        return "rust".to_string();
+    }
+    if fs::metadata(format!("{}/go.mod", project_dir)).is_ok() {
+        return "go".to_string();
+    }
+    if fs::metadata(format!("{}/pubspec.yaml", project_dir)).is_ok() {
+        return "dart".to_string();
+    }
+
+    // 2. Scan directory recursively for extensions
+    let mut ext_counts = std::collections::HashMap::new();
+    scan_exts(std::path::Path::new(project_dir), &mut ext_counts, 0);
+
+    // Get the extension with the highest count
+    let mut best_ext = None;
+    let mut max_count = 0;
+    for (ext, count) in ext_counts {
+        if count > max_count {
+            max_count = count;
+            best_ext = Some(ext);
+        }
+    }
+
+    if let Some(ext) = best_ext {
+        match ext.as_str() {
+            "rs" => "rust".to_string(),
+            "go" => "go".to_string(),
+            "py" => "python".to_string(),
+            "dart" => "dart".to_string(),
+            "c" => "c".to_string(),
+            "cpp" | "cc" | "cxx" => "cpp".to_string(),
+            "java" => "java".to_string(),
+            "kt" | "kts" => "kotlin".to_string(),
+            "swift" => "swift".to_string(),
+            "rb" => "ruby".to_string(),
+            "cs" => "csharp".to_string(),
+            "scala" => "scala".to_string(),
+            "pl" | "pm" => "perl".to_string(),
+            "hs" | "lhs" => "haskell".to_string(),
+            "pas" => "pascal".to_string(),
+            "r" | "R" => "r".to_string(),
+            "js" | "jsx" => "javascript".to_string(),
+            "ts" | "tsx" => "typescript".to_string(),
+            _ => "javascript".to_string(),
+        }
+    } else {
+        "javascript".to_string()
+    }
+}
+
+fn scan_exts(dir: &std::path::Path, counts: &mut std::collections::HashMap<String, usize>, depth: usize) {
+    if depth > 4 { return; }
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if name != "node_modules" && name != "target" && name != ".git" && name != "build" && name != "dist" {
+                    scan_exts(&path, counts, depth + 1);
+                }
+            } else if path.is_file() {
+                if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                    let ext_lower = ext.to_lowercase();
+                    *counts.entry(ext_lower).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+}
+
+pub async fn run_code(Json(mut payload): Json<CodeRequest>) -> Json<CodeResponse> {
     let project_dir = resolve_project_dir(&payload.project_path);
+
+    if payload.language.to_lowercase() == "auto" || payload.language.trim().is_empty() {
+        payload.language = detect_language_from_files(&project_dir);
+        println!("Auto-detected language for execution: {}", payload.language);
+    }
 
     match payload.language.to_lowercase().as_str() {
         "rust" => run_rust(payload, &project_dir),

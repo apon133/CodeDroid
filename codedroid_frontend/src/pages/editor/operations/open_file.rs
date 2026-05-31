@@ -15,6 +15,36 @@ pub fn make_open_file(
     trigger_diagnostics: Callback<String>,
 ) -> Callback<String> {
     Callback::new(move |name: String| {
+        if name.starts_with("git-diff://") {
+            open_tabs.update(|t| {
+                if !t.contains(&name) {
+                    t.push(name.clone());
+                }
+            });
+            active_tab.set(Some(name.clone()));
+            code.set("Loading diff...".to_string());
+            dirty.set(false);
+
+            let name_clone = name.clone();
+            let ppath_clone = ppath.clone();
+            let code_clone = code.clone();
+            let active_tab_clone = active_tab.clone();
+
+            spawn_local(async move {
+                let file_path = name_clone.strip_prefix("git-diff://").unwrap_or(&name_clone).to_string();
+                if let Ok(resp) = api::git_diff_text_api(&ppath_clone, &file_path).await {
+                    if active_tab_clone.get_untracked().as_ref() == Some(&name_clone) {
+                        code_clone.set(resp.output);
+                    }
+                } else {
+                    if active_tab_clone.get_untracked().as_ref() == Some(&name_clone) {
+                        code_clone.set("Error: Failed to fetch diff.".to_string());
+                    }
+                }
+            });
+            return;
+        }
+
         let key = store::file_key(&pid, &name);
         let content = store::load_file(&key);
         open_tabs.update(|t| {

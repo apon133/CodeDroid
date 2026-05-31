@@ -12,12 +12,14 @@ pub mod preview;
 pub mod search_bar;
 pub mod suggestions;
 pub mod utils;
+pub mod git_panel;
 
 use crate::api;
 use crate::components::icon::LucideIcon;
 use crate::components::snackbar::Snackbar;
 use crate::models::{lang_icon, Project, Settings};
 use crate::store;
+use git_panel::GitPanel;
 use code_area::EditorCodeArea;
 use components::*;
 use operations::*;
@@ -65,6 +67,135 @@ pub fn EditorPage() -> impl IntoView {
     let right_code = RwSignal::new(String::new());
     let left_dirty = RwSignal::new(false);
     let right_dirty = RwSignal::new(false);
+
+    let git_status = RwSignal::new(None::<api::GitStatusResponse>);
+    let left_git_diff_lines = RwSignal::new(None::<api::GitDiffLinesResponse>);
+    let right_git_diff_lines = RwSignal::new(None::<api::GitDiffLinesResponse>);
+
+    let refresh_git_status = Callback::new({
+        let project_path = project.path.clone();
+        let git_status = git_status.clone();
+        move |()| {
+            let project_path = project_path.clone();
+            let git_status = git_status.clone();
+            spawn_local(async move {
+                if let Ok(res) = api::git_status_api(&project_path).await {
+                    git_status.set(Some(res));
+                }
+            });
+        }
+    });
+
+    // Run polling every 3 seconds
+    Effect::new(move || {
+        let refresh = refresh_git_status.clone();
+        spawn_local(async move {
+            loop {
+                refresh.run(());
+                gloo_timers::future::TimeoutFuture::new(3000).await;
+            }
+        });
+    });
+
+    let project_path_left_diff = project.path.clone();
+    let left_git_diff_lines_c = left_git_diff_lines.clone();
+    Effect::new(move || {
+        let active = left_active_tab.get();
+        let project_path = project_path_left_diff.clone();
+        let sig = left_git_diff_lines_c.clone();
+        if let Some(tab_name) = active {
+            if !tab_name.starts_with("git-diff://") {
+                spawn_local(async move {
+                    if let Ok(res) = api::git_diff_lines_api(&project_path, &tab_name).await {
+                        sig.set(Some(res));
+                    } else {
+                        sig.set(None);
+                    }
+                });
+            } else {
+                sig.set(None);
+            }
+        } else {
+            sig.set(None);
+        }
+    });
+
+    let project_path_right_diff = project.path.clone();
+    let right_git_diff_lines_c = right_git_diff_lines.clone();
+    Effect::new(move || {
+        let active = right_active_tab.get();
+        let project_path = project_path_right_diff.clone();
+        let sig = right_git_diff_lines_c.clone();
+        if let Some(tab_name) = active {
+            if !tab_name.starts_with("git-diff://") {
+                spawn_local(async move {
+                    if let Ok(res) = api::git_diff_lines_api(&project_path, &tab_name).await {
+                        sig.set(Some(res));
+                    } else {
+                        sig.set(None);
+                    }
+                });
+            } else {
+                sig.set(None);
+            }
+        } else {
+            sig.set(None);
+        }
+    });
+
+    // Refresh git diff on left pane save
+    let left_last_dirty = RwSignal::new(false);
+    let refresh_status_left = refresh_git_status.clone();
+    let project_path_left_save = project.path.clone();
+    let left_git_diff_lines_save = left_git_diff_lines.clone();
+    Effect::new(move || {
+        let is_dirty = left_dirty.get();
+        let was_dirty = left_last_dirty.get_untracked();
+        left_last_dirty.set(is_dirty);
+        if was_dirty && !is_dirty {
+            refresh_status_left.run(());
+            if let Some(tab_name) = left_active_tab.get_untracked() {
+                if !tab_name.starts_with("git-diff://") {
+                    let project_path = project_path_left_save.clone();
+                    let sig = left_git_diff_lines_save.clone();
+                    spawn_local(async move {
+                        if let Ok(res) = api::git_diff_lines_api(&project_path, &tab_name).await {
+                            sig.set(Some(res));
+                        } else {
+                            sig.set(None);
+                        }
+                    });
+                }
+            }
+        }
+    });
+
+    // Refresh git diff on right pane save
+    let right_last_dirty = RwSignal::new(false);
+    let refresh_status_right = refresh_git_status.clone();
+    let project_path_right_save = project.path.clone();
+    let right_git_diff_lines_save = right_git_diff_lines.clone();
+    Effect::new(move || {
+        let is_dirty = right_dirty.get();
+        let was_dirty = right_last_dirty.get_untracked();
+        right_last_dirty.set(is_dirty);
+        if was_dirty && !is_dirty {
+            refresh_status_right.run(());
+            if let Some(tab_name) = right_active_tab.get_untracked() {
+                if !tab_name.starts_with("git-diff://") {
+                    let project_path = project_path_right_save.clone();
+                    let sig = right_git_diff_lines_save.clone();
+                    spawn_local(async move {
+                        if let Ok(res) = api::git_diff_lines_api(&project_path, &tab_name).await {
+                            sig.set(Some(res));
+                        } else {
+                            sig.set(None);
+                        }
+                    });
+                }
+            }
+        }
+    });
 
     // Synchronize global signals with the active pane
     Effect::new(move || {
@@ -658,6 +789,42 @@ pub fn EditorPage() -> impl IntoView {
                         </button>
 
                         <button 
+                            class=move || {
+                                let active = sidebar_open.get() && sidebar_mode.get() == 2;
+                                if active { "activity-btn active" } else { "activity-btn" }
+                            }
+                            title="Source Control"
+                            on:click=move |_| {
+                                if sidebar_open.get() && sidebar_mode.get() == 2 {
+                                    sidebar_open.set(false);
+                                } else {
+                                    sidebar_mode.set(2);
+                                    sidebar_open.set(true);
+                                }
+                            }
+                        >
+                            <div style="position: relative; display: inline-flex;">
+                                <LucideIcon name="git-branch" size="22" />
+                                {move || {
+                                    if let Some(ref status) = git_status.get() {
+                                        let count = status.files.len();
+                                        if count > 0 {
+                                            view! {
+                                                <span style="position: absolute; top: -4px; right: -4px; background: var(--git-modified, #eab308); color: #000; border-radius: 50%; min-width: 13px; height: 13px; font-size: 8px; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 1px;">
+                                                    {count}
+                                                </span>
+                                            }.into_any()
+                                        } else {
+                                            view! {}.into_any()
+                                        }
+                                    } else {
+                                        view! {}.into_any()
+                                    }
+                                }}
+                            </div>
+                        </button>
+
+                        <button 
                             class="activity-btn"
                             title="Package Manager (Dependencies)"
                             on:click=move |_| show_deps.set(true)
@@ -679,8 +846,8 @@ pub fn EditorPage() -> impl IntoView {
                     </div>
                 </div>
                 {move || {
-                    if sidebar_mode.get() == 0 {
-                        view! {
+                    match sidebar_mode.get() {
+                        0 => view! {
                             <FileTree 
                                 file_tree=file_tree_data.into()
                                 active_tab=active_tab.into()
@@ -699,10 +866,10 @@ pub fn EditorPage() -> impl IntoView {
                                 _sidebar_mode=sidebar_mode
                                 project_path=ppath.clone()
                                 terminal_trigger=terminal_trigger
+                                git_status=git_status.into()
                             />
-                        }.into_any()
-                    } else {
-                        view! {
+                        }.into_any(),
+                        1 => view! {
                             <ProjectSearchReplacePanel
                                 project_id=pid.clone()
                                 project_path=ppath.clone()
@@ -720,7 +887,25 @@ pub fn EditorPage() -> impl IntoView {
                                 close_sidebar=Callback::new(move |_: ()| sidebar_open.set(false))
                                 _sidebar_mode=sidebar_mode
                             />
-                        }.into_any()
+                        }.into_any(),
+                        2 => {
+                            let ppath = ppath.clone();
+                            let open_file = open_file.clone();
+                            let show_snack = show_snack.clone();
+                            let close_sidebar = Callback::new(move |_: ()| sidebar_open.set(false));
+                            view! {
+                                <GitPanel
+                                    project_path=ppath
+                                    git_status=git_status
+                                    trigger_git_status=refresh_git_status.clone()
+                                    open_file=open_file
+                                    show_snack=show_snack
+                                    sidebar_open=sidebar_open.into()
+                                    close_sidebar=close_sidebar
+                                />
+                            }.into_any()
+                        }
+                        _ => view! {}.into_any()
                     }
                 }}
 
@@ -777,6 +962,7 @@ pub fn EditorPage() -> impl IntoView {
                                         trigger_definition=trigger_definition
                                         trigger_references=trigger_references
                                         show_deps=show_deps
+                                        git_diff_lines=left_git_diff_lines
                                     />
                                 }.into_any()
                             }}
@@ -834,6 +1020,7 @@ pub fn EditorPage() -> impl IntoView {
                                             trigger_definition=trigger_definition
                                             trigger_references=trigger_references
                                             show_deps=show_deps
+                                            git_diff_lines=right_git_diff_lines
                                         />
                                     }.into_any()
                                 }}

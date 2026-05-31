@@ -9,6 +9,21 @@ use super::error_popover::ErrorPopover;
 use super::hover::{build_hover_html, HoverCard};
 use super::suggestions::SuggestionsOverlay;
 
+fn escape_html(s: &str) -> String {
+    let mut escaped = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '&' => escaped.push_str("&amp;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&#x27;"),
+            _ => escaped.push(c),
+        }
+    }
+    escaped
+}
+
 struct ThreadSafeTimeout(Option<gloo_timers::callback::Timeout>);
 unsafe impl Send for ThreadSafeTimeout {}
 unsafe impl Sync for ThreadSafeTimeout {}
@@ -38,6 +53,7 @@ pub fn EditorCodeArea(
     trigger_definition: Callback<()>,
     trigger_references: Callback<()>,
     show_deps: RwSignal<bool>,
+    #[prop(into)] git_diff_lines: Signal<Option<api::GitDiffLinesResponse>>,
 ) -> impl IntoView {
     let hover_visible = RwSignal::new(false);
     let hover_content = RwSignal::new(None::<String>);
@@ -64,8 +80,26 @@ pub fn EditorCodeArea(
             {move || {
                 let s = settings.get();
                 let content = code.get();
+                let is_diff_view = active_tab.get().map(|t| t.starts_with("git-diff://")).unwrap_or(false);
                 let ext = active_tab.get().map(|n| file_extension(&n).to_string()).unwrap_or_default();
-                let highlighted_lines = highlight_code_lines(&content, &ext);
+                let highlighted_lines = if is_diff_view {
+                    content.split('\n').map(|l| {
+                        let escaped = escape_html(l);
+                        if l.starts_with('+') && !l.starts_with("+++") {
+                            format!("<span style=\"color:#10b981; font-weight: 500;\">{}</span>", escaped)
+                        } else if l.starts_with('-') && !l.starts_with("---") {
+                            format!("<span style=\"color:#ef4444; font-weight: 500;\">{}</span>", escaped)
+                        } else if l.starts_with("@@") {
+                            format!("<span style=\"color:#06b6d4; font-weight: 600;\">{}</span>", escaped)
+                        } else if l.starts_with("diff") || l.starts_with("index") || l.starts_with("---") || l.starts_with("+++") {
+                            format!("<span style=\"color:#8b5cf6; font-weight: 600;\">{}</span>", escaped)
+                        } else {
+                            escaped.to_string()
+                        }
+                    }).collect::<Vec<String>>()
+                } else {
+                    highlight_code_lines(&content, &ext)
+                };
                 let active = active_tab.get();
                 let diags = diagnostics_list.get();
                 let active_diags: Vec<api::Diagnostic> = diags.into_iter()
@@ -394,7 +428,7 @@ pub fn EditorCodeArea(
                         <div class="code-layer code-highlight">
                             {highlighted_lines.into_iter().enumerate().map(|(idx, html_line)| {
                                 let n = idx + 1;
-                                let raw_line = raw_lines.get(idx).cloned().unwrap_or_default();
+                                let raw_line: String = raw_lines.get(idx).cloned().unwrap_or_default();
                                 let raw_line_len = raw_line.chars().count();
 
                                 let line_diags: Vec<api::Diagnostic> = active_diags.iter()
@@ -408,6 +442,21 @@ pub fn EditorCodeArea(
                                 let has_warning = line_diags.iter().any(|d| d.severity.unwrap_or(1) == 2);
 
                                 let is_active = idx == active_line_number;
+                                let git_diff_val = git_diff_lines.get();
+                                let line_git_status = if let Some(ref diff) = git_diff_val {
+                                    if diff.added.contains(&n) {
+                                        "added"
+                                    } else if diff.modified.contains(&n) {
+                                        "modified"
+                                    } else if diff.deleted.contains(&n) {
+                                        "deleted"
+                                    } else {
+                                        ""
+                                    }
+                                } else {
+                                    ""
+                                };
+
                                 let line_class = match primary_diag.map(|d| d.severity.unwrap_or(1)) {
                                     Some(1) => if is_active { "editor-line has-error active-line" } else { "editor-line has-error" },
                                     Some(2) => if is_active { "editor-line has-warning active-line" } else { "editor-line has-warning" },
@@ -436,7 +485,11 @@ pub fn EditorCodeArea(
                                     <div class=line_class>
                                         {s.show_line_numbers.then(|| {
                                             view! {
-                                                <div class="line-number-gutter">
+                                                <div class="line-number-gutter" style="position: relative;">
+                                                    {(!line_git_status.is_empty()).then(|| {
+                                                        let cls = format!("git-gutter-marker {}", line_git_status);
+                                                        view! { <div class=cls /> }
+                                                    })}
                                                     <div class=gutter_class title=move || if has_error { "Error on this line" } else if has_warning { "Warning on this line" } else { "" }>
                                                         {(!gutter_marker.is_empty()).then(|| {
                                                             view! { <span class="gutter-error-icon">{gutter_marker}</span> }
@@ -505,6 +558,7 @@ pub fn EditorCodeArea(
                             node_ref=textarea_ref
                             class="code-layer code-editor"
                             spellcheck="false"
+                            prop:readonly=move || active_tab.get().map(|t| t.starts_with("git-diff://")).unwrap_or(false)
                             prop:value=move || code.get()
                             on:mousemove={
                                 let on_mousemove = on_mousemove.clone();

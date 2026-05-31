@@ -4,6 +4,83 @@ use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use crate::pages::editor::utils::FileEntry;
 
+fn detect_language_from_tree(file_tree: &[FileEntry], active_file: Option<&str>) -> String {
+    // 1. Check for configuration files first
+    if file_tree.iter().any(|e| e.name == "package.json") {
+        return "javascript".to_string();
+    }
+    if file_tree.iter().any(|e| e.name == "index.html") {
+        return "javascript".to_string();
+    }
+    if file_tree.iter().any(|e| e.name == "Cargo.toml") {
+        return "rust".to_string();
+    }
+    if file_tree.iter().any(|e| e.name == "go.mod") {
+        return "go".to_string();
+    }
+    if file_tree.iter().any(|e| e.name == "pubspec.yaml") {
+        return "dart".to_string();
+    }
+
+    // 2. Fallback to active file extension
+    if let Some(file_name) = active_file {
+        if let Some(ext) = file_name.split('.').last() {
+            match ext.to_lowercase().as_str() {
+                "rs" => return "rust".to_string(),
+                "go" => return "go".to_string(),
+                "py" => return "python".to_string(),
+                "dart" => return "dart".to_string(),
+                "c" => return "c".to_string(),
+                "cpp" | "cc" | "cxx" => return "cpp".to_string(),
+                "java" => return "java".to_string(),
+                "kt" | "kts" => return "kotlin".to_string(),
+                "swift" => return "swift".to_string(),
+                "rb" => return "ruby".to_string(),
+                "cs" => return "csharp".to_string(),
+                "scala" => return "scala".to_string(),
+                "pl" | "pm" => return "perl".to_string(),
+                "hs" | "lhs" => return "haskell".to_string(),
+                "pas" => return "pascal".to_string(),
+                "r" | "R" => return "r".to_string(),
+                "js" | "jsx" => return "javascript".to_string(),
+                "ts" | "tsx" => return "typescript".to_string(),
+                _ => {}
+            }
+        }
+    }
+
+    // 3. Fallback to first file extension in tree
+    for entry in file_tree {
+        if !entry.is_dir {
+            if let Some(ext) = entry.name.split('.').last() {
+                match ext.to_lowercase().as_str() {
+                    "rs" => return "rust".to_string(),
+                    "go" => return "go".to_string(),
+                    "py" => return "python".to_string(),
+                    "dart" => return "dart".to_string(),
+                    "c" => return "c".to_string(),
+                    "cpp" | "cc" | "cxx" => return "cpp".to_string(),
+                    "java" => return "java".to_string(),
+                    "kt" | "kts" => return "kotlin".to_string(),
+                    "swift" => return "swift".to_string(),
+                    "rb" => return "ruby".to_string(),
+                    "cs" => return "csharp".to_string(),
+                    "scala" => return "scala".to_string(),
+                    "pl" | "pm" => return "perl".to_string(),
+                    "hs" | "lhs" => return "haskell".to_string(),
+                    "pas" => return "pascal".to_string(),
+                    "r" | "R" => return "r".to_string(),
+                    "js" | "jsx" => return "javascript".to_string(),
+                    "ts" | "tsx" => return "typescript".to_string(),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    "javascript".to_string()
+}
+
 fn should_run_in_terminal(lang: &str, file_tree: &[FileEntry]) -> bool {
     let l = lang.to_lowercase();
     if matches!(
@@ -83,11 +160,16 @@ pub fn make_run_code(
         }
         save_current.run(());
         
-        let lang = plang.clone();
+        let mut lang = plang.clone();
         let path = ppath.clone();
         let pid2 = pid.clone();
         let file_tree = file_tree_data.get_untracked();
         let current_code = code.get_untracked();
+        let active_file = active_tab.get_untracked();
+
+        if lang.to_lowercase() == "auto" {
+            lang = detect_language_from_tree(&file_tree, active_file.as_deref());
+        }
         
         if should_run_in_terminal(&lang, &file_tree) {
             let file_name_opt = active_tab.get_untracked();

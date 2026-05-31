@@ -59,6 +59,50 @@ pub fn LucideIcon(
             <path d="m12 19-7-7 7-7" />
             <path d="M19 12H5" />
         }.into_any(),
+        "git-branch" => view! {
+            <line x1="6" y1="3" x2="6" y2="15" />
+            <circle cx="18" cy="6" r="3" />
+            <circle cx="6" cy="18" r="3" />
+            <path d="M18 9a9 9 0 0 1-9 9" />
+        }.into_any(),
+        "check" => view! {
+            <polyline points="20 6 9 17 4 12" />
+        }.into_any(),
+        "sparkles" => view! {
+            <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275Z" />
+            <path d="m5 3 1 2.5L8.5 6 6 7 5 9.5 4 7 1.5 6 4 5.5Z" />
+            <path d="m19 17 1 2.5 2.5.5-2.5 1-1 2.5-1-2.5-2.5-1 2.5-1Z" />
+        }.into_any(),
+        "rotate-cw" => view! {
+            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+            <polyline points="21 3 21 8 16 8" />
+        }.into_any(),
+        "arrow-up" => view! {
+            <path d="m5 12 7-7 7 7" />
+            <path d="M12 19V5" />
+        }.into_any(),
+        "arrow-down" => view! {
+            <path d="m19 12-7 7-7-7" />
+            <path d="M12 5v14" />
+        }.into_any(),
+        "more-horizontal" => view! {
+            <circle cx="12" cy="12" r="1" />
+            <circle cx="19" cy="12" r="1" />
+            <circle cx="5" cy="12" r="1" />
+        }.into_any(),
+        "crosshair" => view! {
+            <circle cx="12" cy="12" r="10" />
+            <line x1="22" y1="12" x2="18" y2="12" />
+            <line x1="6" y1="12" x2="2" y2="12" />
+            <line x1="12" y1="6" x2="12" y2="2" />
+            <line x1="12" y1="22" x2="12" y2="18" />
+        }.into_any(),
+        "cloud" => view! {
+            <path d="M17.5 19A5.5 5.5 0 0 0 18 8.02a9 9 0 0 0-17.47 5.01A5.5 5.5 0 0 0 5.5 19Z" />
+        }.into_any(),
+        "minus" => view! {
+            <line x1="5" y1="12" x2="19" y2="12" />
+        }.into_any(),
         "chevron-right" => view! {
             <path d="m9 18 6-6-6-6" />
         }.into_any(),

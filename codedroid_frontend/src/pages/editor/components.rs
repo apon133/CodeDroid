@@ -31,6 +31,7 @@ pub fn FileTree(
     _sidebar_mode: RwSignal<usize>,
     project_path: String,
     terminal_trigger: RwSignal<Option<String>>,
+    git_status: Signal<Option<crate::api::GitStatusResponse>>,
 ) -> impl IntoView {
     let (show_new_file, set_show_new_file) = signal(false);
     let (show_new_folder, set_show_new_folder) = signal(false);
@@ -288,6 +289,58 @@ pub fn FileTree(
                             let indent = depth * 16;
                             let display_name = path_basename(&f.name).to_string();
 
+                            let fname_git = f.name.clone();
+                            let git_file_status = move || {
+                                if let Some(ref status) = git_status.get() {
+                                    status.files.iter().find(|file| file.path == fname_git).map(|file| file.status.clone())
+                                } else {
+                                    None
+                                }
+                            };
+
+                            let text_color = {
+                                let git_file_status = git_file_status.clone();
+                                move || {
+                                    if let Some(status) = git_file_status() {
+                                        match status.trim() {
+                                            "M" => "var(--git-modified, #eab308)".to_string(),
+                                            "A" => "var(--git-added, #10b981)".to_string(),
+                                            "D" => "var(--git-deleted, #ef4444)".to_string(),
+                                            "??" | "U" | "Untracked" => "var(--git-untracked, #84cc16)".to_string(),
+                                            _ => "inherit".to_string(),
+                                        }
+                                    } else {
+                                        "inherit".to_string()
+                                    }
+                                }
+                            };
+
+                            let badge = {
+                                let git_file_status = git_file_status.clone();
+                                move || {
+                                    if let Some(status) = git_file_status() {
+                                        let (txt, color) = match status.trim() {
+                                            "M" => ("M", "var(--git-modified, #eab308)"),
+                                            "A" => ("A", "var(--git-added, #10b981)"),
+                                            "D" => ("D", "var(--git-deleted, #ef4444)"),
+                                            "??" | "U" | "Untracked" => ("U", "var(--git-untracked, #84cc16)"),
+                                            _ => ("", ""),
+                                        };
+                                        if !txt.is_empty() {
+                                            view! {
+                                                <span style=format!("margin-left: 8px; padding: 1px 4px; border-radius: 3px; font-size: 9px; font-weight: 700; background: rgba(255,255,255,0.06); color: {}; font-family: var(--font-ui)", color)>
+                                                    {txt}
+                                                </span>
+                                            }.into_any()
+                                        } else {
+                                            view! {}.into_any()
+                                        }
+                                    } else {
+                                        view! {}.into_any()
+                                    }
+                                }
+                            };
+
                             view! {
                                 <div
                                     class=move || {
@@ -371,13 +424,14 @@ pub fn FileTree(
                                                 </span>
                                             }.into_any()
                                         }}
-                                        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; margin-left: 4px;">
+                                        <span style=move || format!("overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; margin-left: 4px; color: {};", text_color())>
                                             {display_name}
                                             {move || (!f.is_dir).then(|| view! {
                                                 <span style="font-size: 10px; opacity: 0.5; margin-left: 6px; font-weight: 500; font-family: var(--font-ui)">
                                                     {format!("({})", file_lang_name(&fname_lang))}
                                                 </span>
                                             })}
+                                            {badge}
                                         </span>
                                     </div>
                                 </div>
@@ -516,6 +570,13 @@ pub fn TabStrip(
             {move || open_tabs.get().into_iter().map(|tab| {
                 let tab2 = tab.clone();
                 let tab3 = tab.clone();
+                let is_diff = tab.starts_with("git-diff://");
+                let display_name = if is_diff {
+                    let raw_path = tab.strip_prefix("git-diff://").unwrap_or(&tab);
+                    format!("{} (Diff)", raw_path)
+                } else {
+                    tab.clone()
+                };
                 view! {
                     <div
                         class=move || {
@@ -527,8 +588,18 @@ pub fn TabStrip(
                         on:click=move |_| open_file.run(tab2.clone())
                     >
                         <span style="display:inline-flex; align-items:center; gap:6px;">
-                            <img src=file_icon(&tab) class="tab-icon-img" alt="" style="width:14px; height:14px; object-fit:contain;" />
-                            {tab.clone()}
+                            {if is_diff {
+                                view! {
+                                    <span style="color: var(--accent1); display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px;">
+                                        <LucideIcon name="git-diff" size="14" />
+                                    </span>
+                                }.into_any()
+                            } else {
+                                view! {
+                                    <img src=file_icon(&tab) class="tab-icon-img" alt="" style="width:14px; height:14px; object-fit:contain;" />
+                                }.into_any()
+                            }}
+                            {display_name}
                         </span>
                         <span class="tab-close"
                             on:click=move |e: MouseEvent| {

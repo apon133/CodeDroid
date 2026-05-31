@@ -3574,8 +3574,8 @@ body.dragging-preview iframe {
 .git-panel {
   display: flex;
   flex-direction: column;
-  background: var(--bg-sidebar, #181824);
-  color: var(--text, #f8f8f2);
+  background: var(--bg2);
+  color: var(--text);
   height: 100%;
 }
 
@@ -3584,7 +3584,7 @@ body.dragging-preview iframe {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--border, #2d2d3d);
+  border-bottom: 1px solid var(--border);
 }
 
 .git-panel-title {
@@ -3592,7 +3592,7 @@ body.dragging-preview iframe {
   text-transform: uppercase;
   font-weight: 600;
   letter-spacing: 0.8px;
-  color: var(--text2, #b5b5c9);
+  color: var(--text2);
 }
 
 .git-panel-subtitle {
@@ -3600,7 +3600,7 @@ body.dragging-preview iframe {
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: var(--accent, #3b82f6);
+  color: var(--accent);
   margin-top: 2px;
 }
 
@@ -3613,7 +3613,7 @@ body.dragging-preview iframe {
 .git-action-btn {
   background: transparent;
   border: none;
-  color: var(--text2, #b5b5c9);
+  color: var(--text2);
   padding: 4px;
   border-radius: 4px;
   cursor: pointer;
@@ -3625,7 +3625,7 @@ body.dragging-preview iframe {
 
 .git-action-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.08);
-  color: var(--text, #f8f8f2);
+  color: var(--text);
 }
 
 .git-action-btn:disabled {
@@ -3647,10 +3647,10 @@ body.dragging-preview iframe {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--text, #ffffff);
+  color: var(--text);
   cursor: pointer;
   text-align: left;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--border);
 }
 
 .git-section-header-btn:hover {
@@ -3677,7 +3677,7 @@ body.dragging-preview iframe {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border-bottom: 1px solid var(--border, #2d2d3d);
+  border-bottom: 1px solid var(--border);
 }
 
 .git-commit-input-wrapper {
@@ -3689,11 +3689,11 @@ body.dragging-preview iframe {
   width: 100%;
   min-height: 70px;
   max-height: 120px;
-  background: var(--bg-input, #0f0f1a);
-  border: 1px solid var(--border, #2d2d3d);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
   border-radius: 4px;
-  color: var(--text, #ffffff);
-  padding: 8px 30px 8px 8px;
+  color: var(--text);
+  padding: 8px 8px;
   font-family: var(--font-ui, sans-serif);
   font-size: 12px;
   resize: vertical;
@@ -3702,7 +3702,7 @@ body.dragging-preview iframe {
 }
 
 .git-commit-input:focus {
-  border-color: var(--accent, #3b82f6);
+  border-color: var(--accent);
 }
 
 /* AI Sparkles icon button inside textarea */

@@ -392,7 +392,7 @@ pub fn ProjectSearchReplacePanel(
     show_snack: Callback<String>,
     sidebar_open: Signal<bool>,
     close_sidebar: Callback<()>,
-    sidebar_mode: RwSignal<usize>,
+    _sidebar_mode: RwSignal<usize>,
 ) -> impl IntoView {
     let match_case = RwSignal::new(false);
     let whole_word = RwSignal::new(false);
@@ -490,22 +490,7 @@ pub fn ProjectSearchReplacePanel(
         })}
 
         <div class=move || if sidebar_open.get() { "file-tree-panel search-replace-panel open" } else { "file-tree-panel search-replace-panel" }>
-            <div class="sidebar-tabs">
-                <button
-                    class=move || if sidebar_mode.get() == 0 { "sidebar-tab active" } else { "sidebar-tab" }
-                    on:click=move |_| sidebar_mode.set(0)
-                >
-                    <LucideIcon name="folder" size="14" />
-                    <span>"Files"</span>
-                </button>
-                <button
-                    class=move || if sidebar_mode.get() == 1 { "sidebar-tab active" } else { "sidebar-tab" }
-                    on:click=move |_| sidebar_mode.set(1)
-                >
-                    <LucideIcon name="search" size="14" />
-                    <span>"Search"</span>
-                </button>
-            </div>
+
 
             <div class="search-panel-header">
                 <div>

@@ -14,7 +14,6 @@ pub mod suggestions;
 pub mod utils;
 
 use crate::api;
-use crate::components::app_bar::AppBar;
 use crate::components::icon::LucideIcon;
 use crate::components::snackbar::Snackbar;
 use crate::models::{lang_icon, Project, Settings};
@@ -88,6 +87,40 @@ pub fn EditorPage() -> impl IntoView {
     let terminal_session_id = RwSignal::new(Option::<String>::None);
     let terminal_history = RwSignal::new(store::load_terminal_history(&project.id));
     let terminal_trigger = RwSignal::new(Option::<String>::None);
+
+    // Status Bar helper signals
+    let cursor_line_col = Signal::derive(move || {
+        let text = code.get();
+        let pos = cursor_pos.get() as usize;
+        let mut line = 1;
+        let mut col = 1;
+        for (i, c) in text.chars().enumerate() {
+            if i >= pos {
+                break;
+            }
+            if c == '\n' {
+                line += 1;
+                col = 1;
+            } else {
+                col += 1;
+            }
+        }
+        (line, col)
+    });
+
+    let error_warning_counts = Signal::derive(move || {
+        let diags = diagnostics_list.get();
+        let mut errors = 0;
+        let mut warnings = 0;
+        for d in diags.iter() {
+            match d.severity.unwrap_or(1) {
+                1 => errors += 1,
+                2 => warnings += 1,
+                _ => {}
+            }
+        }
+        (errors, warnings)
+    });
 
     // Callbacks
     let show_snack = Callback::new({
@@ -378,81 +411,123 @@ pub fn EditorPage() -> impl IntoView {
         }
     });
 
+    let project_lang_upper = project.language.to_uppercase();
+    let nav_back = navigate.clone();
+    let nav_settings = navigate.clone();
+
     view! {
         <div class="editor-page-root">
-            <AppBar title=project.name.clone() back=true>
-                <button class="btn btn-icon btn-menu" title="Toggle Files"
-                    style=move || {
-                        let is_active = sidebar_open.get() && sidebar_mode.get() == 0;
-                        if is_active {
-                            "margin-right: 6px; background: rgba(99, 102, 241, 0.2); color: var(--accent); border-color: var(--accent);"
-                        } else {
-                            "margin-right: 6px;"
-                        }
-                    }
-                    on:click=move |_| {
-                        if sidebar_open.get() && sidebar_mode.get() == 0 {
-                            sidebar_open.set(false);
-                        } else {
-                            sidebar_mode.set(0);
-                            sidebar_open.set(true);
-                        }
-                    }>
-                    <LucideIcon name="folder" size="20" />
-                </button>
-                <button class="btn btn-icon" title="Find in Current File (Ctrl+F)"
-                    on:click=move |_| show_search.update(|v| *v = !*v)>
-                    <LucideIcon name="search" size="20" />
-                </button>
-                <button class="btn btn-icon" title="Search and Replace Project"
-                    style=move || {
-                        let is_active = sidebar_open.get() && sidebar_mode.get() == 1;
-                        if is_active {
-                            "background: rgba(99, 102, 241, 0.2); color: var(--accent); border-color: var(--accent);"
-                        } else {
-                            ""
-                        }
-                    }
-                    on:click=move |_| {
-                        if sidebar_open.get() && sidebar_mode.get() == 1 {
-                            sidebar_open.set(false);
-                        } else {
-                            sidebar_mode.set(1);
-                            sidebar_open.set(true);
-                        }
-                    }>
-                    <LucideIcon name="replace" size="20" />
-                </button>
-
-                {move || if is_running.get() || current_pid.get().is_some() {
-                    view! {
-                        <button class="btn btn-danger" style="display:inline-flex; align-items:center; gap:6px;" on:click=move |_| stop_code.run(())>
-                            <LucideIcon name="square" size="14" /> <span class="btn-text">"Stop"</span>
-                        </button>
-                    }.into_any()
-                } else {
-                    view! { "" }.into_any()
-                }}
-                <button class="btn btn-success" style="display:inline-flex; align-items:center; gap:6px;" disabled=move || is_running.get()
-                    on:click=move |_| run_code.run(())
-                >
-                    {move || if is_running.get() {
-                        view! { <><span class="spinner"></span><span class="btn-text">" Running..."</span></> }.into_any()
-                    } else {
-                        view! { <><LucideIcon name="play" size="14" /> <span class="btn-text">"Run"</span></> }.into_any()
-                    }}
-                </button>
-                {move || preview_url.get().is_some().then(|| view! {
-                    <button class="btn btn-success mobile-preview-toggle-btn"
-                        style="display:inline-flex; align-items:center; gap:6px; background:#4f46e5; border-color:#4f46e5;"
-                        on:click=move |_| show_mobile_full_preview.set(true)>
-                        <LucideIcon name="eye" size="16" />
-                        <span class="btn-text">"Preview"</span>
+            <div class="vscode-titlebar">
+                <div class="titlebar-left">
+                    <button class="titlebar-back" on:click=move |_| nav_back("/", Default::default()) title="Back to Projects">
+                        <LucideIcon name="arrow-left" size="16" />
                     </button>
-                })}
-            </AppBar>
+                    <div class="titlebar-breadcrumbs">
+                        <span class="breadcrumb-project">{project.name.clone()}</span>
+                        {move || active_tab.get().map(|tab| {
+                            let parts: Vec<&str> = tab.split('/').collect();
+                            parts.into_iter().map(|part| {
+                                view! {
+                                    <span class="breadcrumb-separator">"›"</span>
+                                    <span class="breadcrumb-part">{part.to_string()}</span>
+                                }
+                            }).collect_view()
+                        })}
+                    </div>
+                </div>
+                <div class="titlebar-actions">
+                    <button class="btn-titlebar-action" title="Find in File (Ctrl+F)"
+                        on:click=move |_| show_search.update(|v| *v = !*v)>
+                        <LucideIcon name="search" size="14" />
+                    </button>
+                    
+                    {move || if is_running.get() || current_pid.get().is_some() {
+                        view! {
+                            <button class="btn-titlebar-action btn-stop" title="Stop Project" on:click=move |_| stop_code.run(())>
+                                <LucideIcon name="square" size="14" />
+                                <span class="btn-text">"Stop"</span>
+                            </button>
+                        }.into_any()
+                    } else {
+                        view! {
+                            <button class="btn-titlebar-action btn-run" title="Run Project (Ctrl+Alt+R)" disabled=move || is_running.get() on:click=move |_| run_code.run(())>
+                                <LucideIcon name="play" size="14" />
+                                <span class="btn-text">"Run"</span>
+                            </button>
+                        }.into_any()
+                    }}
+
+                    {move || preview_url.get().is_some().then(|| view! {
+                        <button class="btn-titlebar-action btn-preview"
+                            title="Show Preview"
+                            on:click=move |_| show_mobile_full_preview.set(true)>
+                            <LucideIcon name="eye" size="14" />
+                            <span class="btn-text">"Preview"</span>
+                        </button>
+                    })}
+                </div>
+            </div>
 
             <div class="editor-layout">
+                <div class="activity-bar">
+                    <div class="activity-bar-top">
+                        <button 
+                            class=move || {
+                                let active = sidebar_open.get() && sidebar_mode.get() == 0;
+                                if active { "activity-btn active" } else { "activity-btn" }
+                            }
+                            title="Explorer"
+                            on:click=move |_| {
+                                if sidebar_open.get() && sidebar_mode.get() == 0 {
+                                    sidebar_open.set(false);
+                                } else {
+                                    sidebar_mode.set(0);
+                                    sidebar_open.set(true);
+                                }
+                            }
+                        >
+                            <LucideIcon name="folder" size="22" />
+                        </button>
+
+                        <button 
+                            class=move || {
+                                let active = sidebar_open.get() && sidebar_mode.get() == 1;
+                                if active { "activity-btn active" } else { "activity-btn" }
+                            }
+                            title="Search and Replace"
+                            on:click=move |_| {
+                                if sidebar_open.get() && sidebar_mode.get() == 1 {
+                                    sidebar_open.set(false);
+                                } else {
+                                    sidebar_mode.set(1);
+                                    sidebar_open.set(true);
+                                }
+                            }
+                        >
+                            <LucideIcon name="search" size="22" />
+                        </button>
+
+                        <button 
+                            class="activity-btn"
+                            title="Package Manager (Dependencies)"
+                            on:click=move |_| show_deps.set(true)
+                        >
+                            <LucideIcon name="package" size="22" />
+                        </button>
+                    </div>
+                    
+                    <div class="activity-bar-bottom">
+                        <button 
+                            class="activity-btn"
+                            title="Settings"
+                            on:click=move |_| {
+                                nav_settings("/settings", Default::default());
+                            }
+                        >
+                            <LucideIcon name="settings" size="22" />
+                        </button>
+                    </div>
+                </div>
                 {move || {
                     if sidebar_mode.get() == 0 {
                         view! {
@@ -471,7 +546,7 @@ pub fn EditorPage() -> impl IntoView {
                                 move_entry=move_entry
                                 sidebar_open=sidebar_open.into()
                                 toggle_sidebar=Callback::new(move |_: ()| sidebar_open.set(false))
-                                sidebar_mode=sidebar_mode
+                                _sidebar_mode=sidebar_mode
                                 project_path=ppath.clone()
                                 terminal_trigger=terminal_trigger
                             />
@@ -493,7 +568,7 @@ pub fn EditorPage() -> impl IntoView {
                                 show_snack=show_snack
                                 sidebar_open=sidebar_open.into()
                                 close_sidebar=Callback::new(move |_: ()| sidebar_open.set(false))
-                                sidebar_mode=sidebar_mode
+                                _sidebar_mode=sidebar_mode
                             />
                         }.into_any()
                     }
@@ -582,6 +657,48 @@ pub fn EditorPage() -> impl IntoView {
                 preview_url=preview_url.into()
                 refresh_key=refresh_key
             />
+
+            <div class="status-bar">
+                <div class="status-bar-left">
+                    <div class="status-bar-item status-bar-logo">
+                        <LucideIcon name="code" size="14" />
+                        "CodeDroid"
+                    </div>
+                    {move || {
+                        let (errors, warnings) = error_warning_counts.get();
+                        if errors > 0 || warnings > 0 {
+                            view! {
+                                <div class="status-bar-item status-bar-problems" on:click=move |_| bottom_tab.set(1) title="Show Problems">
+                                    <LucideIcon name="alert-triangle" size="14" />
+                                    {format!("{} 🔴  {} 🟡", errors, warnings)}
+                                </div>
+                            }.into_any()
+                        } else {
+                            view! {
+                                <div class="status-bar-item status-bar-problems" on:click=move |_| bottom_tab.set(1) title="No Problems">
+                                    "✓ No Problems"
+                                </div>
+                            }.into_any()
+                        }
+                    }}
+                </div>
+                <div class="status-bar-right">
+                    <div class="status-bar-item status-bar-cursor">
+                        {move || {
+                            let (line, col) = cursor_line_col.get();
+                            format!("Ln {}, Col {}", line, col)
+                        }}
+                    </div>
+                    <div class="status-bar-item status-bar-spaces">
+                        {move || format!("Spaces: {}", settings.get().tab_size)}
+                    </div>
+                    <div class="status-bar-item status-bar-encoding">"UTF-8"</div>
+                    <div class="status-bar-item status-bar-lineending">"LF"</div>
+                    <div class="status-bar-item status-bar-language" style="text-transform: uppercase;">
+                        {project_lang_upper.clone()}
+                    </div>
+                </div>
+            </div>
 
             <Snackbar message=snack_msg.read_only() />
         </div>

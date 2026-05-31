@@ -28,7 +28,7 @@ pub fn FileTree(
     move_entry: Callback<(FileEntry, String)>,
     sidebar_open: Signal<bool>,
     toggle_sidebar: Callback<()>,
-    sidebar_mode: RwSignal<usize>,
+    _sidebar_mode: RwSignal<usize>,
     project_path: String,
     terminal_trigger: RwSignal<Option<String>>,
 ) -> impl IntoView {
@@ -98,22 +98,7 @@ pub fn FileTree(
                 }
             }
         >
-            <div class="sidebar-tabs">
-                <button
-                    class=move || if sidebar_mode.get() == 0 { "sidebar-tab active" } else { "sidebar-tab" }
-                    on:click=move |_| sidebar_mode.set(0)
-                >
-                    <LucideIcon name="folder" size="14" />
-                    <span>"Files"</span>
-                </button>
-                <button
-                    class=move || if sidebar_mode.get() == 1 { "sidebar-tab active" } else { "sidebar-tab" }
-                    on:click=move |_| sidebar_mode.set(1)
-                >
-                    <LucideIcon name="search" size="14" />
-                    <span>"Search"</span>
-                </button>
-            </div>
+
 
             <div class="file-tree-header" style="display:flex; justify-content:space-between; align-items:center;">
                 <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:700; display:flex; align-items:center; gap:6px;">

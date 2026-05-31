@@ -659,6 +659,70 @@ body {
 .editor-tab:hover .tab-close { opacity: 0.6; }
 .tab-close:hover { background: rgba(255,255,255,.1); opacity: 1 !important; color: var(--red); }
 
+/* ── Split Editor Layout ── */
+.editor-workspace {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+.editor-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  background: var(--bg);
+}
+.editor-pane.active {
+  box-shadow: inset 0 0 0 1px var(--accent-translucent, rgba(142, 107, 247, 0.15));
+}
+.editor-pane + .editor-pane {
+  border-left: 1px solid var(--border);
+}
+.empty-editor-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text3);
+  background: var(--bg);
+  padding: 40px;
+  text-align: center;
+  user-select: none;
+}
+.empty-editor-icon {
+  color: var(--text3);
+  opacity: 0.3;
+  margin-bottom: 16px;
+  animation: float-pulse 4s ease-in-out infinite;
+}
+.empty-editor-pane p {
+  font-size: 15px;
+  font-weight: 500;
+  margin: 0 0 8px 0;
+  color: var(--text2);
+}
+.empty-editor-sub {
+  font-size: 12px;
+  opacity: 0.6;
+}
+@keyframes float-pulse {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateY(-5px) scale(1.05);
+    opacity: 0.45;
+  }
+}
+
 /* ── Code Editor ── */
 .code-area {
   flex: 1; 

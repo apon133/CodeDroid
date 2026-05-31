@@ -13,7 +13,11 @@ pub fn make_on_select(
         let cpos = cursor_pos.get_untracked();
         use wasm_bindgen::JsCast;
         if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
-            if let Ok(Some(target)) = doc.query_selector(".code-editor") {
+            let target_opt = doc.query_selector(".editor-pane.active .code-editor")
+                .ok()
+                .flatten()
+                .or_else(|| doc.query_selector(".code-editor").ok().flatten());
+            if let Some(target) = target_opt {
                 if let Ok(target) = target.dyn_into::<web_sys::HtmlTextAreaElement>() {
                     let start = target.selection_start().unwrap().unwrap_or(cpos);
                     let end = target.selection_end().unwrap().unwrap_or(cpos);
@@ -48,7 +52,11 @@ pub fn make_on_select(
 
                     spawn_local(async move {
                         if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
-                            if let Ok(Some(target)) = doc.query_selector(".code-editor") {
+                            let target_opt = doc.query_selector(".editor-pane.active .code-editor")
+                                .ok()
+                                .flatten()
+                                .or_else(|| doc.query_selector(".code-editor").ok().flatten());
+                            if let Some(target) = target_opt {
                                 if let Ok(target) =
                                     target.dyn_into::<web_sys::HtmlTextAreaElement>()
                                 {

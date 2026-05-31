@@ -96,7 +96,7 @@ pub fn make_trigger_definition(
                         use wasm_bindgen::JsCast;
                         if let Some(target) = web_sys::window()
                             .and_then(|w| w.document())
-                            .and_then(|d| d.query_selector(".code-editor").ok().flatten())
+                            .and_then(|d| d.query_selector(".editor-pane.active .code-editor").ok().flatten().or_else(|| d.query_selector(".code-editor").ok().flatten()))
                         {
                             if let Ok(target) = target.dyn_into::<web_sys::HtmlTextAreaElement>() {
                                 let current_code = code_sig.get_untracked();

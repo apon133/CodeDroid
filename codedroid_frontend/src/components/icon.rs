@@ -88,6 +88,10 @@ pub fn LucideIcon(
             <path d="M6 10V5a2 2 0 0 1 2-2h2" />
             <rect x="3" y="14" width="7" height="7" rx="1" />
         }.into_any(),
+        "columns" => view! {
+            <rect width="18" height="18" x="3" y="3" rx="2" />
+            <path d="M12 3v18" />
+        }.into_any(),
         "square" => view! {
             <rect width="18" height="18" x="3" y="3" rx="2" />
         }.into_any(),

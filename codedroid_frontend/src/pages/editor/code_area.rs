@@ -761,11 +761,9 @@ pub fn EditorCodeArea(
                                     let textarea = e.target().unwrap().unchecked_into::<web_sys::HtmlTextAreaElement>();
                                     let scroll_top = textarea.scroll_top();
                                     let scroll_left = textarea.scroll_left();
-                                    if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
-                                        if let Some(highlight) = doc.query_selector(".code-highlight").ok().flatten() {
-                                            let _ = highlight.unchecked_ref::<web_sys::HtmlElement>().style()
-                                                .set_property("transform", &format!("translate({}px, {}px)", -scroll_left, -scroll_top));
-                                        }
+                                    if let Some(highlight) = textarea.parent_element().and_then(|p| p.query_selector(".code-highlight").ok().flatten()) {
+                                        let _ = highlight.unchecked_ref::<web_sys::HtmlElement>().style()
+                                            .set_property("transform", &format!("translate({}px, {}px)", -scroll_left, -scroll_top));
                                     }
                                     let start = textarea.selection_start().unwrap().unwrap_or(0);
                                     let val = textarea.value();

@@ -53,6 +53,96 @@ pub fn EditorPage() -> impl IntoView {
     let active_tab: RwSignal<Option<String>> = RwSignal::new(None);
     let code: RwSignal<String> = RwSignal::new(String::new());
     let dirty: RwSignal<bool> = RwSignal::new(false);
+
+    // Split Editor State
+    let active_pane = RwSignal::new(0usize);
+    let split_active = RwSignal::new(false);
+    let left_open_tabs = RwSignal::new(Vec::<String>::new());
+    let right_open_tabs = RwSignal::new(Vec::<String>::new());
+    let left_active_tab = RwSignal::new(None::<String>);
+    let right_active_tab = RwSignal::new(None::<String>);
+    let left_code = RwSignal::new(String::new());
+    let right_code = RwSignal::new(String::new());
+    let left_dirty = RwSignal::new(false);
+    let right_dirty = RwSignal::new(false);
+
+    // Synchronize global signals with the active pane
+    Effect::new(move || {
+        let pane = active_pane.get();
+        if pane == 0 {
+            active_tab.set(left_active_tab.get());
+            code.set(left_code.get());
+            dirty.set(left_dirty.get());
+            open_tabs.set(left_open_tabs.get());
+        } else {
+            active_tab.set(right_active_tab.get());
+            code.set(right_code.get());
+            dirty.set(right_dirty.get());
+            open_tabs.set(right_open_tabs.get());
+        }
+    });
+
+    Effect::new(move || {
+        let val = code.get();
+        let pane = active_pane.get_untracked();
+        if pane == 0 {
+            if left_code.get_untracked() != val {
+                left_code.set(val);
+            }
+        } else {
+            if right_code.get_untracked() != val {
+                right_code.set(val);
+            }
+        }
+    });
+
+    Effect::new(move || {
+        let val = active_tab.get();
+        let pane = active_pane.get_untracked();
+        if pane == 0 {
+            if left_active_tab.get_untracked() != val {
+                left_active_tab.set(val);
+            }
+        } else {
+            if right_active_tab.get_untracked() != val {
+                right_active_tab.set(val);
+            }
+        }
+    });
+
+    Effect::new(move || {
+        let val = dirty.get();
+        let pane = active_pane.get_untracked();
+        if pane == 0 {
+            if left_dirty.get_untracked() != val {
+                left_dirty.set(val);
+            }
+        } else {
+            if right_dirty.get_untracked() != val {
+                right_dirty.set(val);
+            }
+        }
+    });
+
+    Effect::new(move || {
+        let val = open_tabs.get();
+        let pane = active_pane.get_untracked();
+        if pane == 0 {
+            if left_open_tabs.get_untracked() != val {
+                left_open_tabs.set(val);
+            }
+        } else {
+            if right_open_tabs.get_untracked() != val {
+                right_open_tabs.set(val);
+            }
+        }
+    });
+
+    Effect::new(move || {
+        if !split_active.get() {
+            active_pane.set(0);
+        }
+    });
     let output: RwSignal<String> = RwSignal::new(
         "Welcome to CodeDroid Terminal\nType commands below (e.g. ls, cargo test, git status)\n\n"
             .to_string(),
@@ -150,15 +240,52 @@ pub fn EditorPage() -> impl IntoView {
 
     let pid = project.id.clone();
     let ppath_val = project.path.clone();
-    let open_file = make_open_file(
+    let left_open_file = make_open_file(
         pid.clone(),
         ppath_val.clone(),
-        code,
-        active_tab,
-        open_tabs,
-        dirty,
+        left_code,
+        left_active_tab,
+        left_open_tabs,
+        left_dirty,
         trigger_diagnostics.clone(),
     );
+    let left_close_tab = make_close_tab(pid.clone(), left_code, left_active_tab, left_open_tabs);
+
+    let right_open_file = make_open_file(
+        pid.clone(),
+        ppath_val.clone(),
+        right_code,
+        right_active_tab,
+        right_open_tabs,
+        right_dirty,
+        trigger_diagnostics.clone(),
+    );
+    let right_close_tab = make_close_tab(pid.clone(), right_code, right_active_tab, right_open_tabs);
+
+    let open_file = Callback::new({
+        let left_open_file = left_open_file.clone();
+        let right_open_file = right_open_file.clone();
+        move |name: String| {
+            if active_pane.get() == 0 {
+                left_open_file.run(name);
+            } else {
+                right_open_file.run(name);
+            }
+        }
+    });
+
+    let close_tab = Callback::new({
+        let left_close_tab = left_close_tab.clone();
+        let right_close_tab = right_close_tab.clone();
+        move |name: String| {
+            if left_open_tabs.get_untracked().contains(&name) {
+                left_close_tab.run(name.clone());
+            }
+            if right_open_tabs.get_untracked().contains(&name) {
+                right_close_tab.run(name);
+            }
+        }
+    });
 
     let on_click_problem = make_on_click_problem(
         open_file.clone(),
@@ -177,8 +304,6 @@ pub fn EditorPage() -> impl IntoView {
         active_tab,
         trigger_diagnostics.clone(),
     );
-
-    let close_tab = make_close_tab(pid.clone(), code, active_tab, open_tabs);
 
     let trigger_definition = make_trigger_definition(
         pid.clone(),
@@ -440,6 +565,31 @@ pub fn EditorPage() -> impl IntoView {
                         on:click=move |_| show_search.update(|v| *v = !*v)>
                         <LucideIcon name="search" size="14" />
                     </button>
+
+                    <button class=move || if split_active.get() { "btn-titlebar-action active" } else { "btn-titlebar-action" }
+                        title="Split Editor"
+                        on:click={
+                            let split_project_id = project.id.clone();
+                            move |_| {
+                                split_active.update(|v| *v = !*v);
+                                if split_active.get_untracked() {
+                                    let current_file = left_active_tab.get_untracked();
+                                    if let Some(file) = current_file {
+                                        right_open_tabs.update(|t| {
+                                            if !t.contains(&file) {
+                                                t.push(file.clone());
+                                            }
+                                        });
+                                        right_active_tab.set(Some(file.clone()));
+                                        let key = store::file_key(&split_project_id, &file);
+                                        right_code.set(store::load_file(&key));
+                                        active_pane.set(1);
+                                    }
+                                }
+                            }
+                        }>
+                        <LucideIcon name="columns" size="14" />
+                    </button>
                     
                     {move || if is_running.get() || current_pid.get().is_some() {
                         view! {
@@ -575,46 +725,121 @@ pub fn EditorPage() -> impl IntoView {
                 }}
 
                 <div class="editor-main">
-                    <TabStrip 
-                        open_tabs=open_tabs.into()
-                        active_tab=active_tab.into()
-                        dirty=dirty.into()
-                        open_file=open_file
-                        close_tab=close_tab
-                    />
+                    <div class="editor-workspace">
+                        <div class=move || if active_pane.get() == 0 { "editor-pane active" } else { "editor-pane" }
+                            on:mousedown=move |_| { if active_pane.get_untracked() != 0 { active_pane.set(0); } }>
+                            <TabStrip 
+                                open_tabs=left_open_tabs.into()
+                                active_tab=left_active_tab.into()
+                                dirty=left_dirty.into()
+                                open_file=left_open_file
+                                close_tab=left_close_tab
+                            />
 
-                    <SearchBar 
-                        show_search=show_search
-                        find_text=find_text
-                        find_index=find_index
-                        code=code
-                    />
+                            <SearchBar 
+                                show_search=show_search
+                                find_text=find_text
+                                find_index=find_index
+                                code=left_code
+                            />
 
-                    <EditorCodeArea
-                        settings=settings
-                        code=code
-                        dirty=dirty
-                        active_tab=active_tab
-                        diagnostics_list=diagnostics_list
-                        active_error=active_error
-                        cursor_pos=cursor_pos
-                        cursor_coords=cursor_coords
-                        suggestions=suggestions
-                        selected_idx=selected_idx
-                        project_lang_str=project_lang_str
-                        project_path_str=project_path_str
-                        last_request_id=last_request_id
-                        trigger_diagnostics=trigger_diagnostics
-                        save_current=save_current
-                        format_code=format_code
-                        show_search=show_search
-                        check_error_at_cursor=check_error_at_cursor
-                        on_select=on_select
-                        show_snack=show_snack
-                        trigger_definition=trigger_definition
-                        trigger_references=trigger_references
-                        show_deps=show_deps
-                    />
+                            {move || if left_active_tab.get().is_none() {
+                                view! {
+                                    <div class="empty-editor-pane">
+                                        <LucideIcon name="code" size="48" class="empty-editor-icon" />
+                                        <p>"No file open"</p>
+                                        <span class="empty-editor-sub">"Select a file from the explorer to start editing"</span>
+                                    </div>
+                                }.into_any()
+                            } else {
+                                view! {
+                                    <EditorCodeArea
+                                        settings=settings
+                                        code=left_code
+                                        dirty=left_dirty
+                                        active_tab=left_active_tab
+                                        diagnostics_list=diagnostics_list
+                                        active_error=active_error
+                                        cursor_pos=cursor_pos
+                                        cursor_coords=cursor_coords
+                                        suggestions=suggestions
+                                        selected_idx=selected_idx
+                                        project_lang_str=project_lang_str
+                                        project_path_str=project_path_str
+                                        last_request_id=last_request_id
+                                        trigger_diagnostics=trigger_diagnostics
+                                        save_current=save_current
+                                        format_code=format_code
+                                        show_search=show_search
+                                        check_error_at_cursor=check_error_at_cursor
+                                        on_select=on_select
+                                        show_snack=show_snack
+                                        trigger_definition=trigger_definition
+                                        trigger_references=trigger_references
+                                        show_deps=show_deps
+                                    />
+                                }.into_any()
+                            }}
+                        </div>
+
+                        {move || split_active.get().then(|| view! {
+                            <div class=move || if active_pane.get() == 1 { "editor-pane active" } else { "editor-pane" }
+                                on:mousedown=move |_| { if active_pane.get_untracked() != 1 { active_pane.set(1); } }>
+                                <TabStrip 
+                                    open_tabs=right_open_tabs.into()
+                                    active_tab=right_active_tab.into()
+                                    dirty=right_dirty.into()
+                                    open_file=right_open_file
+                                    close_tab=right_close_tab
+                                />
+
+                                <SearchBar 
+                                    show_search=show_search
+                                    find_text=find_text
+                                    find_index=find_index
+                                    code=right_code
+                                />
+
+                                {move || if right_active_tab.get().is_none() {
+                                    view! {
+                                        <div class="empty-editor-pane">
+                                            <LucideIcon name="code" size="48" class="empty-editor-icon" />
+                                            <p>"No file open"</p>
+                                            <span class="empty-editor-sub">"Select a file from the explorer to start editing"</span>
+                                        </div>
+                                    }.into_any()
+                                } else {
+                                    view! {
+                                        <EditorCodeArea
+                                            settings=settings
+                                            code=right_code
+                                            dirty=right_dirty
+                                            active_tab=right_active_tab
+                                            diagnostics_list=diagnostics_list
+                                            active_error=active_error
+                                            cursor_pos=cursor_pos
+                                            cursor_coords=cursor_coords
+                                            suggestions=suggestions
+                                            selected_idx=selected_idx
+                                            project_lang_str=project_lang_str
+                                            project_path_str=project_path_str
+                                            last_request_id=last_request_id
+                                            trigger_diagnostics=trigger_diagnostics
+                                            save_current=save_current
+                                            format_code=format_code
+                                            show_search=show_search
+                                            check_error_at_cursor=check_error_at_cursor
+                                            on_select=on_select
+                                            show_snack=show_snack
+                                            trigger_definition=trigger_definition
+                                            trigger_references=trigger_references
+                                            show_deps=show_deps
+                                        />
+                                    }.into_any()
+                                }}
+                            </div>
+                        })}
+                    </div>
 
                     <BottomPanel 
                         bottom_tab=bottom_tab

@@ -832,9 +832,10 @@ pub fn update_cursor_coords(val: &str, start: u32) -> Option<(f64, f64)> {
     let document = window.document()?;
     let mirror = document.get_element_by_id("cursor-mirror")?;
     let textarea = document
-        .query_selector(".code-editor")
+        .query_selector(".editor-pane.active .code-editor")
         .ok()
-        .flatten()?
+        .flatten()
+        .or_else(|| document.query_selector(".code-editor").ok().flatten())?
         .dyn_into::<web_sys::HtmlTextAreaElement>()
         .ok()?;
     let scroll_top = textarea.scroll_top() as f64;

@@ -556,6 +556,7 @@ body {
   background: var(--bg); 
   min-width: 0;
   min-height: 0;
+  position: relative;
 }
 
 /* ── Editor Footer ── */
@@ -838,6 +839,146 @@ body {
   font-size: 13px;
   overflow: hidden;
   box-sizing: border-box;
+}
+
+/* ── Terminal toolbar and multi-session ── */
+.terminal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px;
+  background: #0d1117;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-sans);
+  flex-shrink: 0;
+}
+.terminal-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.terminal-title-icon {
+  font-size: 12px;
+}
+.terminal-active-name {
+  color: var(--text2);
+}
+.terminal-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.terminal-session-select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 2px 6px;
+  outline: none;
+  cursor: pointer;
+  height: 22px;
+  font-weight: 500;
+}
+.terminal-session-select:focus {
+  border-color: var(--accent);
+}
+.terminal-toolbar-btn {
+  background: transparent;
+  border: none;
+  color: var(--text2);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  width: 22px;
+  height: 22px;
+}
+.terminal-toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.terminal-toolbar-btn.btn-kill:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+/* ── Terminal mobile touch auxiliary keys row ── */
+.terminal-mobile-keys {
+  display: none; /* hidden by default on desktop */
+}
+
+@media (max-width: 768px) {
+  .terminal-mobile-keys {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #0d1117;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    flex-shrink: 0;
+  }
+  /* Hide scrollbar for key row */
+  .terminal-mobile-keys::-webkit-scrollbar {
+    display: none;
+  }
+  .terminal-mobile-keys {
+    scrollbar-width: none;
+  }
+  .terminal-key-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #e2e8f0;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .terminal-key-btn:active {
+    background: var(--accent);
+    color: #fff;
+    transform: scale(0.95);
+  }
+  .terminal-key-btn.command-chip {
+    background: rgba(99, 102, 241, 0.15);
+    border-color: rgba(99, 102, 241, 0.3);
+    color: #a5b4fc;
+  }
+  .terminal-key-btn.command-chip:active {
+    background: var(--accent);
+    color: #fff;
+  }
+  .terminal-input {
+    font-size: 16px !important; /* Prevents auto-zoom viewport shift on iOS Safari */
+  }
+}
+
+/* Maximized bottom panel state */
+.bottom-panel.maximized {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 100% !important;
+  z-index: 150;
+  background: #07090e;
 }
 
 .terminal-output-area {

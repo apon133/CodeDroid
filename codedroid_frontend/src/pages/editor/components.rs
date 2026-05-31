@@ -552,6 +552,13 @@ pub fn apply_replacement(code: &str, range: &crate::api::Range, replacement: &st
     result
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct SessionState {
+    pub id: String,
+    pub name: String,
+    pub output: String,
+}
+
 #[component]
 pub fn BottomPanel(
     bottom_tab: RwSignal<usize>,
@@ -582,6 +589,21 @@ pub fn BottomPanel(
     let input_ref = NodeRef::<leptos::html::Input>::new();
     let output_area_ref = NodeRef::<leptos::html::Div>::new();
 
+    // Multi-session state
+    let sessions = RwSignal::new(Vec::<SessionState>::new());
+    let active_idx = RwSignal::new(0usize);
+    let is_maximized = RwSignal::new(false);
+
+    let active_session_name = Signal::derive(move || {
+        let list = sessions.get();
+        let idx = active_idx.get();
+        if idx < list.len() {
+            list[idx].name.clone()
+        } else {
+            "Terminal".to_string()
+        }
+    });
+
     // Auto-scroll effect
     Effect::new(move |_| {
         let _ = output.get();
@@ -599,99 +621,293 @@ pub fn BottomPanel(
         }
     });
 
-    // Effect to start terminal session when tab is selected
-    Effect::new(move |_| {
-        if bottom_tab.get() == 0 && terminal_session_id.get().is_none() {
-            let path = project_path.get_untracked();
-            spawn_local(async move {
-                match crate::api::start_terminal_api(&path).await {
-                    Ok(session_id) => {
-                        terminal_session_id.set(Some(session_id));
-                    }
-                    Err(e) => {
-                        let mut current = output.get_untracked();
-                        current.push_str(&format!("❌ Failed to initialize terminal session: {}\n", e));
-                        output.set(current);
-                    }
-                }
-            });
-        }
-    });
-
-    // Effect to poll terminal output
-    Effect::new(move |_| {
-        if let Some(session_id) = terminal_session_id.get() {
-            let output_sig = output;
-            let session_id_clone = session_id.clone();
-            let terminal_session_id_clone = terminal_session_id.clone();
-            let is_running_clone = is_running;
-            spawn_local(async move {
-                while terminal_session_id_clone.get_untracked() == Some(session_id_clone.clone()) {
-                    gloo_timers::future::TimeoutFuture::new(150).await;
-                    if let Ok((new_output, is_alive)) = crate::api::poll_terminal_output_api(&session_id_clone).await {
-                        if !new_output.is_empty() {
-                            let mut clean_output = new_output.clone();
-                            let mut ended = false;
-                            if clean_output.contains("[CODE_RUN_ENDED]") {
-                                clean_output = clean_output.replace("[CODE_RUN_ENDED]", "");
-                                ended = true;
+    // Polling logic closure
+    let start_polling = move |session_id: String| {
+        let session_id_clone = session_id.clone();
+        let sessions_clone = sessions;
+        let active_idx_clone = active_idx;
+        let terminal_session_id_clone = terminal_session_id;
+        let output_sig = output;
+        let is_running_clone = is_running;
+        
+        spawn_local(async move {
+            let mut alive = true;
+            while alive {
+                gloo_timers::future::TimeoutFuture::new(150).await;
+                if let Ok((new_output, is_alive)) = crate::api::poll_terminal_output_api(&session_id_clone).await {
+                    alive = is_alive;
+                    if !new_output.is_empty() {
+                        let mut clean_output = new_output.clone();
+                        let mut ended = false;
+                        if clean_output.contains("[CODE_RUN_ENDED]") {
+                            clean_output = clean_output.replace("[CODE_RUN_ENDED]", "");
+                            ended = true;
+                        }
+                        
+                        sessions_clone.update(|s_list| {
+                            if let Some(s) = s_list.iter_mut().find(|s| s.id == session_id_clone) {
+                                s.output.push_str(&clean_output);
                             }
-                            if !clean_output.is_empty() {
-                                let mut current = output_sig.get_untracked();
-                                current.push_str(&clean_output);
-                                output_sig.set(current);
-                            }
-                            if ended {
+                        });
+                        
+                        let current_list = sessions_clone.get_untracked();
+                        let active = active_idx_clone.get_untracked();
+                        if active < current_list.len() && current_list[active].id == session_id_clone {
+                            let mut current = output_sig.get_untracked();
+                            current.push_str(&clean_output);
+                            output_sig.set(current);
+                        }
+                        
+                        if ended {
+                            let current_list = sessions_clone.get_untracked();
+                            let active = active_idx_clone.get_untracked();
+                            if active < current_list.len() && current_list[active].id == session_id_clone {
                                 is_running_clone.set(false);
                             }
                         }
-                        if !is_alive {
+                    }
+                    
+                    if !is_alive {
+                        sessions_clone.update(|s_list| {
+                            if let Some(s) = s_list.iter_mut().find(|s| s.id == session_id_clone) {
+                                s.output.push_str("\n[Process completed]\n");
+                            }
+                        });
+                        
+                        let current_list = sessions_clone.get_untracked();
+                        let active = active_idx_clone.get_untracked();
+                        if active < current_list.len() && current_list[active].id == session_id_clone {
                             let mut current = output_sig.get_untracked();
                             current.push_str("\n[Process completed]\n");
                             output_sig.set(current);
                             terminal_session_id_clone.set(None);
                             is_running_clone.set(false);
-                            break;
                         }
-                    } else {
                         break;
+                    }
+                } else {
+                    break;
+                }
+            }
+        });
+    };
+
+    // Effect to start initial terminal session when tab is selected
+    Effect::new(move |_| {
+        if bottom_tab.get() == 0 && terminal_session_id.get().is_none() && sessions.get().is_empty() {
+            let path = project_path.get_untracked();
+            let sessions_clone = sessions;
+            let active_idx_clone = active_idx;
+            let terminal_session_id_clone = terminal_session_id;
+            let output_clone = output;
+            let start_polling_clone = start_polling;
+            
+            spawn_local(async move {
+                match crate::api::start_terminal_api(&path).await {
+                    Ok(session_id) => {
+                        let initial_out = "Welcome to CodeDroid Terminal\nType commands below (e.g. ls, cargo test, git status)\n\n".to_string();
+                        let new_sess = SessionState {
+                            id: session_id.clone(),
+                            name: "sh (1)".to_string(),
+                            output: initial_out.clone(),
+                        };
+                        sessions_clone.set(vec![new_sess]);
+                        active_idx_clone.set(0);
+                        terminal_session_id_clone.set(Some(session_id.clone()));
+                        output_clone.set(initial_out);
+                        
+                        start_polling_clone(session_id);
+                    }
+                    Err(e) => {
+                        let mut current = output_clone.get_untracked();
+                        current.push_str(&format!("❌ Failed to initialize terminal session: {}\n", e));
+                        output_clone.set(current);
                     }
                 }
             });
         }
     });
 
+    // Effect to detect external session additions (e.g. from Run Code)
+    Effect::new(move |_| {
+        if let Some(session_id) = terminal_session_id.get() {
+            let list = sessions.get_untracked();
+            if !list.iter().any(|s| s.id == session_id) {
+                let next_num = list.len() + 1;
+                let name = format!("sh ({})", next_num);
+                let initial_out = output.get_untracked();
+                let new_sess = SessionState {
+                    id: session_id.clone(),
+                    name,
+                    output: initial_out,
+                };
+                sessions.update(|s| s.push(new_sess));
+                active_idx.set(sessions.get_untracked().len() - 1);
+                
+                start_polling(session_id);
+            }
+        }
+    });
+
     on_cleanup(move || {
-        if let Some(session_id) = terminal_session_id.get_untracked() {
+        let list = sessions.get_untracked();
+        for s in list {
             spawn_local(async move {
-                let _ = crate::api::stop_terminal_api(&session_id).await;
+                let _ = crate::api::stop_terminal_api(&s.id).await;
             });
         }
     });
+
+    let switch_to_session = move |target_idx: usize| {
+        let list = sessions.get_untracked();
+        if target_idx < list.len() {
+            let current_active_idx = active_idx.get_untracked();
+            let current_out = output.get_untracked();
+            sessions.update(|s_list| {
+                if current_active_idx < s_list.len() {
+                    s_list[current_active_idx].output = current_out;
+                }
+            });
+
+            active_idx.set(target_idx);
+            let target_s = &list[target_idx];
+            output.set(target_s.output.clone());
+            terminal_session_id.set(Some(target_s.id.clone()));
+            
+            if let Some(input) = input_ref.get() {
+                let _ = input.focus();
+            }
+        }
+    };
+
+    let add_new_session = move |_| {
+        let proj_path = project_path.get_untracked();
+        let sessions_clone = sessions;
+        let active_idx_clone = active_idx;
+        let terminal_session_id_clone = terminal_session_id;
+        let output_clone = output;
+        let start_polling_clone = start_polling;
+        
+        let current_active_idx = active_idx_clone.get_untracked();
+        let current_out = output_clone.get_untracked();
+        sessions_clone.update(|s_list| {
+            if current_active_idx < s_list.len() {
+                s_list[current_active_idx].output = current_out;
+            }
+        });
+
+        spawn_local(async move {
+            match crate::api::start_terminal_api(&proj_path).await {
+                Ok(session_id) => {
+                    let next_num = sessions_clone.get_untracked().len() + 1;
+                    let name = format!("sh ({})", next_num);
+                    
+                    let new_sess = SessionState {
+                        id: session_id.clone(),
+                        name,
+                        output: "Welcome to CodeDroid Terminal\n\n".to_string(),
+                    };
+                    
+                    sessions_clone.update(|s| s.push(new_sess));
+                    let new_idx = sessions_clone.get_untracked().len() - 1;
+                    active_idx_clone.set(new_idx);
+                    
+                    output_clone.set("Welcome to CodeDroid Terminal\n\n".to_string());
+                    terminal_session_id_clone.set(Some(session_id.clone()));
+                    
+                    start_polling_clone(session_id);
+                }
+                Err(e) => {
+                    let mut current = output_clone.get_untracked();
+                    current.push_str(&format!("❌ Failed to initialize terminal session: {}\n", e));
+                    output_clone.set(current);
+                }
+            }
+        });
+    };
+
+    let kill_active_session = move |_| {
+        let list = sessions.get_untracked();
+        if list.is_empty() { return; }
+        
+        let current_idx = active_idx.get_untracked();
+        if current_idx < list.len() {
+            let session_id = list[current_idx].id.clone();
+            let sessions_clone = sessions;
+            let active_idx_clone = active_idx;
+            let terminal_session_id_clone = terminal_session_id;
+            let output_clone = output;
+            
+            spawn_local(async move {
+                let _ = crate::api::stop_terminal_api(&session_id).await;
+                
+                sessions_clone.update(|s_list| {
+                    if current_idx < s_list.len() {
+                        s_list.remove(current_idx);
+                    }
+                });
+                
+                let updated_list = sessions_clone.get_untracked();
+                if updated_list.is_empty() {
+                    terminal_session_id_clone.set(None);
+                    output_clone.set("[No active terminal sessions]\n".to_string());
+                    active_idx_clone.set(0);
+                } else {
+                    let new_idx = if current_idx > 0 { current_idx - 1 } else { 0 };
+                    active_idx_clone.set(new_idx);
+                    let target_s = &updated_list[new_idx];
+                    output_clone.set(target_s.output.clone());
+                    terminal_session_id_clone.set(Some(target_s.id.clone()));
+                }
+            });
+        }
+    };
 
     let stop_command = move || {
         let proj_id_clone = project_id_stored.get_value();
         let proj_path_clone = project_path.get_untracked();
         let file_tree_data_clone = file_tree_data.clone();
-        let terminal_session_id_clone = terminal_session_id.clone();
+        let terminal_session_id_clone = terminal_session_id;
         let output_clone = output;
+        let sessions_clone = sessions;
+        let active_idx_clone = active_idx;
+        let is_running_clone = is_running;
 
         let mut current = output_clone.get_untracked();
         current.push_str("\n[Initializing terminal session...]\n");
         output_clone.set(current);
 
         spawn_local(async move {
-            if let Some(session_id) = terminal_session_id_clone.get_untracked() {
-                let _ = crate::api::stop_terminal_api(&session_id).await;
-                terminal_session_id_clone.set(None);
+            let active = active_idx_clone.get_untracked();
+            let mut list = sessions_clone.get_untracked();
+            
+            if active < list.len() {
+                let old_id = list[active].id.clone();
+                let _ = crate::api::stop_terminal_api(&old_id).await;
             }
 
             match crate::api::start_terminal_api(&proj_path_clone).await {
                 Ok(new_id) => {
-                    terminal_session_id_clone.set(Some(new_id));
-                    let mut current = output_clone.get_untracked();
-                    current.push_str("[Terminal session initialized]\n");
-                    output_clone.set(current);
+                    if active < list.len() {
+                        sessions_clone.update(|s_list| {
+                            s_list[active].id = new_id.clone();
+                            s_list[active].output = "Welcome to CodeDroid Terminal (Restarted)\n\n".to_string();
+                        });
+                        output_clone.set("Welcome to CodeDroid Terminal (Restarted)\n\n".to_string());
+                    } else {
+                        let name = format!("sh ({})", list.len() + 1);
+                        let new_sess = SessionState {
+                            id: new_id.clone(),
+                            name,
+                            output: "Welcome to CodeDroid Terminal\n\n".to_string(),
+                        };
+                        sessions_clone.update(|s| s.push(new_sess));
+                        active_idx_clone.set(sessions_clone.get_untracked().len() - 1);
+                        output_clone.set("Welcome to CodeDroid Terminal\n\n".to_string());
+                    }
+                    terminal_session_id_clone.set(Some(new_id.clone()));
+                    
+                    start_polling(new_id);
                 }
                 Err(e) => {
                     let mut current = output_clone.get_untracked();
@@ -721,6 +937,80 @@ pub fn BottomPanel(
         }
     });
 
+    let submit_cmd_fn = move |cmd: String| {
+        command_input.set(String::new());
+        history_index.set(None);
+
+        if cmd.is_empty() {
+            let mut current = output.get_untracked();
+            current.push_str("\n");
+            output.set(current);
+
+            if let Some(session_id) = terminal_session_id.get_untracked() {
+                spawn_local(async move {
+                    let _ = crate::api::send_terminal_input_api(&session_id, "\n").await;
+                });
+            }
+            return;
+        }
+
+        let proj_path = project_path.get_untracked();
+        let proj_name = project_name.get_untracked();
+        let proj_id = project_id_stored.get_value();
+
+        if cmd.trim() == "clear" || cmd.trim() == "cls" {
+            output.set(String::new());
+            sessions.update(|s_list| {
+                let active = active_idx.get_untracked();
+                if active < s_list.len() {
+                    s_list[active].output = String::new();
+                }
+            });
+            let mut hist = terminal_history.get_untracked();
+            if hist.last() != Some(&cmd) {
+                hist.push(cmd.clone());
+                crate::store::save_terminal_history(&proj_id, &hist);
+                terminal_history.set(hist);
+            }
+            return;
+        }
+
+        let mut current = output.get_untracked();
+        current.push_str(&format!("{} $ {}\n", proj_name, cmd));
+        output.set(current);
+        
+        sessions.update(|s_list| {
+            let active = active_idx.get_untracked();
+            if active < s_list.len() {
+                s_list[active].output = format!("{} $ {}\n", proj_name, cmd);
+            }
+        });
+
+        let mut hist = terminal_history.get_untracked();
+        if hist.last() != Some(&cmd) {
+            hist.push(cmd.clone());
+            crate::store::save_terminal_history(&proj_id, &hist);
+            terminal_history.set(hist);
+        }
+
+        if let Some(session_id) = terminal_session_id.get_untracked() {
+            let proj_id_clone = project_id_stored.get_value();
+            let file_tree_data_clone = file_tree_data.clone();
+            let cmd_clone = cmd.clone();
+            let proj_path_clone = proj_path.clone();
+            spawn_local(async move {
+                let _ = crate::api::send_terminal_input_api(&session_id, &format!("{}\n", cmd_clone)).await;
+
+                gloo_timers::future::TimeoutFuture::new(500).await;
+                crate::pages::editor::operations::sync_from_disk(
+                    proj_id_clone,
+                    proj_path_clone,
+                    file_tree_data_clone,
+                );
+            });
+        }
+    };
+
     let on_keydown = move |e: web_sys::KeyboardEvent| {
         let key = e.key();
         if key == "c" && e.ctrl_key() {
@@ -730,66 +1020,7 @@ pub fn BottomPanel(
             }
         } else if key == "Enter" {
             let cmd = command_input.get_untracked();
-            command_input.set(String::new());
-            history_index.set(None);
-
-            if cmd.is_empty() {
-                let mut current = output.get_untracked();
-                current.push_str("\n");
-                output.set(current);
-
-                if let Some(session_id) = terminal_session_id.get_untracked() {
-                    spawn_local(async move {
-                        let _ = crate::api::send_terminal_input_api(&session_id, "\n").await;
-                    });
-                }
-                return;
-            }
-
-            let proj_path = project_path.get_untracked();
-            let proj_name = project_name.get_untracked();
-            let proj_id = project_id_stored.get_value();
-
-            if cmd.trim() == "clear" || cmd.trim() == "cls" {
-                output.set(String::new());
-                let mut hist = terminal_history.get_untracked();
-                if hist.last() != Some(&cmd) {
-                    hist.push(cmd.clone());
-                    crate::store::save_terminal_history(&proj_id, &hist);
-                    terminal_history.set(hist);
-                }
-                return;
-            }
-
-            // Append command echo to terminal output
-            let mut current = output.get_untracked();
-            current.push_str(&format!("{} $ {}\n", proj_name, cmd));
-            output.set(current);
-
-            // Add to history
-            let mut hist = terminal_history.get_untracked();
-            if hist.last() != Some(&cmd) {
-                hist.push(cmd.clone());
-                crate::store::save_terminal_history(&proj_id, &hist);
-                terminal_history.set(hist);
-            }
-
-            if let Some(session_id) = terminal_session_id.get_untracked() {
-                let proj_id_clone = project_id_stored.get_value();
-                let file_tree_data_clone = file_tree_data.clone();
-                let cmd_clone = cmd.clone();
-                let proj_path_clone = proj_path.clone();
-                spawn_local(async move {
-                    let _ = crate::api::send_terminal_input_api(&session_id, &format!("{}\n", cmd_clone)).await;
-
-                    gloo_timers::future::TimeoutFuture::new(500).await;
-                    crate::pages::editor::operations::sync_from_disk(
-                        proj_id_clone,
-                        proj_path_clone,
-                        file_tree_data_clone,
-                    );
-                });
-            }
+            submit_cmd_fn(cmd);
         } else if key == "ArrowUp" {
             e.prevent_default();
             let hist = terminal_history.get_untracked();
@@ -825,8 +1056,92 @@ pub fn BottomPanel(
         }
     };
 
+    let send_tab = move |_| {
+        let val = command_input.get_untracked();
+        command_input.set(format!("{}\t", val));
+        if let Some(input) = input_ref.get() {
+            let _ = input.focus();
+        }
+    };
+
+    let send_ctrl_c = move |_| {
+        if let Some(session_id) = terminal_session_id.get_untracked() {
+            spawn_local(async move {
+                let _ = crate::api::send_terminal_input_api(&session_id, "\x03").await;
+            });
+        } else {
+            output.set(String::new());
+        }
+        if let Some(input) = input_ref.get() {
+            let _ = input.focus();
+        }
+    };
+
+    let send_ctrl_d = move |_| {
+        if let Some(session_id) = terminal_session_id.get_untracked() {
+            spawn_local(async move {
+                let _ = crate::api::send_terminal_input_api(&session_id, "\x04").await;
+            });
+        }
+        if let Some(input) = input_ref.get() {
+            let _ = input.focus();
+        }
+    };
+
+    let send_arrow_up = move |_| {
+        let hist = terminal_history.get_untracked();
+        if !hist.is_empty() {
+            let next_idx = match history_index.get_untracked() {
+                None => hist.len() - 1,
+                Some(idx) => if idx > 0 { idx - 1 } else { 0 }
+            };
+            history_index.set(Some(next_idx));
+            command_input.set(hist[next_idx].clone());
+        }
+        if let Some(input) = input_ref.get() {
+            let _ = input.focus();
+        }
+    };
+
+    let send_arrow_down = move |_| {
+        let hist = terminal_history.get_untracked();
+        if !hist.is_empty() {
+            if let Some(idx) = history_index.get_untracked() {
+                if idx + 1 < hist.len() {
+                    let next_idx = idx + 1;
+                    history_index.set(Some(next_idx));
+                    command_input.set(hist[next_idx].clone());
+                } else {
+                    history_index.set(None);
+                    command_input.set(String::new());
+                }
+            }
+        }
+        if let Some(input) = input_ref.get() {
+            let _ = input.focus();
+        }
+    };
+
+    let run_quick_cmd = move |cmd: String| {
+        submit_cmd_fn(cmd);
+        if let Some(input) = input_ref.get() {
+            let _ = input.focus();
+        }
+    };
+
+    let on_session_change = move |e: web_sys::Event| {
+        use wasm_bindgen::JsCast;
+        if let Some(target) = e.target() {
+            if let Ok(select) = target.dyn_into::<web_sys::HtmlSelectElement>() {
+                if let Ok(idx) = select.value().parse::<usize>() {
+                    switch_to_session(idx);
+                }
+            }
+        }
+    };
+
     view! {
-        <div class="bottom-panel">
+        <div class=move || if is_maximized.get() { "bottom-panel maximized" } else { "bottom-panel" }>
             <div class="bottom-tabs">
                 <button
                     class=move || if bottom_tab.get() == 0 { "bottom-tab active" } else { "bottom-tab" }
@@ -861,32 +1176,6 @@ pub fn BottomPanel(
                     }}
                 </button>
                 <div style="flex:1"/>
-                {move || (bottom_tab.get() == 0).then(|| view! {
-                    <>
-                    <button class="btn" style="color:#ef4444;border:1px solid rgba(239, 68, 68, 0.4);font-size:11px;padding:2px 8px;margin-right:8px;border-radius:4px;display:flex;align-items:center;gap:4px"
-                        on:click=move |_| stop_command()
-                    >
-                        <LucideIcon name="square" size="12" />
-                        "Restart"
-                    </button>
-                    <button class="btn btn-icon" style="font-size:12px" title="Copy output"
-                        on:click=move |_| {
-                            let w = web_sys::window().unwrap();
-                            let _ = w.navigator().clipboard().write_text(&output.get_untracked());
-                            show_snack.run("Output copied!".to_string());
-                        }
-                    >
-                        <LucideIcon name="copy" size="16" />
-                    </button>
-                    <button class="btn btn-icon" style="font-size:12px" title="Clear terminal"
-                        on:click=move |_| {
-                            output.set(String::new());
-                        }
-                    >
-                        <LucideIcon name="trash" size="16" />
-                    </button>
-                    </>
-                })}
                 {move || (bottom_tab.get() == 2).then(|| view! {
                     <button class="btn btn-icon" style="font-size:12px" title="Clear references"
                         on:click=move |_| {
@@ -1121,9 +1410,100 @@ pub fn BottomPanel(
                                 let _ = input.focus();
                             }
                         }>
+                            <div class="terminal-toolbar" on:click=move |e| e.stop_propagation()>
+                                <div class="terminal-toolbar-left">
+                                    <span class="terminal-title-icon">"🐚"</span>
+                                    <span class="terminal-active-name">{move || active_session_name.get()}</span>
+                                </div>
+                                <div class="terminal-toolbar-right">
+                                    <select class="terminal-session-select" on:change=on_session_change>
+                                        {move || {
+                                            sessions.get().iter().enumerate().map(|(idx, s)| {
+                                                let is_selected = idx == active_idx.get();
+                                                view! {
+                                                    <option value=idx.to_string() prop:selected=is_selected>
+                                                        {format!("{}: {}", idx + 1, s.name)}
+                                                    </option>
+                                                }
+                                            }).collect_view()
+                                        }}
+                                    </select>
+                                    <button class="terminal-toolbar-btn" on:click=add_new_session title="New Terminal">
+                                        <LucideIcon name="plus" size="14" />
+                                    </button>
+                                    <button class="terminal-toolbar-btn btn-kill" on:click=kill_active_session title="Kill Terminal">
+                                        <LucideIcon name="trash" size="14" />
+                                    </button>
+                                    <button class="terminal-toolbar-btn" on:click=move |_| {
+                                        let w = web_sys::window().unwrap();
+                                        let _ = w.navigator().clipboard().write_text(&output.get_untracked());
+                                        show_snack.run("Output copied!".to_string());
+                                    } title="Copy Output">
+                                        <LucideIcon name="copy" size="14" />
+                                    </button>
+                                    <button class="terminal-toolbar-btn" on:click=move |_| {
+                                        output.set(String::new());
+                                        sessions.update(|s_list| {
+                                            let active = active_idx.get_untracked();
+                                            if active < s_list.len() {
+                                                s_list[active].output = String::new();
+                                            }
+                                        });
+                                    } title="Clear Terminal">
+                                        <LucideIcon name="trash" size="14" />
+                                    </button>
+                                    <button class="terminal-toolbar-btn" on:click=move |_| is_maximized.update(|v| *v = !*v) title=move || if is_maximized.get() { "Minimize" } else { "Maximize" }>
+                                        {move || if is_maximized.get() {
+                                            view! { <LucideIcon name="chevron-down" size="14" /> }.into_any()
+                                        } else {
+                                            view! { <LucideIcon name="chevron-up" size="14" /> }.into_any()
+                                        }}
+                                    </button>
+                                </div>
+                            </div>
+                            
                             <div class="terminal-output-area" node_ref=output_area_ref>
                                 {move || output.get()}
                             </div>
+                            
+                            <div class="terminal-mobile-keys" on:click=move |e| e.stop_propagation()>
+                                <button class="terminal-key-btn" on:click=send_tab>"TAB"</button>
+                                <button class="terminal-key-btn" on:click=send_ctrl_c>"CTRL+C"</button>
+                                <button class="terminal-key-btn" on:click=send_ctrl_d>"CTRL+D"</button>
+                                <button class="terminal-key-btn" on:click=send_arrow_up>"↑"</button>
+                                <button class="terminal-key-btn" on:click=send_arrow_down>"↓"</button>
+                                <button class="terminal-key-btn" on:click=move |_| {
+                                    output.set(String::new());
+                                    sessions.update(|s_list| {
+                                        let active = active_idx.get_untracked();
+                                        if active < s_list.len() {
+                                            s_list[active].output = String::new();
+                                        }
+                                    });
+                                }>"CLEAR"</button>
+                                
+                                <button class="terminal-key-btn command-chip" on:click=move |_| run_quick_cmd("ls".to_string())>"ls"</button>
+                                <button class="terminal-key-btn command-chip" on:click=move |_| run_quick_cmd("cd ..".to_string())>"cd .."</button>
+                                <button class="terminal-key-btn command-chip" on:click=move |_| run_quick_cmd("git status".to_string())>"git status"</button>
+                                {move || {
+                                    let lang = language.get().to_lowercase();
+                                    match lang.as_str() {
+                                        "rust" => view! {
+                                            <button class="terminal-key-btn command-chip" on:click=move |_| run_quick_cmd("cargo check".to_string())>"cargo check"</button>
+                                            <button class="terminal-key-btn command-chip" on:click=move |_| run_quick_cmd("cargo test".to_string())>"cargo test"</button>
+                                        }.into_any(),
+                                        "javascript" | "typescript" => view! {
+                                            <button class="terminal-key-btn command-chip" on:click=move |_| run_quick_cmd("npm run dev".to_string())>"npm run dev"</button>
+                                            <button class="terminal-key-btn command-chip" on:click=move |_| run_quick_cmd("npm install".to_string())>"npm install"</button>
+                                        }.into_any(),
+                                        "python" => view! {
+                                            <button class="terminal-key-btn command-chip" on:click=move |_| run_quick_cmd("python3 main.py".to_string())>"python3"</button>
+                                        }.into_any(),
+                                        _ => view! { "" }.into_any()
+                                    }
+                                }}
+                            </div>
+                            
                             <div class="terminal-input-line">
                                 <span class="terminal-prompt">
                                     {move || format!("{} $", project_name.get())}

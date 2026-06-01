@@ -1645,12 +1645,10 @@ pub async fn create_project(
     let fw = payload.framework.to_lowercase();
     let name = &payload.name;
 
-    let mut created_with_cmd = false;
-
     match lang.as_str() {
         "rust" => {
             let _ = fs::create_dir_all(&project_dir);
-            created_with_cmd = run_command_in_dir("cargo", &["init", "--bin"], &project_dir);
+            let created_with_cmd = run_command_in_dir("cargo", &["init", "--bin"], &project_dir);
             if !created_with_cmd {
                 let _ = fs::create_dir_all(project_path.join("src"));
                 let _ = fs::write(
@@ -1668,7 +1666,7 @@ pub async fn create_project(
         }
         "go" => {
             let _ = fs::create_dir_all(&project_dir);
-            created_with_cmd = run_command_in_dir("go", &["mod", "init", name], &project_dir);
+            let created_with_cmd = run_command_in_dir("go", &["mod", "init", name], &project_dir);
             let _ = fs::write(
                 project_path.join("main.go"),
                 "package main\n\nimport \"fmt\"\n\nfunc main() {\n    fmt.Println(\"Hello, Go!\")\n}\n",
@@ -1689,7 +1687,7 @@ pub async fn create_project(
             let _ = fs::write(project_path.join("requirements.txt"), "");
         }
         "dart" => {
-            created_with_cmd = run_command_in_dir(
+            let created_with_cmd = run_command_in_dir(
                 "dart",
                 &["create", "--template=console-simple", name],
                 &parent_dir_str,
@@ -1748,7 +1746,7 @@ pub async fn create_project(
         }
         "csharp" => {
             let _ = fs::create_dir_all(&project_dir);
-            created_with_cmd = run_command_in_dir("dotnet", &["new", "console"], &project_dir);
+            let created_with_cmd = run_command_in_dir("dotnet", &["new", "console"], &project_dir);
             if !created_with_cmd {
                 let _ = fs::write(
                     project_path.join("Program.cs"),
@@ -1785,7 +1783,7 @@ pub async fn create_project(
         }
         "swift" => {
             let _ = fs::create_dir_all(&project_dir);
-            created_with_cmd = run_command_in_dir("swift", &["package", "init", "--type", "executable"], &project_dir);
+            let created_with_cmd = run_command_in_dir("swift", &["package", "init", "--type", "executable"], &project_dir);
             if !created_with_cmd {
                 let _ = fs::write(
                     project_path.join("main.swift"),
@@ -1816,7 +1814,7 @@ pub async fn create_project(
             match fw.as_str() {
                 "none" | "" => {
                     let _ = fs::create_dir_all(&project_dir);
-                    created_with_cmd = run_command_in_dir("npm", &["init", "-y"], &project_dir);
+                    let created_with_cmd = run_command_in_dir("npm", &["init", "-y"], &project_dir);
                     let _ = fs::write(
                         project_path.join(format!("main.{}", ext)),
                         format!("console.log(\"Hello, {}!\");\n", lang.to_uppercase()),
@@ -1839,7 +1837,7 @@ pub async fn create_project(
                         "svelte" => if lang == "typescript" { "svelte-ts" } else { "svelte" },
                         _ => "vanilla",
                     };
-                    created_with_cmd = run_command_in_dir(
+                    let created_with_cmd = run_command_in_dir(
                         "npm",
                         &["create", "vite@latest", name, "--", "--template", template],
                         &parent_dir_str,
@@ -1942,7 +1940,7 @@ pub async fn create_project(
                 }
                 "nextjs" => {
                     let next_lang = if lang == "typescript" { "--ts" } else { "--js" };
-                    created_with_cmd = run_command_in_dir(
+                    let created_with_cmd = run_command_in_dir(
                         "npx",
                         &[
                             "-y",
@@ -1979,7 +1977,7 @@ pub async fn create_project(
                     }
                 }
                 "remix" => {
-                    created_with_cmd = run_command_in_dir(
+                    let created_with_cmd = run_command_in_dir(
                         "npx",
                         &[
                             "-y",

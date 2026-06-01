@@ -17,6 +17,16 @@ CodeDroid is highly optimized and can run directly on your Android device using 
 
 ## 🛠️ Step 2: Environment Setup
 
+### 🚀 One-Line Setup & Run
+
+```bash
+pkg update -y && pkg upgrade -y && pkg install -y git rust && git clone https://github.com/apon133/CodeDroid.git && cd CodeDroid/codedroid_api && cargo run --release
+```
+
+The API server will start and wait for connections.
+
+### **OR**
+
 Once Termux is installed, run the following commands to set up the base environment:
 
 1. **Update packages**:

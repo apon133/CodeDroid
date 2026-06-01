@@ -81,41 +81,6 @@ pub async fn get_diagnostics_handler(
         {
             let mut servers = servers_arc.lock().unwrap();
             if !servers.contains_key(&lang) {
-                // Setup project structure (identical to completion setup)
-                if lang == "rust" {
-                    let _ = fs::create_dir_all(format!("{}/src", project_dir));
-                    let cargo_path = format!("{}/Cargo.toml", project_dir);
-                    if !std::path::Path::new(&cargo_path).exists() {
-                        let default_cargo = r#"[package]
-name = "codedroid_project"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-"#;
-                        let _ = fs::write(cargo_path, default_cargo);
-                    }
-                } else if lang == "go" {
-                    let _ = fs::create_dir_all(&project_dir);
-                    let mod_path = format!("{}/go.mod", project_dir);
-                    if !std::path::Path::new(&mod_path).exists() {
-                        let default_mod = "module codedroid_project\n\ngo 1.25\n";
-                        let _ = fs::write(mod_path, default_mod);
-                    }
-                } else if lang == "dart" {
-                    let _ = fs::create_dir_all(format!("{}/lib", project_dir));
-                    let pubspec_path = format!("{}/pubspec.yaml", project_dir);
-                    if !std::path::Path::new(&pubspec_path).exists() {
-                        let default_pubspec = r#"name: codedroid_project
-description: A new Dart project.
-version: 1.0.0
-environment:
-  sdk: '>=3.0.0 <4.0.0'
-"#;
-                        let _ = fs::write(pubspec_path, default_pubspec);
-                    }
-                }
-
                 let root_uri = format!("file://{}", project_dir);
                 let final_cmd = crate::utils::resolve_lsp_executable(&lang, cmd);
 
@@ -141,70 +106,6 @@ environment:
                         let _ = fs::create_dir_all(parent);
                     }
                     let _ = fs::write(&dest_path, &payload.code);
-                } else {
-                    match lang.as_str() {
-                        "rust" => {
-                            let _ =
-                                fs::write(format!("{}/src/main.rs", project_dir), &payload.code);
-                        }
-                        "dart" => {
-                            let _ =
-                                fs::write(format!("{}/lib/main.dart", project_dir), &payload.code);
-                        }
-                        "cpp" => {
-                            let _ = fs::write(format!("{}/main.cpp", project_dir), &payload.code);
-                        }
-                        "c" => {
-                            let _ = fs::write(format!("{}/main.c", project_dir), &payload.code);
-                        }
-                        "python" => {
-                            let _ = fs::write(format!("{}/main.py", project_dir), &payload.code);
-                        }
-                        "go" => {
-                            let _ = fs::write(format!("{}/main.go", project_dir), &payload.code);
-                        }
-                        "ruby" => {
-                            let _ = fs::write(format!("{}/main.rb", project_dir), &payload.code);
-                        }
-                        "javascript" => {
-                            let _ = fs::write(format!("{}/main.js", project_dir), &payload.code);
-                        }
-                        "typescript" => {
-                            let _ = fs::write(format!("{}/main.ts", project_dir), &payload.code);
-                        }
-                        "jsx" => {
-                            let _ = fs::write(format!("{}/main.jsx", project_dir), &payload.code);
-                        }
-                        "tsx" => {
-                            let _ = fs::write(format!("{}/main.tsx", project_dir), &payload.code);
-                        }
-                        "kotlin" => {
-                            let _ = fs::write(format!("{}/main.kt", project_dir), &payload.code);
-                        }
-                        "java" => {
-                            let _ = fs::write(format!("{}/main.java", project_dir), &payload.code);
-                        }
-                        "swift" => {
-                            let _ = fs::write(format!("{}/main.swift", project_dir), &payload.code);
-                        }
-                        "html" => {
-                            let _ = fs::write(format!("{}/index.html", project_dir), &payload.code);
-                        }
-                        "css" => {
-                            let _ = fs::write(format!("{}/style.css", project_dir), &payload.code);
-                        }
-                        "vue" => {
-                            let _ =
-                                fs::write(format!("{}/Component.vue", project_dir), &payload.code);
-                        }
-                        "svelte" => {
-                            let _ = fs::write(
-                                format!("{}/Component.svelte", project_dir),
-                                &payload.code,
-                            );
-                        }
-                        _ => {}
-                    }
                 }
 
                 // Get starting version

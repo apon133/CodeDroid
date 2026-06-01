@@ -806,4 +806,30 @@ pub async fn pick_directory_api() -> Result<PickDirectoryResponse, String> {
         .map_err(|e| e.to_string())
 }
 
+#[derive(serde::Serialize, Clone)]
+pub struct CreateProjectRequest {
+    pub name: String,
+    pub language: String,
+    pub framework: String,
+    pub path: String,
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct CreateProjectResponse {
+    pub success: bool,
+    pub error: String,
+}
+
+pub async fn create_project_api(req: CreateProjectRequest) -> Result<CreateProjectResponse, String> {
+    Request::post(&format!("{}/create_project", get_api_url()))
+        .json(&req)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<CreateProjectResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
 

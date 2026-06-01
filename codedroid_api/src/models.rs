@@ -189,3 +189,18 @@ pub struct PickDirectoryResponse {
     pub path: Option<String>,
     pub error: Option<String>,
 }
+
+#[derive(Deserialize)]
+pub struct CreateProjectRequest {
+    pub name: String,
+    pub language: String,
+    pub framework: String,
+    pub path: String,
+}
+
+#[derive(Serialize)]
+pub struct CreateProjectResponse {
+    pub success: bool,
+    pub error: String,
+}
+

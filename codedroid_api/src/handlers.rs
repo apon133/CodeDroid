@@ -5,8 +5,9 @@ use crate::models::{
     DeleteRequest, FileInfo, FormatRequest, FormatResponse, HoverRequest, HoverResponse,
     MoveRequest, PackageRequest, PackageResponse, ReadFileRequest, ReadFileResponse,
     ReferencesRequest, ReferencesResponse, ScanProjectRequest, ScanProjectResponse, StopRequest,
-    SyncRequest,
+    SyncRequest, CreateProjectRequest, CreateProjectResponse,
 };
+use std::path::Path;
 use crate::runner::*;
 use crate::utils::resolve_project_dir;
 use axum::Json;
@@ -142,7 +143,24 @@ pub async fn run_code(Json(mut payload): Json<CodeRequest>) -> Json<CodeResponse
                 }
             }
 
-            if has_package_json {
+            let has_dev_script = if has_package_json {
+                let pkg_path = format!("{}/package.json", project_dir);
+                if let Ok(content) = fs::read_to_string(pkg_path) {
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                        json.get("scripts")
+                            .and_then(|s| s.get("dev"))
+                            .is_some()
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            if has_package_json && has_dev_script {
                 run_javascript_framework(payload, &project_dir)
             } else if has_index_html {
                 run_vanilla_js(payload, &project_dir)
@@ -645,63 +663,6 @@ pub async fn get_completions(Json(payload): Json<CompletionRequest>) -> Json<Com
         let servers_arc = lsp::get_servers();
         let mut servers = servers_arc.lock().unwrap();
         if !servers.contains_key(&lang) {
-            if lang == "rust" {
-                let _ = fs::create_dir_all(format!("{}/src", project_dir));
-                let cargo_path = format!("{}/Cargo.toml", project_dir);
-                if !std::path::Path::new(&cargo_path).exists() {
-                    println!("📝 Creating default Cargo.toml for LSP");
-                    let default_cargo = r#"[package]
-name = "codedroid_project"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-"#;
-                    let _ = fs::write(cargo_path, default_cargo);
-                }
-            } else if lang == "go" {
-                let _ = fs::create_dir_all(&project_dir);
-                let mod_path = format!("{}/go.mod", project_dir);
-                if !std::path::Path::new(&mod_path).exists() {
-                    println!("📝 Creating default go.mod for LSP");
-                    let default_mod = "module codedroid_project\n\ngo 1.25\n";
-                    let _ = fs::write(mod_path, default_mod);
-                }
-            } else if lang == "dart" {
-                let _ = fs::create_dir_all(format!("{}/lib", project_dir));
-                let pubspec_path = format!("{}/pubspec.yaml", project_dir);
-                if !std::path::Path::new(&pubspec_path).exists() {
-                    println!("📝 Creating default pubspec.yaml for LSP");
-                    let default_pubspec = r#"name: codedroid_project
-description: A new Dart project.
-version: 1.0.0
-environment:
-  sdk: '>=3.0.0 <4.0.0'
-"#;
-                    let _ = fs::write(pubspec_path, default_pubspec);
-                }
-            } else if lang == "jsx" || lang == "tsx" || lang == "javascript" || lang == "typescript"
-            {
-                let jsconfig_path = format!("{}/jsconfig.json", project_dir);
-                let tsconfig_path = format!("{}/tsconfig.json", project_dir);
-                if !std::path::Path::new(&jsconfig_path).exists()
-                    && !std::path::Path::new(&tsconfig_path).exists()
-                {
-                    println!("📝 Creating default jsconfig.json for JS/JSX LSP");
-                    let default_config = r#"{
-  "compilerOptions": {
-    "jsx": "react-jsx",
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "node",
-    "allowJs": true,
-    "checkJs": false
-  }
-}"#;
-                    let _ = fs::write(jsconfig_path, default_config);
-                }
-            }
-
             let root_uri = format!("file://{}", project_dir);
             let final_cmd = crate::utils::resolve_lsp_executable(&lang, cmd);
 
@@ -1178,40 +1139,6 @@ pub async fn get_definition(Json(payload): Json<DefinitionRequest>) -> Json<Defi
         let servers_arc = lsp::get_servers();
         let mut servers = servers_arc.lock().unwrap();
         if !servers.contains_key(&lang) {
-            // Setup boilerplate files for LSP if needed
-            if lang == "rust" {
-                let _ = fs::create_dir_all(format!("{}/src", project_dir));
-                let cargo_path = format!("{}/Cargo.toml", project_dir);
-                if !std::path::Path::new(&cargo_path).exists() {
-                    let default_cargo = "[package]\nname = \"codedroid_project\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n";
-                    let _ = fs::write(cargo_path, default_cargo);
-                }
-            } else if lang == "go" {
-                let _ = fs::create_dir_all(&project_dir);
-                let mod_path = format!("{}/go.mod", project_dir);
-                if !std::path::Path::new(&mod_path).exists() {
-                    let default_mod = "module codedroid_project\n\ngo 1.25\n";
-                    let _ = fs::write(mod_path, default_mod);
-                }
-            } else if lang == "dart" {
-                let _ = fs::create_dir_all(format!("{}/lib", project_dir));
-                let pubspec_path = format!("{}/pubspec.yaml", project_dir);
-                if !std::path::Path::new(&pubspec_path).exists() {
-                    let default_pubspec = "name: codedroid_project\ndescription: A new Dart project.\nversion: 1.0.0\nenvironment:\n  sdk: '>=3.0.0 <4.0.0'\n";
-                    let _ = fs::write(pubspec_path, default_pubspec);
-                }
-            } else if lang == "jsx" || lang == "tsx" || lang == "javascript" || lang == "typescript"
-            {
-                let jsconfig_path = format!("{}/jsconfig.json", project_dir);
-                let tsconfig_path = format!("{}/tsconfig.json", project_dir);
-                if !std::path::Path::new(&jsconfig_path).exists()
-                    && !std::path::Path::new(&tsconfig_path).exists()
-                {
-                    let default_config = "{\n  \"compilerOptions\": {\n    \"jsx\": \"react-jsx\",\n    \"target\": \"ESNext\",\n    \"module\": \"ESNext\",\n    \"moduleResolution\": \"node\",\n    \"allowJs\": true,\n    \"checkJs\": false\n  }\n}";
-                    let _ = fs::write(jsconfig_path, default_config);
-                }
-            }
-
             let root_uri = format!("file://{}", project_dir);
             let final_cmd = crate::utils::resolve_lsp_executable(&lang, cmd);
 
@@ -1323,40 +1250,6 @@ pub async fn get_references(Json(payload): Json<ReferencesRequest>) -> Json<Refe
         let servers_arc = lsp::get_servers();
         let mut servers = servers_arc.lock().unwrap();
         if !servers.contains_key(&lang) {
-            // Setup boilerplate files for LSP if needed
-            if lang == "rust" {
-                let _ = fs::create_dir_all(format!("{}/src", project_dir));
-                let cargo_path = format!("{}/Cargo.toml", project_dir);
-                if !std::path::Path::new(&cargo_path).exists() {
-                    let default_cargo = "[package]\nname = \"codedroid_project\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n";
-                    let _ = fs::write(cargo_path, default_cargo);
-                }
-            } else if lang == "go" {
-                let _ = fs::create_dir_all(&project_dir);
-                let mod_path = format!("{}/go.mod", project_dir);
-                if !std::path::Path::new(&mod_path).exists() {
-                    let default_mod = "module codedroid_project\n\ngo 1.25\n";
-                    let _ = fs::write(mod_path, default_mod);
-                }
-            } else if lang == "dart" {
-                let _ = fs::create_dir_all(format!("{}/lib", project_dir));
-                let pubspec_path = format!("{}/pubspec.yaml", project_dir);
-                if !std::path::Path::new(&pubspec_path).exists() {
-                    let default_pubspec = "name: codedroid_project\ndescription: A new Dart project.\nversion: 1.0.0\nenvironment:\n  sdk: '>=3.0.0 <4.0.0'\n";
-                    let _ = fs::write(pubspec_path, default_pubspec);
-                }
-            } else if lang == "jsx" || lang == "tsx" || lang == "javascript" || lang == "typescript"
-            {
-                let jsconfig_path = format!("{}/jsconfig.json", project_dir);
-                let tsconfig_path = format!("{}/tsconfig.json", project_dir);
-                if !std::path::Path::new(&jsconfig_path).exists()
-                    && !std::path::Path::new(&tsconfig_path).exists()
-                {
-                    let default_config = "{\n  \"compilerOptions\": {\n    \"jsx\": \"react-jsx\",\n    \"target\": \"ESNext\",\n    \"module\": \"ESNext\",\n    \"moduleResolution\": \"node\",\n    \"allowJs\": true,\n    \"checkJs\": false\n  }\n}";
-                    let _ = fs::write(jsconfig_path, default_config);
-                }
-            }
-
             let root_uri = format!("file://{}", project_dir);
             let final_cmd = crate::utils::resolve_lsp_executable(&lang, cmd);
 
@@ -1482,24 +1375,6 @@ pub async fn get_hover(Json(payload): Json<HoverRequest>) -> Json<HoverResponse>
         let mut servers = servers_arc.lock().unwrap();
 
         if !servers.contains_key(&lang) {
-            if lang == "dart" {
-                let analysis_options_path = format!("{}/analysis_options.yaml", project_dir);
-                if !std::path::Path::new(&analysis_options_path).exists() {
-                    let default_config = "analyzer:\n  strong-mode:\n    implicit-casts: true\n    implicit-dynamic: true\n";
-                    let _ = fs::write(analysis_options_path, default_config);
-                }
-            } else if lang == "jsx" || lang == "tsx" || lang == "javascript" || lang == "typescript"
-            {
-                let jsconfig_path = format!("{}/jsconfig.json", project_dir);
-                let tsconfig_path = format!("{}/tsconfig.json", project_dir);
-                if !std::path::Path::new(&jsconfig_path).exists()
-                    && !std::path::Path::new(&tsconfig_path).exists()
-                {
-                    let default_config = "{\n  \"compilerOptions\": {\n    \"jsx\": \"react-jsx\",\n    \"target\": \"ESNext\",\n    \"module\": \"ESNext\",\n    \"moduleResolution\": \"node\",\n    \"allowJs\": true,\n    \"checkJs\": false\n  }\n}";
-                    let _ = fs::write(jsconfig_path, default_config);
-                }
-            }
-
             let root_uri = format!("file://{}", project_dir);
             let final_cmd = crate::utils::resolve_lsp_executable(&lang, cmd);
 
@@ -1803,6 +1678,424 @@ pub async fn pick_directory() -> Json<crate::models::PickDirectoryResponse> {
         }),
     }
 }
+
+fn run_command_in_dir(cmd: &str, args: &[&str], dir: &str) -> bool {
+    match std::process::Command::new(cmd)
+        .args(args)
+        .current_dir(dir)
+        .output()
+    {
+        Ok(output) => output.status.success(),
+        Err(_) => false,
+    }
+}
+
+pub async fn create_project(
+    Json(payload): Json<CreateProjectRequest>,
+) -> Json<CreateProjectResponse> {
+    let project_dir = resolve_project_dir(&payload.path);
+    let project_path = Path::new(&project_dir);
+    let parent_dir = project_path.parent().unwrap_or(project_path);
+    let parent_dir_str = parent_dir.to_string_lossy().into_owned();
+
+    let _ = fs::create_dir_all(parent_dir);
+
+    let lang = payload.language.to_lowercase();
+    let fw = payload.framework.to_lowercase();
+    let name = &payload.name;
+
+    let mut created_with_cmd = false;
+
+    match lang.as_str() {
+        "rust" => {
+            let _ = fs::create_dir_all(&project_dir);
+            created_with_cmd = run_command_in_dir("cargo", &["init", "--bin"], &project_dir);
+            if !created_with_cmd {
+                let _ = fs::create_dir_all(project_path.join("src"));
+                let _ = fs::write(
+                    project_path.join("Cargo.toml"),
+                    format!(
+                        "[package]\nname = \"{}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\n",
+                        name
+                    ),
+                );
+                let _ = fs::write(
+                    project_path.join("src/main.rs"),
+                    "fn main() {\n    println!(\"Hello, Rust!\");\n}\n",
+                );
+            }
+        }
+        "go" => {
+            let _ = fs::create_dir_all(&project_dir);
+            created_with_cmd = run_command_in_dir("go", &["mod", "init", name], &project_dir);
+            let _ = fs::write(
+                project_path.join("main.go"),
+                "package main\n\nimport \"fmt\"\n\nfunc main() {\n    fmt.Println(\"Hello, Go!\")\n}\n",
+            );
+            if !created_with_cmd {
+                let _ = fs::write(
+                    project_path.join("go.mod"),
+                    format!("module {}\n\ngo 1.21\n", name),
+                );
+            }
+        }
+        "python" => {
+            let _ = fs::create_dir_all(&project_dir);
+            let _ = fs::write(
+                project_path.join("main.py"),
+                "print(\"Hello, Python!\")\n",
+            );
+            let _ = fs::write(project_path.join("requirements.txt"), "");
+        }
+        "dart" => {
+            created_with_cmd = run_command_in_dir(
+                "dart",
+                &["create", "--template=console-simple", name],
+                &parent_dir_str,
+            );
+            if !created_with_cmd {
+                let _ = fs::create_dir_all(&project_dir);
+                let _ = fs::write(
+                    project_path.join("pubspec.yaml"),
+                    format!(
+                        "name: {}\ndescription: A new Dart project.\nversion: 1.0.0\nenvironment:\n  sdk: '>=3.0.0 <4.0.0'\ndependencies:\n",
+                        name
+                    ),
+                );
+                let _ = fs::write(
+                    project_path.join("main.dart"),
+                    "void main() {\n  print(\"Hello, Dart!\");\n}\n",
+                );
+            }
+        }
+        "java" => {
+            let _ = fs::create_dir_all(&project_dir);
+            let _ = fs::write(
+                project_path.join("Main.java"),
+                "public class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Hello, Java!\");\n    }\n}\n",
+            );
+            let _ = fs::write(
+                project_path.join("pom.xml"),
+                format!(
+                    r#"<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.project</groupId>
+    <artifactId>{}</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <dependencies>
+    </dependencies>
+</project>"#,
+                    name
+                ),
+            );
+        }
+        "c" => {
+            let _ = fs::create_dir_all(&project_dir);
+            let _ = fs::write(
+                project_path.join("main.c"),
+                "#include <stdio.h>\n\nint main() {\n    printf(\"Hello, C!\\n\");\n    return 0;\n}\n",
+            );
+        }
+        "cpp" => {
+            let _ = fs::create_dir_all(&project_dir);
+            let _ = fs::write(
+                project_path.join("main.cpp"),
+                "#include <iostream>\n\nint main() {\n    std::cout << \"Hello, C++!\" << std::endl;\n    return 0;\n}\n",
+            );
+        }
+        "csharp" => {
+            let _ = fs::create_dir_all(&project_dir);
+            created_with_cmd = run_command_in_dir("dotnet", &["new", "console"], &project_dir);
+            if !created_with_cmd {
+                let _ = fs::write(
+                    project_path.join("Program.cs"),
+                    "Console.WriteLine(\"Hello, C#!\");\n",
+                );
+                let _ = fs::write(
+                    project_path.join(format!("{}.csproj", name)),
+                    "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <OutputType>Exe</OutputType>\n    <TargetFramework>net8.0</TargetFramework>\n  </PropertyGroup>\n</Project>\n",
+                );
+            }
+        }
+        "kotlin" => {
+            let _ = fs::create_dir_all(&project_dir);
+            let _ = fs::write(
+                project_path.join("main.kt"),
+                "fun main() {\n    println(\"Hello, Kotlin!\")\n}\n",
+            );
+            let _ = fs::write(
+                project_path.join("pom.xml"),
+                format!(
+                    r#"<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.project</groupId>
+    <artifactId>{}</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <dependencies>
+    </dependencies>
+</project>"#,
+                    name
+                ),
+            );
+        }
+        "swift" => {
+            let _ = fs::create_dir_all(&project_dir);
+            created_with_cmd = run_command_in_dir("swift", &["package", "init", "--type", "executable"], &project_dir);
+            if !created_with_cmd {
+                let _ = fs::write(
+                    project_path.join("main.swift"),
+                    "print(\"Hello, Swift!\")\n",
+                );
+                let _ = fs::write(
+                    project_path.join("Package.swift"),
+                    format!(
+                        "// swift-tools-version: 5.9\nimport PackageDescription\n\nlet package = Package(\n    name: \"{}\",\n    targets: [.executableTarget(name: \"{}\")]\n)\n",
+                        name, name
+                    ),
+                );
+            }
+        }
+        "ruby" => {
+            let _ = fs::create_dir_all(&project_dir);
+            let _ = fs::write(
+                project_path.join("main.rb"),
+                "puts \"Hello, Ruby!\"\n",
+            );
+            let _ = fs::write(
+                project_path.join("Gemfile"),
+                "source \"https://rubygems.org\"\n",
+            );
+        }
+        "javascript" | "typescript" => {
+            let ext = if lang == "typescript" { "ts" } else { "js" };
+            match fw.as_str() {
+                "none" | "" => {
+                    let _ = fs::create_dir_all(&project_dir);
+                    created_with_cmd = run_command_in_dir("npm", &["init", "-y"], &project_dir);
+                    let _ = fs::write(
+                        project_path.join(format!("main.{}", ext)),
+                        format!("console.log(\"Hello, {}!\");\n", lang.to_uppercase()),
+                    );
+                    if !created_with_cmd {
+                        let _ = fs::write(
+                            project_path.join("package.json"),
+                            format!(
+                                "{{\n  \"name\": \"{}\",\n  \"version\": \"1.0.0\",\n  \"main\": \"main.{}\",\n  \"dependencies\": {{}}\n}}\n",
+                                name, ext
+                            ),
+                        );
+                    }
+                }
+                "vanilla" | "react" | "vue" | "svelte" => {
+                    let template = match fw.as_str() {
+                        "vanilla" => if lang == "typescript" { "vanilla-ts" } else { "vanilla" },
+                        "react" => if lang == "typescript" { "react-ts" } else { "react" },
+                        "vue" => if lang == "typescript" { "vue-ts" } else { "vue" },
+                        "svelte" => if lang == "typescript" { "svelte-ts" } else { "svelte" },
+                        _ => "vanilla",
+                    };
+                    created_with_cmd = run_command_in_dir(
+                        "npm",
+                        &["create", "vite@latest", name, "--", "--template", template],
+                        &parent_dir_str,
+                    );
+                    if !created_with_cmd {
+                        let _ = fs::create_dir_all(&project_dir);
+                        if fw == "vanilla" {
+                            let _ = fs::write(
+                                project_path.join("index.html"),
+                                format!("<!DOCTYPE html>\n<html>\n<head><title>{}</title><link rel=\"stylesheet\" href=\"style.css\"></head>\n<body>\n  <div id=\"app\"></div>\n  <script type=\"module\" src=\"/main.{}\"></script>\n</body>\n</html>\n", name, ext)
+                            );
+                            let _ = fs::write(
+                                project_path.join(format!("main.{}", ext)),
+                                format!("document.getElementById('app').innerHTML = '<h1>Hello {}!</h1>';\n", name)
+                            );
+                            let _ = fs::write(
+                                project_path.join("style.css"),
+                                "body { font-family: sans-serif; display:flex; justify-content:center; align-items:center; height:100vh; margin:0; background:#f0f0f0; }\n"
+                            );
+                            let _ = fs::write(
+                                project_path.join("package.json"),
+                                format!(
+                                    "{{\n  \"name\": \"{}\",\n  \"type\": \"module\",\n  \"scripts\": {{ \"dev\": \"vite --host 0.0.0.0 --port 0\" }},\n  \"devDependencies\": {{ \"vite\": \"latest\" }}\n}}\n",
+                                    name
+                                )
+                            );
+                        } else if fw == "react" {
+                            let _ = fs::create_dir_all(project_path.join("src"));
+                            let _ = fs::write(
+                                project_path.join("index.html"),
+                                "<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"UTF-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n  <title>React App</title>\n</head>\n<body>\n  <div id=\"root\"></div>\n  <script type=\"module\" src=\"/src/main.jsx\"></script>\n</body>\n</html>\n"
+                            );
+                            let _ = fs::write(
+                                project_path.join("src/main.jsx"),
+                                "import React from 'react';\nimport ReactDOM from 'react-dom/client';\n\nconst App = () => (\n  <div style={{ textAlign: 'center', fontFamily: 'sans-serif', padding: '1em' }}>\n    <h1 style={{ color: '#61dafb' }}>Hello React!</h1>\n    <p>Welcome to your CodeDroid React project.</p>\n  </div>\n);\n\nReactDOM.createRoot(document.getElementById('root')).render(<App />);\n"
+                            );
+                            let _ = fs::write(
+                                project_path.join("vite.config.js"),
+                                "import { defineConfig } from 'vite';\nimport react from '@vitejs/plugin-react';\n\nexport default defineConfig({\n  plugins: [react()],\n});\n"
+                            );
+                            let _ = fs::write(
+                                project_path.join("package.json"),
+                                format!(
+                                    "{{\n  \"name\": \"{}\",\n  \"type\": \"module\",\n  \"scripts\": {{ \"dev\": \"vite --host 0.0.0.0\" }},\n  \"dependencies\": {{ \"react\": \"^18.0.0\", \"react-dom\": \"^18.0.0\" }},\n  \"devDependencies\": {{ \"vite\": \"^5.0.0\", \"@vitejs/plugin-react\": \"^4.0.0\" }}\n}}\n",
+                                    name
+                                )
+                            );
+                        } else if fw == "vue" {
+                            let _ = fs::create_dir_all(project_path.join("src"));
+                            let _ = fs::write(
+                                project_path.join("index.html"),
+                                "<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"UTF-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n  <title>Vue App</title>\n</head>\n<body>\n  <div id=\"app\"></div>\n  <script type=\"module\" src=\"/src/main.js\"></script>\n</body>\n</html>\n"
+                            );
+                            let _ = fs::write(
+                                project_path.join("src/App.vue"),
+                                "<template>\n  <main>\n    <h1>Hello Vue!</h1>\n    <p>Welcome to your CodeDroid Vue project.</p>\n  </main>\n</template>\n\n<style>\nmain {\n  text-align: center;\n  padding: 1em;\n  font-family: sans-serif;\n}\nh1 {\n  color: #42b983;\n}\n</style>\n"
+                            );
+                            let _ = fs::write(
+                                project_path.join("src/main.js"),
+                                "import { createApp } from 'vue';\nimport App from './App.vue';\ncreateApp(App).mount('#app');\n"
+                            );
+                            let _ = fs::write(
+                                project_path.join("vite.config.js"),
+                                "import { defineConfig } from 'vite';\nimport vue from '@vitejs/plugin-vue';\n\nexport default defineConfig({\n  plugins: [vue()],\n});\n"
+                            );
+                            let _ = fs::write(
+                                project_path.join("package.json"),
+                                format!(
+                                    "{{\n  \"name\": \"{}\",\n  \"type\": \"module\",\n  \"scripts\": {{ \"dev\": \"vite --host 0.0.0.0\" }},\n  \"dependencies\": {{ \"vue\": \"^3.4.0\" }},\n  \"devDependencies\": {{ \"vite\": \"^5.0.0\", \"@vitejs/plugin-vue\": \"^5.0.0\" }}\n}}\n",
+                                    name
+                                )
+                            );
+                        } else if fw == "svelte" {
+                            let _ = fs::create_dir_all(project_path.join("src"));
+                            let _ = fs::write(
+                                project_path.join("index.html"),
+                                "<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"UTF-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n  <title>Svelte App</title>\n</head>\n<body>\n  <div id=\"app\"></div>\n  <script type=\"module\" src=\"/src/main.js\"></script>\n</body>\n</html>\n"
+                            );
+                            let _ = fs::write(
+                                project_path.join("src/main.js"),
+                                "import App from './App.svelte';\n\nconst app = new App({\n  target: document.getElementById('app'),\n});\n\nexport default app;\n"
+                            );
+                            let _ = fs::write(
+                                project_path.join("src/App.svelte"),
+                                "<script>\n  let name = 'Svelte';\n</script>\n\n<main>\n  <h1>Hello {name}!</h1>\n  <p>Welcome to your CodeDroid Svelte project.</p>\n</main>\n\n<style>\n  main {\n    text-align: center;\n    padding: 1em;\n    font-family: sans-serif;\n  }\n  h1 {\n    color: #ff3e00;\n    font-size: 2.5rem;\n  }\n</style>\n"
+                            );
+                            let _ = fs::write(
+                                project_path.join("vite.config.js"),
+                                "import { defineConfig } from 'vite';\nimport { svelte } from '@sveltejs/vite-plugin-svelte';\n\nexport default defineConfig({\n  plugins: [svelte()],\n});\n"
+                            );
+                            let _ = fs::write(
+                                project_path.join("package.json"),
+                                format!(
+                                    "{{\n  \"name\": \"{}\",\n  \"type\": \"module\",\n  \"scripts\": {{ \"dev\": \"vite --host 0.0.0.0\" }},\n  \"dependencies\": {{ \"svelte\": \"^4.0.0\" }},\n  \"devDependencies\": {{ \"vite\": \"^5.0.0\", \"@sveltejs/vite-plugin-svelte\": \"^3.0.0\" }}\n}}\n",
+                                    name
+                                )
+                            );
+                        }
+                    }
+                }
+                "nextjs" => {
+                    let next_lang = if lang == "typescript" { "--ts" } else { "--js" };
+                    created_with_cmd = run_command_in_dir(
+                        "npx",
+                        &[
+                            "-y",
+                            "create-next-app@latest",
+                            name,
+                            "--use-npm",
+                            next_lang,
+                            "--eslint",
+                            "--no-src-dir",
+                            "--no-tailwind",
+                            "--no-app",
+                            "--import-alias",
+                            "@/*",
+                        ],
+                        &parent_dir_str,
+                    );
+                    if !created_with_cmd {
+                        let _ = fs::create_dir_all(project_path.join("app"));
+                        let _ = fs::write(
+                            project_path.join("app/layout.jsx"),
+                            "export default function RootLayout({ children }) {\n  return (\n    <html lang=\"en\">\n      <body style={{ margin: 0, fontFamily: 'sans-serif' }}>{children}</body>\n    </html>\n  );\n}\n"
+                        );
+                        let _ = fs::write(
+                            project_path.join("app/page.jsx"),
+                            "export default function Home() {\n  return (\n    <div style={{ textAlign: 'center', padding: '2em' }}>\n      <h1 style={{ color: '#0070f3' }}>Hello Next.js!</h1>\n      <p>Welcome to your CodeDroid Next.js project using App Router.</p>\n    </div>\n  );\n}\n"
+                        );
+                        let _ = fs::write(
+                            project_path.join("package.json"),
+                            format!(
+                                "{{\n  \"name\": \"{}\",\n  \"private\": true,\n  \"scripts\": {{ \"dev\": \"next dev -H 0.0.0.0 -p 3001\" }},\n  \"dependencies\": {{\n    \"next\": \"^14.2.0\",\n    \"react\": \"^18.3.0\",\n    \"react-dom\": \"^18.3.0\"\n  }}\n}}\n",
+                                name
+                            )
+                        );
+                    }
+                }
+                "remix" => {
+                    created_with_cmd = run_command_in_dir(
+                        "npx",
+                        &[
+                            "-y",
+                            "create-remix@latest",
+                            name,
+                            "--template",
+                            "remix-run/remix/templates/spa",
+                        ],
+                        &parent_dir_str,
+                    );
+                    if !created_with_cmd {
+                        let _ = fs::create_dir_all(project_path.join("app/routes"));
+                        let _ = fs::write(
+                            project_path.join("app/root.jsx"),
+                            "import { Links, Meta, Outlet, Scripts, ScrollRestoration } from '@remix-run/react';\n\nexport default function App() {\n  return (\n    <html lang=\"en\">\n      <head>\n        <meta charSet=\"utf-8\" />\n        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n        <Meta />\n        <Links />\n      </head>\n      <body>\n        <Outlet />\n        <ScrollRestoration />\n        <Scripts />\n      </body>\n    </html>\n  );\n}\n"
+                        );
+                        let _ = fs::write(
+                            project_path.join("app/routes/_index.jsx"),
+                            "export default function Index() {\n  return (\n    <div style={{ textAlign: 'center', fontFamily: 'sans-serif', padding: '1em' }}>\n      <h1 style={{ color: '#319795' }}>Hello Remix!</h1>\n      <p>Welcome to your CodeDroid Remix project.</p>\n    </div>\n  );\n}\n"
+                        );
+                        let _ = fs::write(
+                            project_path.join("vite.config.js"),
+                            "import { vitePlugin as remix } from '@remix-run/dev';\nimport { defineConfig } from 'vite';\n\nexport default defineConfig({\n  plugins: [remix()],\n});\n"
+                        );
+                        let _ = fs::write(
+                            project_path.join("package.json"),
+                            format!(
+                                "{{\n  \"name\": \"{}\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {{ \"dev\": \"vite --host 0.0.0.0\" }},\n  \"dependencies\": {{\n    \"@remix-run/node\": \"^2.9.0\",\n    \"@remix-run/react\": \"^2.9.0\",\n    \"@remix-run/serve\": \"^2.9.0\",\n    \"isbot\": \"^4.1.0\",\n    \"react\": \"^18.2.0\",\n    \"react-dom\": \"^18.2.0\"\n  }},\n  \"devDependencies\": {{\n    \"@remix-run/dev\": \"^2.9.0\",\n    \"vite\": \"^5.1.0\"\n  }}\n}}",
+                                name
+                            )
+                        );
+                    }
+                }
+                _ => {
+                    let _ = fs::create_dir_all(&project_dir);
+                    let _ = fs::write(
+                        project_path.join(format!("main.{}", ext)),
+                        format!("console.log('Hello {}!');\n", name),
+                    );
+                }
+            }
+        }
+        _ => {
+            let _ = fs::create_dir_all(&project_dir);
+            let _ = fs::write(
+                project_path.join("main.txt"),
+                format!("Hello, World!\nProject: {}\n", name),
+            );
+        }
+    }
+
+    Json(crate::models::CreateProjectResponse {
+        success: true,
+        error: "".to_string(),
+    })
+}
+
 
 #[cfg(test)]
 mod tests {

@@ -15,7 +15,7 @@ mod terminal;
 mod utils;
 
 use handlers::{
-    add_package, copy_file, create_dir, delete_file, format_code, get_completions, get_definition,
+    add_package, copy_file, create_dir, create_project, delete_file, format_code, get_completions, get_definition,
     get_hover, get_references, move_file, pick_directory, read_file, run_code, run_command,
     scan_project, stop_process, sync_file,
 };
@@ -32,6 +32,7 @@ async fn main() {
         .route("/copy_file", post(copy_file))
         .route("/move_file", post(move_file))
         .route("/create_dir", post(create_dir))
+        .route("/create_project", post(create_project))
         .route("/complete", post(get_completions))
         .route("/definition", post(get_definition))
         .route("/references", post(get_references))

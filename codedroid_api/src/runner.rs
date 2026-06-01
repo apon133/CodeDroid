@@ -268,15 +268,42 @@ pub fn run_javascript_framework(_payload: CodeRequest, project_dir: &str) -> Jso
 
     let fallback_port = get_port_from_package_json(project_dir);
 
+    let mut dev_args = vec!["run", "dev"];
+    let mut custom_args = Vec::new();
+
+    // Check if we should append host binding arguments
+    if let Ok(content) = fs::read_to_string(format!("{}/package.json", project_dir)) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(dev_script) = json
+                .get("scripts")
+                .and_then(|s| s.get("dev"))
+                .and_then(|d| d.as_str())
+            {
+                if dev_script.contains("vite") || dev_script.contains("astro") || dev_script.contains("nuxt") || dev_script.contains("svelte-kit") {
+                    custom_args.push("--");
+                    custom_args.push("--host=0.0.0.0");
+                } else if dev_script.contains("next") {
+                    custom_args.push("--");
+                    custom_args.push("--hostname=0.0.0.0");
+                }
+            }
+        }
+    }
+
+    for arg in &custom_args {
+        dev_args.push(arg);
+    }
+
     let mut cmd = Command::new("npm");
-    cmd.args(["run", "dev"])
+    cmd.args(&dev_args)
         .current_dir(project_dir)
         .env("NG_CLI_ANALYTICS", "false");
 
     let mut response = run_with_timeout_web(cmd);
     if response.url.is_none() {
         if let Some(port) = fallback_port {
-            response.url = Some(format!("http://localhost:{}", port));
+            let host = crate::utils::get_local_ip();
+            response.url = Some(format!("http://{}:{}", host, port));
         }
     }
     response

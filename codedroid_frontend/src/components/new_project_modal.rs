@@ -50,8 +50,11 @@ pub fn NewProjectModal(
     let active_tab = RwSignal::new(0usize); // 0 = Language, 1 = Web Framework, 2 = Git Clone
     let clone_url = RwSignal::new(String::new());
     let is_cloning = RwSignal::new(false);
+    let is_creating = RwSignal::new(false);
     let error_msg = RwSignal::new(Option::<String>::None);
     let project_location = RwSignal::new("/Codedroid_Projects".to_string());
+
+    let is_loading = move || is_cloning.get() || is_creating.get();
 
     // When switching to Web Framework tab, force JS
     let on_tab = move |idx: usize| {
@@ -132,11 +135,41 @@ pub fn NewProjectModal(
             } else {
                 "none".to_string()
             };
-            on_create.run(NewProjectResult {
-                name: proj_name,
-                lang: lang.get_untracked(),
-                framework: fw,
-                path: proj_path,
+            let lg = lang.get_untracked();
+
+            is_creating.set(true);
+            error_msg.set(None);
+
+            let on_create_project = on_create.clone();
+            let proj_path_clone = proj_path.clone();
+            let proj_name_clone = proj_name.clone();
+            spawn_local(async move {
+                let req = api::CreateProjectRequest {
+                    name: proj_name_clone.clone(),
+                    language: lg.clone(),
+                    framework: fw.clone(),
+                    path: proj_path_clone.clone(),
+                };
+                let res = api::create_project_api(req).await;
+                match res {
+                    Ok(resp) => {
+                        if resp.success {
+                            on_create_project.run(NewProjectResult {
+                                name: proj_name_clone,
+                                lang: lg,
+                                framework: fw,
+                                path: proj_path_clone,
+                            });
+                        } else {
+                            error_msg.set(Some(format!("Failed to create project: {}", resp.error)));
+                            is_creating.set(false);
+                        }
+                    }
+                    Err(e) => {
+                        error_msg.set(Some(format!("API Error: {}", e)));
+                        is_creating.set(false);
+                    }
+                }
             });
         }
     };
@@ -160,7 +193,7 @@ pub fn NewProjectModal(
                             type="text"
                             placeholder="my_project"
                             autofocus
-                            disabled=move || is_cloning.get()
+                            disabled=move || is_loading()
                             prop:value=move || name.get()
                             on:input=move |e: Event| {
                                 let v = event_target_value(&e);
@@ -177,7 +210,7 @@ pub fn NewProjectModal(
                                 class="input"
                                 type="text"
                                 placeholder="/absolute/path/to/folder"
-                                disabled=move || is_cloning.get()
+                                disabled=move || is_loading()
                                 prop:value=move || project_location.get()
                                 on:input=move |e: Event| {
                                     let v = event_target_value(&e);
@@ -189,7 +222,7 @@ pub fn NewProjectModal(
                                 class="btn btn-primary"
                                 type="button"
                                 style="padding: 0 16px; height: 38px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px;"
-                                disabled=move || is_cloning.get()
+                                disabled=move || is_loading()
                                 on:click=move |_| {
                                     spawn_local(async move {
                                         if let Ok(resp) = api::pick_directory_api().await {
@@ -214,17 +247,17 @@ pub fn NewProjectModal(
                     <div class="tabs">
                         <button
                             class=move || if active_tab.get() == 0 { "tab-btn active" } else { "tab-btn" }
-                            disabled=move || is_cloning.get()
+                            disabled=move || is_loading()
                             on:click=move |_| on_tab(0)
                         >"Language"</button>
                         <button
                             class=move || if active_tab.get() == 1 { "tab-btn active" } else { "tab-btn" }
-                            disabled=move || is_cloning.get()
+                            disabled=move || is_loading()
                             on:click=move |_| on_tab(1)
                         >"Web Framework"</button>
                         <button
                             class=move || if active_tab.get() == 2 { "tab-btn active" } else { "tab-btn" }
-                            disabled=move || is_cloning.get()
+                            disabled=move || is_loading()
                             on:click=move |_| on_tab(2)
                         >"Git Clone"</button>
                     </div>
@@ -280,7 +313,7 @@ pub fn NewProjectModal(
                                 class="input"
                                 type="text"
                                 placeholder="https://github.com/user/repo.git"
-                                disabled=move || is_cloning.get()
+                                disabled=move || is_loading()
                                 prop:value=move || clone_url.get()
                                 on:input=move |e: Event| {
                                     let v = event_target_value(&e);
@@ -321,14 +354,27 @@ pub fn NewProjectModal(
                     </div>
                 })}
 
+                {move || is_creating.get().then(|| view! {
+                    <div class="creating-loader" style="display:flex; align-items:center; justify-content:center; gap:8px; margin: 12px 20px 0; color:var(--text2); font-size:14px;">
+                        <style>
+                            "@keyframes spin {
+                                0% { transform: rotate(0deg); }
+                                100% { transform: rotate(360deg); }
+                            }"
+                        </style>
+                        <span class="spinner" style="border:2px solid var(--border); border-top:2px solid var(--accent); border-radius:50%; width:16px; height:16px; display:inline-block; animation:spin 1s linear infinite"></span>
+                        "Creating project... Please wait."
+                    </div>
+                })}
+
                 <div class="modal-footer">
                     <button class="btn" on:click=cancel
-                        disabled=move || is_cloning.get()
+                        disabled=move || is_loading()
                         style="background:transparent;color:var(--text2);border:1px solid var(--border)">
                         "Cancel"
                     </button>
-                    <button class="btn btn-primary" on:click=create disabled=move || is_cloning.get() || name.get().trim().is_empty()>
-                        {move || if is_cloning.get() { "Cloning..." } else if active_tab.get() == 2 { "Clone & Create" } else { "Create Project" }}
+                    <button class="btn btn-primary" on:click=create disabled=move || is_loading() || name.get().trim().is_empty()>
+                        {move || if is_cloning.get() { "Cloning..." } else if is_creating.get() { "Creating..." } else if active_tab.get() == 2 { "Clone & Create" } else { "Create Project" }}
                     </button>
                 </div>
             </div>

@@ -22,6 +22,9 @@ pub async fn sync_project_async(pid: &str, ppath: &str) {
                             }
                         } else if !rel.is_empty() {
                             let content = store::load_file(&k);
+                            if store::should_skip_disk_sync(&content) {
+                                continue;
+                            }
                             let full_file_path = format!("{}/{}", ppath, rel);
                             let _ = api::save_file_api(&full_file_path, &content).await;
                         }

@@ -31,9 +31,16 @@ pub async fn sync_from_disk_async(pid: &str, ppath: &str, file_tree_data: RwSign
                         };
                         backend_keys.insert(key.clone());
 
-                        // If key doesn't exist locally, save it (empty string is fine, it will trigger load on open)
-                        if !local_keys.contains(&key) {
-                            let _ = storage.set_item(&key, "");
+                        if !file.is_dir {
+                            if !local_keys.contains(&key) {
+                                // New file on disk: register placeholder (never write this to disk).
+                                let _ = storage.set_item(&key, crate::store::UNLOADED_PLACEHOLDER);
+                            } else if let Ok(Some(existing)) = storage.get_item(&key) {
+                                // Migrate legacy empty placeholders that previously wiped files on reopen.
+                                if existing.is_empty() {
+                                    let _ = storage.set_item(&key, crate::store::UNLOADED_PLACEHOLDER);
+                                }
+                            }
                         }
                     }
 

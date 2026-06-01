@@ -586,6 +586,20 @@ pub async fn sync_file(Json(payload): Json<SyncRequest>) -> Json<CodeResponse> {
         let _ = fs::create_dir_all(parent);
     }
 
+    // Never overwrite a non-empty file with empty content (prevents cache sync from wiping projects).
+    if payload.content.is_empty() {
+        if let Ok(meta) = fs::metadata(&target_path) {
+            if meta.is_file() && meta.len() > 0 {
+                return Json(CodeResponse {
+                    output: "".to_string(),
+                    error: "Refusing to overwrite non-empty file with empty content".to_string(),
+                    pid: None,
+                    url: None,
+                });
+            }
+        }
+    }
+
     match fs::write(&target_path, payload.content) {
         Ok(_) => Json(CodeResponse {
             output: "File synced".to_string(),

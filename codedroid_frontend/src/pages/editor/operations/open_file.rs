@@ -59,7 +59,7 @@ pub fn make_open_file(
 
         let key_exists = gloo_storage::LocalStorage::get::<String>(&key).is_ok();
         let is_absolute = is_absolute_path(&name);
-        if !key_exists || is_absolute || content.is_empty() {
+        if !key_exists || is_absolute || store::needs_load_from_disk(&content) {
             let name_clone = name.clone();
             let key_clone = key.clone();
             let ppath_clone = ppath.clone();

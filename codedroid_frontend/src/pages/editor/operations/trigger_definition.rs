@@ -64,7 +64,7 @@ pub fn make_trigger_definition(
                         let key = store::file_key(&pid_clone, &rel_path);
                         let key_exists = gloo_storage::LocalStorage::get::<String>(&key).is_ok();
                         let is_absolute = is_absolute_path(&rel_path);
-                        let content_is_empty = store::load_file(&key).is_empty();
+                        let content_is_empty = store::needs_load_from_disk(&store::load_file(&key));
 
                         if !key_exists || is_absolute || content_is_empty {
                             let file_path = if rel_path.starts_with('/') {

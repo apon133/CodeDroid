@@ -39,6 +39,9 @@ pub fn make_save_current(
             let content_clone = content.clone();
 
             let save_to_disk = move || {
+                if store::should_skip_disk_sync(&content_clone) {
+                    return;
+                }
                 let base_path = base_path.clone();
                 let tab_name = tab_name.clone();
                 let trigger_diag_clone = trigger_diag_clone.clone();

@@ -572,13 +572,13 @@ pub fn EditorPage() -> impl IntoView {
         open_tabs,
     );
 
-    // Sync all files from localStorage to backend filesystem on mount, then update from disk sequentially
+    // Index project from disk first, then push only loaded/edited cache entries to disk.
     let pid_clone = project.id.clone();
     let ppath_clone = project.path.clone();
     let file_tree_data_clone = file_tree_data.clone();
     spawn_local(async move {
-        crate::pages::editor::operations::sync_project_async(&pid_clone, &ppath_clone).await;
         crate::pages::editor::operations::sync_from_disk_async(&pid_clone, &ppath_clone, file_tree_data_clone).await;
+        crate::pages::editor::operations::sync_project_async(&pid_clone, &ppath_clone).await;
     });
 
     // Open default file on mount

@@ -66,6 +66,24 @@ pub fn save_snippets(snippets: &[Snippet]) {
 }
 
 // ── Virtual Files (code per project/file) ─────────────────────────────────
+/// Marker stored in localStorage when a file is indexed but not yet loaded from disk.
+/// Must never be written back to the host filesystem (see sync_project / save_current).
+pub const UNLOADED_PLACEHOLDER: &str = "__CODEDROID_NOT_LOADED__";
+
+pub fn is_unloaded_placeholder(content: &str) -> bool {
+    content == UNLOADED_PLACEHOLDER
+}
+
+/// True when editor cache has no real file body yet (empty or unload marker).
+pub fn needs_load_from_disk(content: &str) -> bool {
+    content.is_empty() || is_unloaded_placeholder(content)
+}
+
+/// True when this cache entry must not be pushed to disk (prevents wiping source files).
+pub fn should_skip_disk_sync(content: &str) -> bool {
+    needs_load_from_disk(content)
+}
+
 pub fn load_file(key: &str) -> String {
     LocalStorage::get::<String>(key).unwrap_or_default()
 }

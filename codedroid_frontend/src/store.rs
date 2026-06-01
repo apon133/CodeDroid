@@ -96,6 +96,23 @@ pub fn file_key(project_id: &str, filename: &str) -> String {
     format!("codedroid_file_{}_{}", project_id, filename)
 }
 
+// ── Editor sidebar (explorer / search / git) ─────────────────────────────
+pub fn load_sidebar_open(project_id: &str) -> bool {
+    LocalStorage::get(&format!("codedroid_sidebar_open_{}", project_id)).unwrap_or(true)
+}
+
+pub fn save_sidebar_open(project_id: &str, open: bool) {
+    let _ = LocalStorage::set(&format!("codedroid_sidebar_open_{}", project_id), &open);
+}
+
+pub fn load_sidebar_mode(project_id: &str) -> usize {
+    LocalStorage::get(&format!("codedroid_sidebar_mode_{}", project_id)).unwrap_or(0)
+}
+
+pub fn save_sidebar_mode(project_id: &str, mode: usize) {
+    let _ = LocalStorage::set(&format!("codedroid_sidebar_mode_{}", project_id), &mode);
+}
+
 // ── Terminal Command History ──────────────────────────────────────────────
 pub fn load_terminal_history(project_id: &str) -> Vec<String> {
     LocalStorage::get(&format!("codedroid_term_history_{}", project_id)).unwrap_or_default()

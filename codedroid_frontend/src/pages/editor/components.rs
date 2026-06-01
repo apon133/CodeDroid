@@ -3,7 +3,23 @@ use crate::pages::editor::utils::*;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use web_sys::{Event, KeyboardEvent, MouseEvent, TouchEvent};
-use gloo_storage::Storage;
+use gloo_storage::{LocalStorage, Storage};
+use std::collections::HashSet;
+
+fn file_tree_collapsed_key(project_id: &str) -> String {
+    format!("codedroid_tree_collapsed_{}", project_id)
+}
+
+fn load_file_tree_collapsed(project_id: &str) -> Option<HashSet<String>> {
+    LocalStorage::get::<Vec<String>>(&file_tree_collapsed_key(project_id))
+        .ok()
+        .map(|paths| paths.into_iter().collect())
+}
+
+fn save_file_tree_collapsed(project_id: &str, collapsed: &HashSet<String>) {
+    let paths: Vec<String> = collapsed.iter().cloned().collect();
+    let _ = LocalStorage::set(&file_tree_collapsed_key(project_id), &paths);
+}
 
 #[derive(Clone, PartialEq)]
 pub struct ContextMenuState {
@@ -30,6 +46,7 @@ pub fn FileTree(
     toggle_sidebar: Callback<()>,
     _sidebar_mode: RwSignal<usize>,
     project_path: String,
+    project_id: String,
     terminal_trigger: RwSignal<Option<String>>,
     git_status: Signal<Option<crate::api::GitStatusResponse>>,
 ) -> impl IntoView {
@@ -41,7 +58,63 @@ pub fn FileTree(
 
     let (context_menu, set_context_menu) = signal(Option::<ContextMenuState>::None);
     let (press_id, set_press_id) = signal(0i32);
-    let (collapsed_dirs, set_collapsed_dirs) = signal(std::collections::HashSet::<String>::new());
+
+    let saved_collapsed = load_file_tree_collapsed(&project_id);
+    let has_saved_collapsed = saved_collapsed.is_some();
+    let tree_collapsed_ready = RwSignal::new(has_saved_collapsed);
+    let (collapsed_dirs, set_collapsed_dirs) =
+        signal(saved_collapsed.unwrap_or_default());
+    let prev_tree_dirs = StoredValue::new(HashSet::<String>::new());
+
+    Effect::new({
+        let file_tree = file_tree;
+        let set_collapsed_dirs = set_collapsed_dirs;
+        let tree_collapsed_ready = tree_collapsed_ready;
+        let project_id = project_id.clone();
+        move || {
+            let all_dirs: HashSet<String> = file_tree
+                .get()
+                .into_iter()
+                .filter(|f| f.is_dir)
+                .map(|f| f.name.clone())
+                .collect();
+
+            if all_dirs.is_empty() {
+                return;
+            }
+
+            if !has_saved_collapsed && !tree_collapsed_ready.get_untracked() {
+                set_collapsed_dirs.set(all_dirs.clone());
+                save_file_tree_collapsed(&project_id, &all_dirs);
+                prev_tree_dirs.set_value(all_dirs);
+                tree_collapsed_ready.set(true);
+                return;
+            }
+
+            let prev = prev_tree_dirs.get_value();
+            set_collapsed_dirs.update(|collapsed| {
+                for dir in all_dirs.difference(&prev) {
+                    collapsed.insert(dir.clone());
+                }
+                collapsed.retain(|dir| all_dirs.contains(dir));
+            });
+            prev_tree_dirs.set_value(all_dirs);
+            tree_collapsed_ready.set(true);
+        }
+    });
+
+    Effect::new({
+        let collapsed_dirs = collapsed_dirs;
+        let tree_collapsed_ready = tree_collapsed_ready;
+        let project_id = project_id.clone();
+        move || {
+            if !tree_collapsed_ready.get_untracked() {
+                return;
+            }
+            save_file_tree_collapsed(&project_id, &collapsed_dirs.get());
+        }
+    });
+
     let (selected_path, set_selected_path) = signal(Option::<String>::None);
     
     let get_target_dir = move || {

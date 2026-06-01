@@ -517,8 +517,18 @@ pub fn EditorPage() -> impl IntoView {
     let on_select = make_on_select(code, dirty, suggestions, cursor_pos);
 
     let copied_item: RwSignal<Option<FileEntry>> = RwSignal::new(None);
-    let sidebar_open: RwSignal<bool> = RwSignal::new(false);
-    let sidebar_mode: RwSignal<usize> = RwSignal::new(0); // 0=files, 1=search
+    let sidebar_open: RwSignal<bool> =
+        RwSignal::new(store::load_sidebar_open(&project.id));
+    let sidebar_mode: RwSignal<usize> =
+        RwSignal::new(store::load_sidebar_mode(&project.id)); // 0=files, 1=search, 2=git
+
+    Effect::new({
+        let project_id = project.id.clone();
+        move || {
+            store::save_sidebar_open(&project_id, sidebar_open.get());
+            store::save_sidebar_mode(&project_id, sidebar_mode.get());
+        }
+    });
 
     let create_file = make_create_file(
         pid.clone(),
@@ -865,6 +875,7 @@ pub fn EditorPage() -> impl IntoView {
                                 toggle_sidebar=Callback::new(move |_: ()| sidebar_open.set(false))
                                 _sidebar_mode=sidebar_mode
                                 project_path=ppath.clone()
+                                project_id=pid.clone()
                                 terminal_trigger=terminal_trigger
                                 git_status=git_status.into()
                             />

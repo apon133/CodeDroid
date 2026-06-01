@@ -218,8 +218,44 @@ pub fn HomePage() -> impl IntoView {
             nav(&format!("/editor/{}", pid), Default::default());
         })
     };
-
     let on_cancel = Callback::new(move |()| show_modal.set(false));
+
+    let on_open_project = {
+        let navigate = navigate.clone();
+        let projects = projects.clone();
+        move |_| {
+            let navigate = navigate.clone();
+            let projects = projects.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                if let Ok(resp) = crate::api::pick_directory_api().await {
+                    if resp.success {
+                        if let Some(path) = resp.path {
+                            let name = std::path::Path::new(&path)
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("project")
+                                .to_string();
+
+                            let project = Project {
+                                id: Uuid::new_v4().to_string(),
+                                name,
+                                language: "auto".to_string(),
+                                path: path.clone(),
+                                created_at: js_sys::Date::now() as u64,
+                                framework: "none".to_string(),
+                            };
+
+                            let pid = project.id.clone();
+                            store::add_project(&projects, project);
+
+                            let nav = navigate.clone();
+                            nav(&format!("/editor/{}", pid), Default::default());
+                        }
+                    }
+                }
+            });
+        }
+    };
 
     view! {
         <div>
@@ -292,9 +328,14 @@ pub fn HomePage() -> impl IntoView {
                 }}
             </div>
 
-            <button class="fab" title="New Project" on:click=move |_| show_modal.set(true)>
-                <LucideIcon name="plus" size="24" />
-            </button>
+            <div class="fab-container" style="position:fixed; bottom:32px; right:32px; display:flex; flex-direction:column; gap:16px; z-index:100;">
+                <button class="fab" title="Open Project" style="position:static; background:#1e1e24; border:1px solid var(--border); box-shadow: 0 8px 30px rgba(0,0,0,0.3);" on:click=on_open_project>
+                    <LucideIcon name="folder" size="24" />
+                </button>
+                <button class="fab" title="New Project" style="position:static;" on:click=move |_| show_modal.set(true)>
+                    <LucideIcon name="plus" size="24" />
+                </button>
+            </div>
 
             {move || show_modal.get().then(|| view! {
                 <NewProjectModal on_create=on_create on_cancel=on_cancel />

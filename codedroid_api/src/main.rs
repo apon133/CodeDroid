@@ -16,8 +16,8 @@ mod utils;
 
 use handlers::{
     add_package, copy_file, create_dir, delete_file, format_code, get_completions, get_definition,
-    get_hover, get_references, move_file, read_file, run_code, run_command, scan_project,
-    stop_process, sync_file,
+    get_hover, get_references, move_file, pick_directory, read_file, run_code, run_command,
+    scan_project, stop_process, sync_file,
 };
 
 #[tokio::main]
@@ -39,6 +39,7 @@ async fn main() {
         .route("/read_file", post(read_file))
         .route("/hover", post(get_hover))
         .route("/scan_project", post(scan_project))
+        .route("/pick_directory", post(pick_directory))
         .route("/diagnostics", post(diagnostics::get_diagnostics_handler))
         .route(
             "/error_suggestions",

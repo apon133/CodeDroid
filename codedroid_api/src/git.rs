@@ -24,6 +24,7 @@ pub struct GitCommitRequest {
 pub struct GitCloneRequest {
     pub clone_url: String,
     pub project_name: String,
+    pub project_path: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -388,8 +389,10 @@ pub async fn git_diff_text(Json(payload): Json<GitFileRequest>) -> Json<GitComma
 }
 
 pub async fn git_clone(Json(payload): Json<GitCloneRequest>) -> Json<GitCommandResponse> {
-    // Determine target directory: we want ~/.codedroid_web_cache/Codedroid_Projects/project_name
-    let virtual_project_path = format!("/Codedroid_Projects/{}", payload.project_name);
+    // Determine target directory
+    let virtual_project_path = payload.project_path.clone().unwrap_or_else(|| {
+        format!("/Codedroid_Projects/{}", payload.project_name)
+    });
     let target_dir = resolve_project_dir(&virtual_project_path);
 
     // Get the parent folder

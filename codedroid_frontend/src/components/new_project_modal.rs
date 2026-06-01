@@ -36,6 +36,7 @@ pub struct NewProjectResult {
     pub name: String,
     pub lang: String,
     pub framework: String,
+    pub path: String,
 }
 
 #[component]
@@ -50,6 +51,7 @@ pub fn NewProjectModal(
     let clone_url = RwSignal::new(String::new());
     let is_cloning = RwSignal::new(false);
     let error_msg = RwSignal::new(Option::<String>::None);
+    let project_location = RwSignal::new("/Codedroid_Projects".to_string());
 
     // When switching to Web Framework tab, force JS
     let on_tab = move |idx: usize| {
@@ -69,6 +71,24 @@ pub fn NewProjectModal(
             return;
         }
 
+        let loc = project_location.get_untracked();
+        let trimmed = loc.trim();
+        let proj_path = if trimmed.is_empty() {
+            format!("/Codedroid_Projects/{}", proj_name)
+        } else if trimmed == "/Codedroid_Projects" {
+            format!("/Codedroid_Projects/{}", proj_name)
+        } else if trimmed == "/Codedroid_Desktop" {
+            format!("/Codedroid_Desktop/{}", proj_name)
+        } else if trimmed == "/Codedroid_Documents" {
+            format!("/Codedroid_Documents/{}", proj_name)
+        } else {
+            if !trimmed.starts_with('/') {
+                error_msg.set(Some("Path must be an absolute path (start with '/').".to_string()));
+                return;
+            }
+            format!("{}/{}", trimmed.trim_end_matches('/'), proj_name)
+        };
+
         let tab = active_tab.get_untracked();
         if tab == 2 {
             // Git Clone logic
@@ -82,8 +102,9 @@ pub fn NewProjectModal(
             error_msg.set(None);
 
             let on_create_clone = on_create.clone();
+            let proj_path_clone = proj_path.clone();
             spawn_local(async move {
-                let res = api::git_clone_api(&url, &proj_name).await;
+                let res = api::git_clone_api(&url, &proj_name, &proj_path_clone).await;
                 match res {
                     Ok(resp) => {
                         if resp.success {
@@ -91,6 +112,7 @@ pub fn NewProjectModal(
                                 name: proj_name,
                                 lang: "auto".to_string(),
                                 framework: "none".to_string(),
+                                path: proj_path_clone,
                             });
                         } else {
                             let err = resp.error.unwrap_or_else(|| "Unknown git error".to_string());
@@ -114,6 +136,7 @@ pub fn NewProjectModal(
                 name: proj_name,
                 lang: lang.get_untracked(),
                 framework: fw,
+                path: proj_path,
             });
         }
     };
@@ -144,6 +167,47 @@ pub fn NewProjectModal(
                                 name.set(v);
                             }
                         />
+                    </div>
+
+                    // Project location selection
+                    <div class="input-group" style="margin-bottom: 20px;">
+                        <label>"Project Location"</label>
+                        <div style="display: flex; gap: 8px; width: 100%;">
+                            <input
+                                class="input"
+                                type="text"
+                                placeholder="/absolute/path/to/folder"
+                                disabled=move || is_cloning.get()
+                                prop:value=move || project_location.get()
+                                on:input=move |e: Event| {
+                                    let v = event_target_value(&e);
+                                    project_location.set(v);
+                                }
+                                style="flex: 1; min-width: 0;"
+                            />
+                            <button
+                                class="btn btn-primary"
+                                type="button"
+                                style="padding: 0 16px; height: 38px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px;"
+                                disabled=move || is_cloning.get()
+                                on:click=move |_| {
+                                    spawn_local(async move {
+                                        if let Ok(resp) = api::pick_directory_api().await {
+                                            if resp.success {
+                                                if let Some(path) = resp.path {
+                                                    project_location.set(path);
+                                                }
+                                            }
+                                        }
+                                    });
+                                }
+                            >
+                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                                </svg>
+                                "Browse..."
+                            </button>
+                        </div>
                     </div>
 
                     // Tabs

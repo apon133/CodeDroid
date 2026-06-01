@@ -132,24 +132,36 @@ fn default_files(lang: &str, framework: &str, name: &str) -> Vec<(String, String
 }
 
 fn format_project_path(path: &str) -> String {
-    if path.starts_with("/Codedroid_Projects") {
-        let is_mobile = web_sys::window()
-            .and_then(|w| w.navigator().user_agent().ok())
-            .map(|ua| {
-                let ua_lower = ua.to_lowercase();
-                ua_lower.contains("android")
-                    || ua_lower.contains("iphone")
-                    || ua_lower.contains("ipad")
-            })
-            .unwrap_or(false);
+    let is_mobile = web_sys::window()
+        .and_then(|w| w.navigator().user_agent().ok())
+        .map(|ua| {
+            let ua_lower = ua.to_lowercase();
+            ua_lower.contains("android")
+                || ua_lower.contains("iphone")
+                || ua_lower.contains("ipad")
+        })
+        .unwrap_or(false);
 
+    if path.starts_with("/Codedroid_Projects") {
+        let relative_path = &path["/Codedroid_Projects".len()..];
         if is_mobile {
-            format!(
-                "phone/download/codedroid{}",
-                &path["/Codedroid_Projects".len()..]
-            )
+            format!("phone/download/codedroid{}", relative_path)
         } else {
-            path.to_string()
+            format!("~/Codedroid_Projects{}", relative_path)
+        }
+    } else if path.starts_with("/Codedroid_Desktop") {
+        let relative_path = &path["/Codedroid_Desktop".len()..];
+        if is_mobile {
+            format!("phone/download/codedroid_desktop{}", relative_path)
+        } else {
+            format!("~/Desktop{}", relative_path)
+        }
+    } else if path.starts_with("/Codedroid_Documents") {
+        let relative_path = &path["/Codedroid_Documents".len()..];
+        if is_mobile {
+            format!("phone/documents/codedroid{}", relative_path)
+        } else {
+            format!("~/Documents{}", relative_path)
         }
     } else {
         path.to_string()
@@ -179,7 +191,7 @@ pub fn HomePage() -> impl IntoView {
     let on_create = {
         let navigate = navigate.clone();
         Callback::new(move |result: NewProjectResult| {
-            let path = format!("/Codedroid_Projects/{}", result.name);
+            let path = result.path.clone();
             let project = Project {
                 id: Uuid::new_v4().to_string(),
                 name: result.name.clone(),

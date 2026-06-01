@@ -7,7 +7,7 @@ pub fn ContextMenu(
     trigger_definition: Callback<()>,
     trigger_references: Callback<()>,
     format_code: Callback<()>,
-    save_document: Callback<()>,
+    save_document: Callback<bool>,
     show_deps: RwSignal<bool>,
 ) -> impl IntoView {
     view! {
@@ -96,7 +96,7 @@ pub fn ContextMenu(
                         on:click=move |e: web_sys::MouseEvent| {
                             e.stop_propagation();
                             show_menu.set(false);
-                            save_document.run(());
+                            save_document.run(true);
                         }
                     >
                         <span class="context-menu-label">"Save Document"</span>

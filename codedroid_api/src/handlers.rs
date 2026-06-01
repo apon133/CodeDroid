@@ -1718,6 +1718,92 @@ pub async fn scan_project(Json(payload): Json<ScanProjectRequest>) -> Json<ScanP
     }
 }
 
+pub async fn pick_directory() -> Json<crate::models::PickDirectoryResponse> {
+    let res = tokio::task::spawn_blocking(|| {
+        #[cfg(target_os = "macos")]
+        {
+            let output = std::process::Command::new("osascript")
+                .args(&["-e", "POSIX path of (choose folder with prompt \"Select Project Directory\")"])
+                .output();
+            match output {
+                Ok(out) if out.status.success() => {
+                    let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    if !path.is_empty() {
+                        return Ok(path);
+                    }
+                }
+                _ => {}
+            }
+            return Err("Selection cancelled or failed".to_string());
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let output = std::process::Command::new("powershell")
+                .args(&[
+                    "-Command",
+                    "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; if ($f.ShowDialog() -eq 'OK') { $f.SelectedPath }"
+                ])
+                .output();
+            match output {
+                Ok(out) if out.status.success() => {
+                    let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    if !path.is_empty() {
+                        return Ok(path);
+                    }
+                }
+                _ => {}
+            }
+            return Err("Selection cancelled or failed".to_string());
+        }
+
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            if let Ok(output) = std::process::Command::new("zenity")
+                .args(&["--file-selection", "--directory", "--title=Select Project Directory"])
+                .output()
+            {
+                if output.status.success() {
+                    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !path.is_empty() {
+                        return Ok(path);
+                    }
+                }
+            }
+            if let Ok(output) = std::process::Command::new("kdialog")
+                .args(&["--getexistingdirectory"])
+                .output()
+            {
+                if output.status.success() {
+                    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !path.is_empty() {
+                        return Ok(path);
+                    }
+                }
+            }
+            Err("No system dialog tool (zenity/kdialog) found or selection cancelled".to_string())
+        }
+    }).await;
+
+    match res {
+        Ok(Ok(path)) => Json(crate::models::PickDirectoryResponse {
+            success: true,
+            path: Some(path),
+            error: None,
+        }),
+        Ok(Err(e)) => Json(crate::models::PickDirectoryResponse {
+            success: false,
+            path: None,
+            error: Some(e),
+        }),
+        Err(e) => Json(crate::models::PickDirectoryResponse {
+            success: false,
+            path: None,
+            error: Some(e.to_string()),
+        }),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

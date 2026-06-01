@@ -44,7 +44,7 @@ pub fn EditorCodeArea(
     project_path_str: StoredValue<String>,
     last_request_id: RwSignal<u64>,
     trigger_diagnostics: Callback<String>,
-    save_current: Callback<()>,
+    save_current: Callback<bool>,
     format_code: Callback<()>,
     show_search: RwSignal<bool>,
     check_error_at_cursor: Callback<(u32, u32)>,
@@ -609,7 +609,7 @@ pub fn EditorCodeArea(
                                     dirty.set(true);
                                     active_error.set(None);
                                     trigger_diagnostics.run(val.clone());
-                                    if settings.get_untracked().auto_save { save_current.run(()); }
+                                    if settings.get_untracked().auto_save { save_current.run(false); }
 
                                     let start = target.selection_start().unwrap().unwrap_or(0);
                                     cursor_pos.set(start);
@@ -666,7 +666,7 @@ pub fn EditorCodeArea(
                                          }
                                          show_context_menu.set(false);
                                      }
-                                     if (e.ctrl_key() || e.meta_key()) && e.key() == "s" { e.prevent_default(); save_current.run(()); }
+                                     if (e.ctrl_key() || e.meta_key()) && e.key() == "s" { e.prevent_default(); save_current.run(true); }
                                 if e.shift_key() && e.alt_key() && (e.key() == "f" || e.key() == "F") { e.prevent_default(); format_code.run(()); }
                                 if (e.ctrl_key() || e.meta_key()) && e.key() == "f" { e.prevent_default(); show_search.update(|v| *v = !*v); }
                                 if e.key() == "F12" { e.prevent_default(); trigger_definition.run(()); }

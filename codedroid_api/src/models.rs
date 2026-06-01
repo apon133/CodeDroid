@@ -182,3 +182,10 @@ pub struct ScanProjectResponse {
     pub files: Vec<FileInfo>,
     pub error: String,
 }
+
+#[derive(Serialize)]
+pub struct PickDirectoryResponse {
+    pub success: bool,
+    pub path: Option<String>,
+    pub error: Option<String>,
+}

@@ -146,7 +146,7 @@ pub fn make_run_code(
     is_error: RwSignal<bool>,
     current_pid: RwSignal<Option<u32>>,
     preview_url: RwSignal<Option<String>>,
-    save_current: Callback<()>,
+    save_current: Callback<bool>,
     terminal_session_id: RwSignal<Option<String>>,
     bottom_tab: RwSignal<usize>,
     active_tab: Signal<Option<String>>,
@@ -158,7 +158,7 @@ pub fn make_run_code(
         if is_running.get_untracked() {
             return;
         }
-        save_current.run(());
+        save_current.run(true);
         
         let mut lang = plang.clone();
         let path = ppath.clone();

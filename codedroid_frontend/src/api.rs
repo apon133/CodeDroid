@@ -597,6 +597,7 @@ pub struct GitCommitRequest {
 pub struct GitCloneRequest {
     pub clone_url: String,
     pub project_name: String,
+    pub project_path: Option<String>,
 }
 
 #[derive(serde::Deserialize, Clone, PartialEq, Debug)]
@@ -743,8 +744,12 @@ pub async fn git_diff_text_api(project_path: &str, file_path: &str) -> Result<Gi
         .map_err(|e| e.to_string())
 }
 
-pub async fn git_clone_api(clone_url: &str, project_name: &str) -> Result<GitCommandResponse, String> {
-    let body = GitCloneRequest { clone_url: clone_url.to_string(), project_name: project_name.to_string() };
+pub async fn git_clone_api(clone_url: &str, project_name: &str, project_path: &str) -> Result<GitCommandResponse, String> {
+    let body = GitCloneRequest {
+        clone_url: clone_url.to_string(),
+        project_name: project_name.to_string(),
+        project_path: Some(project_path.to_string()),
+    };
     Request::post(&format!("{}/git/clone", get_api_url()))
         .json(&body)
         .map_err(|e| e.to_string())?
@@ -780,6 +785,23 @@ pub async fn git_log_api(project_path: &str) -> Result<GitLogResponse, String> {
         .await
         .map_err(|e| e.to_string())?
         .json::<GitLogResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct PickDirectoryResponse {
+    pub success: bool,
+    pub path: Option<String>,
+    pub error: Option<String>,
+}
+
+pub async fn pick_directory_api() -> Result<PickDirectoryResponse, String> {
+    Request::post(&format!("{}/pick_directory", get_api_url()))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<PickDirectoryResponse>()
         .await
         .map_err(|e| e.to_string())
 }

@@ -3583,8 +3583,21 @@ body.dragging-preview iframe {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border);
+  gap: 8px;
+}
+
+.git-panel-header-left {
+  min-width: 0;
+  flex: 1;
+}
+
+.git-panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .git-panel-title {
@@ -3776,6 +3789,72 @@ body.dragging-preview iframe {
 
 .git-commit-arrow-btn:hover {
   filter: brightness(1.1);
+}
+
+.git-commit-arrow-btn.open {
+  filter: brightness(0.92);
+}
+
+.git-menu-anchor {
+  position: relative;
+  display: flex;
+}
+
+.git-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: transparent;
+}
+
+.git-dropdown-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 200px;
+  background: var(--bg1, #0d1117);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  z-index: 1001;
+  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.git-dropdown-menu-header {
+  min-width: 180px;
+}
+
+.git-dropdown-menu-commit {
+  bottom: calc(100% + 4px);
+  top: auto;
+}
+
+.git-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.git-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.git-dropdown-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
 }
 
 /* File list item styling */

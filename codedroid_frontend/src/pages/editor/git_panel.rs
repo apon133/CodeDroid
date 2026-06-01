@@ -15,6 +15,117 @@ fn split_path(path: &str) -> (String, String) {
     (filename, parent)
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum GitWorkflow {
+    CommitStaged,
+    CommitAll,
+    CommitAndPush,
+    CommitAllAndPush,
+    CommitAndSync,
+    Push,
+    Pull,
+    Sync,
+    StageAll,
+}
+
+async fn git_cmd_ok(
+    res: Result<api::GitCommandResponse, String>,
+    fallback: &str,
+) -> Result<(), String> {
+    match res {
+        Ok(r) if r.success => Ok(()),
+        Ok(r) => Err(r.error.unwrap_or_else(|| fallback.to_string())),
+        Err(e) => Err(e),
+    }
+}
+
+async fn stage_all_files(project_path: &str, paths: &[String]) {
+    for path in paths {
+        let _ = api::git_stage_api(project_path, path).await;
+    }
+}
+
+async fn run_git_workflow(
+    project_path: &str,
+    message: Option<&str>,
+    workflow: GitWorkflow,
+    unstaged_paths: Vec<String>,
+    staged_count: usize,
+) -> Result<String, String> {
+    let needs_commit = matches!(
+        workflow,
+        GitWorkflow::CommitStaged
+            | GitWorkflow::CommitAll
+            | GitWorkflow::CommitAndPush
+            | GitWorkflow::CommitAllAndPush
+            | GitWorkflow::CommitAndSync
+    );
+
+    if needs_commit {
+        let msg = message.unwrap_or("").trim();
+        if msg.is_empty() {
+            return Err("Please enter a commit message.".to_string());
+        }
+
+        let stage_all = matches!(
+            workflow,
+            GitWorkflow::CommitAll | GitWorkflow::CommitAllAndPush
+        );
+
+        if matches!(
+            workflow,
+            GitWorkflow::CommitStaged | GitWorkflow::CommitAndPush | GitWorkflow::CommitAndSync
+        ) && staged_count == 0
+        {
+            return Err("No staged changes. Stage files first or use Commit All.".to_string());
+        }
+
+        if stage_all {
+            stage_all_files(project_path, &unstaged_paths).await;
+        }
+
+        git_cmd_ok(
+            api::git_commit_api(project_path, msg).await,
+            "Failed to commit",
+        )
+        .await?;
+    }
+
+    if matches!(workflow, GitWorkflow::StageAll) {
+        stage_all_files(project_path, &unstaged_paths).await;
+        return Ok("All changes staged.".to_string());
+    }
+
+    if matches!(
+        workflow,
+        GitWorkflow::Pull | GitWorkflow::Sync | GitWorkflow::CommitAndSync
+    ) {
+        git_cmd_ok(api::git_pull_api(project_path).await, "Failed to pull").await?;
+    }
+
+    if matches!(
+        workflow,
+        GitWorkflow::Push
+            | GitWorkflow::Sync
+            | GitWorkflow::CommitAndPush
+            | GitWorkflow::CommitAllAndPush
+            | GitWorkflow::CommitAndSync
+    ) {
+        git_cmd_ok(api::git_push_api(project_path).await, "Failed to push").await?;
+    }
+
+    let success_msg = match workflow {
+        GitWorkflow::CommitStaged | GitWorkflow::CommitAll => "Changes committed.",
+        GitWorkflow::CommitAndPush | GitWorkflow::CommitAllAndPush => "Committed and pushed.",
+        GitWorkflow::CommitAndSync => "Committed and synced.",
+        GitWorkflow::Push => "Pushed successfully.",
+        GitWorkflow::Pull => "Pulled successfully.",
+        GitWorkflow::Sync => "Synced successfully.",
+        GitWorkflow::StageAll => "All changes staged.",
+    };
+    Ok(success_msg.to_string())
+}
+
 #[component]
 pub fn GitPanel(
     project_path: String,
@@ -27,6 +138,8 @@ pub fn GitPanel(
 ) -> impl IntoView {
     let commit_message = RwSignal::new(String::new());
     let is_loading = RwSignal::new(false);
+    let commit_menu_open = RwSignal::new(false);
+    let header_menu_open = RwSignal::new(false);
 
     // Collapsible sections
     let input_expanded = RwSignal::new(true);
@@ -165,102 +278,66 @@ pub fn GitPanel(
         }
     });
 
-    let commit_changes = Callback::new({
+    let run_workflow = {
         let ppath = project_path.clone();
         let trigger_status = trigger_git_status.clone();
         let snack = show_snack.clone();
         let staged_fn = staged_files.clone();
         let unstaged_fn = unstaged_files.clone();
-        move |_: ()| {
+        let commit_message = commit_message.clone();
+        let is_loading = is_loading.clone();
+        let commit_menu_open = commit_menu_open.clone();
+        let header_menu_open = header_menu_open.clone();
+        Callback::new(move |workflow: GitWorkflow| {
+            let needs_message = matches!(
+                workflow,
+                GitWorkflow::CommitStaged
+                    | GitWorkflow::CommitAll
+                    | GitWorkflow::CommitAndPush
+                    | GitWorkflow::CommitAllAndPush
+                    | GitWorkflow::CommitAndSync
+            );
             let msg = commit_message.get_untracked();
-            if msg.trim().is_empty() {
+            if needs_message && msg.trim().is_empty() {
                 snack.run("Please enter a commit message.".to_string());
                 return;
             }
 
+            commit_menu_open.set(false);
+            header_menu_open.set(false);
             is_loading.set(true);
+
             let ppath = ppath.clone();
             let trigger = trigger_status.clone();
             let s = snack.clone();
-            let sf = staged_fn.clone();
-            let uf = unstaged_fn.clone();
-            spawn_local(async move {
-                let staged = sf();
-                if staged.is_empty() {
-                    let unstaged = uf();
-                    for file in unstaged {
-                        let _ = api::git_stage_api(&ppath, &file.path).await;
-                    }
-                }
+            let unstaged_paths: Vec<String> =
+                unstaged_fn().into_iter().map(|f| f.path).collect();
+            let staged_count = staged_fn().len();
+            let clears_message = needs_message;
 
-                match api::git_commit_api(&ppath, &msg).await {
-                    Ok(res) => {
-                        if res.success {
+            spawn_local(async move {
+                match run_git_workflow(
+                    &ppath,
+                    if needs_message { Some(&msg) } else { None },
+                    workflow,
+                    unstaged_paths,
+                    staged_count,
+                )
+                .await
+                {
+                    Ok(success) => {
+                        if clears_message {
                             commit_message.set(String::new());
-                            s.run("Changes committed successfully!".to_string());
-                            trigger.run(());
-                        } else {
-                            s.run(res.error.unwrap_or_else(|| "Failed to commit".to_string()));
                         }
+                        s.run(success);
+                        trigger.run(());
                     }
-                    Err(e) => s.run(format!("Commit failed: {}", e)),
+                    Err(e) => s.run(e),
                 }
                 is_loading.set(false);
             });
-        }
-    });
-
-    let _pull_changes = Callback::new({
-        let ppath = project_path.clone();
-        let trigger_status = trigger_git_status.clone();
-        let snack = show_snack.clone();
-        move |_: ()| {
-            is_loading.set(true);
-            let ppath = ppath.clone();
-            let trigger = trigger_status.clone();
-            let s = snack.clone();
-            spawn_local(async move {
-                match api::git_pull_api(&ppath).await {
-                    Ok(res) => {
-                        if res.success {
-                            s.run("Pulled changes successfully!".to_string());
-                            trigger.run(());
-                        } else {
-                            s.run(res.error.unwrap_or_else(|| "Failed to pull changes".to_string()));
-                        }
-                    }
-                    Err(e) => s.run(format!("Pull failed: {}", e)),
-                }
-                is_loading.set(false);
-            });
-        }
-    });
-
-    let _push_changes = Callback::new({
-        let ppath = project_path.clone();
-        let trigger_status = trigger_git_status.clone();
-        let snack = show_snack.clone();
-        move |_: ()| {
-            is_loading.set(true);
-            let ppath = ppath.clone();
-            let trigger = trigger_status.clone();
-            let s = snack.clone();
-            spawn_local(async move {
-                match api::git_push_api(&ppath).await {
-                    Ok(res) => {
-                        if res.success {
-                            s.run("Pushed changes successfully!".to_string());
-                            trigger.run(());
-                        } else {
-                            s.run(res.error.unwrap_or_else(|| "Failed to push changes".to_string()));
-                        }
-                    }
-                    Err(e) => s.run(format!("Push failed: {}", e)),
-                }
-                is_loading.set(false);
-            });
-        }
-    });
+        })
+    };
 
     view! {
         {move || sidebar_open.get().then(|| view! {
@@ -269,12 +346,99 @@ pub fn GitPanel(
 
         <div class=move || if sidebar_open.get() { "file-tree-panel git-panel open" } else { "file-tree-panel git-panel" }>
             
-            // Header
+            // Header (VS Code-style toolbar)
             <div class="git-panel-header">
-                <div class="git-panel-title" style="font-size: 13px; font-weight: 500; text-transform: none; letter-spacing: normal; color: var(--text);">"Source Control"</div>
-                <button class="git-action-btn" title="More Actions">
-                    <LucideIcon name="more-horizontal" size="16" />
-                </button>
+                <div class="git-panel-header-left">
+                    <div class="git-panel-title">"Source Control"</div>
+                    {move || {
+                        git_status.get().map(|status| view! {
+                            <div class="git-panel-subtitle">
+                                <LucideIcon name="git-branch" size="12" />
+                                <span>{status.branch.clone()}</span>
+                            </div>
+                        })
+                    }}
+                </div>
+                <div class="git-panel-header-actions">
+                    <button
+                        class="git-action-btn"
+                        title="Refresh"
+                        disabled=move || is_loading.get()
+                        on:click=move |_| trigger_git_status.run(())
+                    >
+                        <LucideIcon name="rotate-cw" size="16" />
+                    </button>
+                    <button
+                        class="git-action-btn"
+                        title="Pull"
+                        disabled=move || is_loading.get()
+                        on:click=move |_| run_workflow.run(GitWorkflow::Pull)
+                    >
+                        <LucideIcon name="arrow-down" size="16" />
+                    </button>
+                    <button
+                        class="git-action-btn"
+                        title="Push"
+                        disabled=move || is_loading.get()
+                        on:click=move |_| run_workflow.run(GitWorkflow::Push)
+                    >
+                        <LucideIcon name="arrow-up" size="16" />
+                    </button>
+                    <button
+                        class="git-action-btn"
+                        title="Sync (Pull then Push)"
+                        disabled=move || is_loading.get()
+                        on:click=move |_| run_workflow.run(GitWorkflow::Sync)
+                    >
+                        <LucideIcon name="cloud" size="16" />
+                    </button>
+                    <div class="git-menu-anchor">
+                        <button
+                            class="git-action-btn"
+                            title="More Actions"
+                            on:click=move |e| {
+                                e.stop_propagation();
+                                header_menu_open.update(|open| *open = !*open);
+                                commit_menu_open.set(false);
+                            }
+                        >
+                            <LucideIcon name="more-horizontal" size="16" />
+                        </button>
+                        {move || header_menu_open.get().then(|| {
+                            let run = run_workflow.clone();
+                            view! {
+                                <div class="git-menu-backdrop" on:click=move |_| header_menu_open.set(false) />
+                                <div class="git-dropdown-menu git-dropdown-menu-header">
+                                    <button class="git-dropdown-item" on:click=move |_| run.run(GitWorkflow::Pull)>
+                                        <LucideIcon name="arrow-down" size="14" />
+                                        "Pull"
+                                    </button>
+                                    <button class="git-dropdown-item" on:click=move |_| run.run(GitWorkflow::Push)>
+                                        <LucideIcon name="arrow-up" size="14" />
+                                        "Push"
+                                    </button>
+                                    <button class="git-dropdown-item" on:click=move |_| run.run(GitWorkflow::Sync)>
+                                        <LucideIcon name="cloud" size="14" />
+                                        "Sync"
+                                    </button>
+                                    <div class="git-dropdown-divider" />
+                                    <button class="git-dropdown-item" on:click=move |_| run.run(GitWorkflow::StageAll)>
+                                        <LucideIcon name="plus" size="14" />
+                                        "Stage All Changes"
+                                    </button>
+                                    <button class="git-dropdown-item" on:click=move |_| run.run(GitWorkflow::CommitAll)>
+                                        <LucideIcon name="check" size="14" />
+                                        "Commit All"
+                                    </button>
+                                    <button class="git-dropdown-item" on:click=move |_| run.run(GitWorkflow::CommitAllAndPush)>
+                                        <LucideIcon name="arrow-up" size="14" />
+                                        "Commit All & Push"
+                                    </button>
+                                </div>
+                            }
+                        })}
+                    </div>
+                </div>
             </div>
 
             // Repository List / Changed Files
@@ -302,26 +466,101 @@ pub fn GitPanel(
                                     on:keydown=move |e: web_sys::KeyboardEvent| {
                                         if e.key() == "Enter" && e.ctrl_key() {
                                             e.prevent_default();
-                                            commit_changes.run(());
+                                            run_workflow.run(GitWorkflow::CommitStaged);
                                         }
                                     }
                                     disabled=move || is_loading.get()
                                 />
                             </div>
-                            
-                            // Split Commit Button Group
+
+                            // Split commit button (VS Code-style)
                             <div class="git-commit-btn-group">
-                                <button class="git-commit-main-btn" on:click=move |_| commit_changes.run(()) disabled=move || is_loading.get()>
+                                <button
+                                    class="git-commit-main-btn"
+                                    on:click=move |_| run_workflow.run(GitWorkflow::CommitStaged)
+                                    disabled=move || is_loading.get()
+                                >
                                     {move || if is_loading.get() {
                                         view! { <span class="spinner" style="width:12px; height:12px; border-width:2px;"></span> }.into_any()
                                     } else {
                                         view! { <LucideIcon name="check" size="14" /> }.into_any()
                                     }}
-                                    "Commit"
+                                    {move || {
+                                        let staged = staged_files().len();
+                                        if staged > 0 {
+                                            format!("Commit ({})", staged)
+                                        } else {
+                                            "Commit".to_string()
+                                        }
+                                    }}
                                 </button>
-                                <button class="git-commit-arrow-btn" title="Commit Options">
-                                    <LucideIcon name="chevron-down" size="14" />
-                                </button>
+                                <div class="git-menu-anchor">
+                                    <button
+                                        class=move || {
+                                            if commit_menu_open.get() {
+                                                "git-commit-arrow-btn open"
+                                            } else {
+                                                "git-commit-arrow-btn"
+                                            }
+                                        }
+                                        title="Commit Options"
+                                        disabled=move || is_loading.get()
+                                        on:click=move |e| {
+                                            e.stop_propagation();
+                                            commit_menu_open.update(|open| *open = !*open);
+                                            header_menu_open.set(false);
+                                        }
+                                    >
+                                        <LucideIcon name="chevron-down" size="14" />
+                                    </button>
+                                    {move || commit_menu_open.get().then(|| {
+                                        let run = run_workflow.clone();
+                                        view! {
+                                            <div class="git-menu-backdrop" on:click=move |_| commit_menu_open.set(false) />
+                                            <div class="git-dropdown-menu git-dropdown-menu-commit">
+                                                <button class="git-dropdown-item" on:click=move |_| run.run(GitWorkflow::CommitStaged)>
+                                                    <LucideIcon name="check" size="14" />
+                                                    "Commit"
+                                                </button>
+                                                <button class="git-dropdown-item" on:click=move |_| run.run(GitWorkflow::CommitAll)>
+                                                    <LucideIcon name="check" size="14" />
+                                                    "Commit All"
+                                                </button>
+                                                <div class="git-dropdown-divider" />
+                                                <button class="git-dropdown-item" on:click=move |_| run.run(GitWorkflow::CommitAndPush)>
+                                                    <LucideIcon name="arrow-up" size="14" />
+                                                    "Commit & Push"
+                                                </button>
+                                                <button class="git-dropdown-item" on:click=move |_| run.run(GitWorkflow::CommitAllAndPush)>
+                                                    <LucideIcon name="arrow-up" size="14" />
+                                                    "Commit All & Push"
+                                                </button>
+                                                <button class="git-dropdown-item" on:click=move |_| run.run(GitWorkflow::CommitAndSync)>
+                                                    <LucideIcon name="cloud" size="14" />
+                                                    "Commit & Sync"
+                                                </button>
+                                                <div class="git-dropdown-divider" />
+                                                <button class="git-dropdown-item" on:click=move |_| run.run(GitWorkflow::Push)>
+                                                    <LucideIcon name="arrow-up" size="14" />
+                                                    "Push"
+                                                </button>
+                                                <button class="git-dropdown-item" on:click=move |_| run.run(GitWorkflow::Pull)>
+                                                    <LucideIcon name="arrow-down" size="14" />
+                                                    "Pull"
+                                                </button>
+                                                <button class="git-dropdown-item" on:click=move |_| run.run(GitWorkflow::Sync)>
+                                                    <LucideIcon name="cloud" size="14" />
+                                                    "Sync"
+                                                </button>
+                                                <div class="git-dropdown-divider" />
+                                                <button class="git-dropdown-item" on:click=move |_| run.run(GitWorkflow::StageAll)>
+                                                    <LucideIcon name="plus" size="14" />
+                                                    "Stage All Changes"
+                                                </button>
+                                            </div>
+                                        }
+                                    })}
+                                </div>
                             </div>
                         </div>
                     }
@@ -504,7 +743,7 @@ pub fn GitPanel(
                         <span style="font-size: 10px; color: var(--text3); cursor: pointer; margin-right: 4px;">"Auto"</span>
                         <button class="git-action-btn" title="Focus HEAD"><LucideIcon name="crosshair" size="12" /></button>
                         <button class="git-action-btn" title="View Graph"><LucideIcon name="git-branch" size="12" /></button>
-                        <button class="git-action-btn" title="Sync Branch"><LucideIcon name="cloud" size="12" /></button>
+                        <button class="git-action-btn" title="Sync Branch" on:click=move |_| run_workflow.run(GitWorkflow::Sync)><LucideIcon name="cloud" size="12" /></button>
                         <button class="git-action-btn" title="Refresh Log" on:click=move |_| refresh_git_log.run(())><LucideIcon name="rotate-cw" size="12" /></button>
                         <button class="git-action-btn" title="More Actions"><LucideIcon name="more-horizontal" size="12" /></button>
                     </div>

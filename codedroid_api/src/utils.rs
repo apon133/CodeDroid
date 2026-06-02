@@ -1,5 +1,15 @@
 use std::fs;
 
+fn create_dir_for_path(path_str: &str) -> std::io::Result<()> {
+    let path = std::path::Path::new(path_str);
+    let dir_to_create = if path.extension().is_some() || path.file_name().map_or(false, |n| n.to_string_lossy().starts_with('.')) {
+        path.parent().unwrap_or(path)
+    } else {
+        path
+    };
+    fs::create_dir_all(dir_to_create)
+}
+
 pub fn resolve_project_dir(path: &str) -> String {
     let (virtual_prefix, sub_dir) = if path.starts_with("/Codedroid_Projects") {
         (Some("/Codedroid_Projects"), "Codedroid_Projects")
@@ -29,9 +39,9 @@ pub fn resolve_project_dir(path: &str) -> String {
             let sdcard_path = format!("/sdcard/{}{}", android_folder, relative_path);
             let emulated_path = format!("/storage/emulated/0/{}{}", android_folder, relative_path);
 
-            if fs::create_dir_all(&sdcard_path).is_ok() {
+            if create_dir_for_path(&sdcard_path).is_ok() {
                 sdcard_path
-            } else if fs::create_dir_all(&emulated_path).is_ok() {
+            } else if create_dir_for_path(&emulated_path).is_ok() {
                 emulated_path
             } else {
                 // Try Termux storage shortcut ~/storage/shared
@@ -40,7 +50,7 @@ pub fn resolve_project_dir(path: &str) -> String {
                         "{}/storage/shared/{}{}",
                         home, android_folder, relative_path
                     );
-                    if fs::create_dir_all(&termux_shared).is_ok() {
+                    if create_dir_for_path(&termux_shared).is_ok() {
                         return termux_shared;
                     }
                 }
@@ -48,14 +58,14 @@ pub fn resolve_project_dir(path: &str) -> String {
                 // Fallback to cache directory if shared storage isn't setup/permitted yet
                 let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
                 let cache_path = format!("{}/{}{}", home, sub_dir, relative_path);
-                let _ = fs::create_dir_all(&cache_path);
+                let _ = create_dir_for_path(&cache_path);
                 cache_path
             }
         } else {
             // Default desktop path
             let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
             let local_path = format!("{}/{}{}", home, sub_dir, relative_path);
-            let _ = fs::create_dir_all(&local_path);
+            let _ = create_dir_for_path(&local_path);
             local_path
         }
     } else {

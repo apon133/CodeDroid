@@ -36,9 +36,22 @@ Available Tools:
 <read_file>relative/path/to/file</read_file>
 
 2. Propose Code Change (Diff) for an existing file:
+To make edits to existing files, you MUST propose changes by replacing specific blocks of code. Use one or more SEARCH/REPLACE blocks inside `<propose_diff>`. This is highly efficient and avoids outputting the entire file.
+Format:
 <propose_diff path="relative/path/to/file">
-proposed new contents of the entire file
+<<<<<<< SEARCH
+exact lines of original code to be replaced
+=======
+new lines of code replacing them
+>>>>>>> REPLACE
 </propose_diff>
+
+Guidelines for SEARCH/REPLACE blocks:
+- The SEARCH block must match the existing file contents EXACTLY, line-for-line, including all spaces, tabs, comments, and empty lines.
+- Keep the SEARCH block as short as possible to only target the lines you want to change, but include enough surrounding context lines (usually 1-3 lines before/after) to make it unique within the file.
+- If you need to make multiple edits in the same file, you can stack multiple SEARCH/REPLACE blocks inside a single `<propose_diff>` tag.
+- If you want to insert code without deleting anything, make the SEARCH block have the lines where you want to insert it, and include those same lines in the REPLACE block with the new code inserted between them.
+- To overwrite/write the entire file, you can output the entire file content without the SEARCH/REPLACE markers, but SEARCH/REPLACE is highly preferred for modifications of existing files.
 
 3. Write/Create a New File:
 <write_file path="relative/path/to/file">
@@ -49,7 +62,7 @@ file content here
 <scan_project />
 
 5. Run Terminal Command (in the project root):
-<run_command>cargo check</run_command>
+<run_command>appropriate build or test command for the project</run_command>
 
 6. Delete File:
 <delete_file>relative/path/to/file</delete_file>
@@ -59,7 +72,18 @@ Guidelines:
 - Ensure paths are relative to the project root.
 - Run one tool call per turn. Once you call a tool, stop and wait. The output of the tool will be provided to you as a System message.
 - Ensure your XML tags are correctly formed (e.g. `<read_file>path</read_file>`). Do not omit closing angle brackets or mix attribute styles.
-- VERIFICATION OF CHANGES: Whenever you modify or create files, or propose diffs, you MUST verify your changes by running the appropriate compile/checker command for the project (e.g., `cargo check` or `cargo test` for Rust, `dart analyze` for Dart/Flutter, `npm run build` or typescript checks for JavaScript/TypeScript, etc.) using the `<run_command>` tool. If any checker reports errors or warnings, edit the code to fix them, apply the fixes, and verify again until the codebase compiles and checks out cleanly.
+
+CRITICAL RULES FOR AUTONOMY:
+1. YOU ARE AN AUTONOMOUS AGENT, NOT A CONVERSATIONAL CHAT ASSISTANT.
+2. NEVER ASK THE USER FOR CODE, FILES, CONTEXT, OR ERROR MESSAGES. If the user tells you to "solve error", "solve all errors", or similar, do NOT reply asking the user to provide details. You must find the errors yourself.
+3. HOW TO FIND AND SOLVE ERRORS AUTONOMOUSLY:
+   - First, run `<scan_project />` to list all files in the project.
+   - Detect the project type (e.g., if you see `package.json` it is Svelte/Vite/Node, if `Cargo.toml` it is Rust, if `pubspec.yaml` it is Dart/Flutter, etc.).
+   - Run the appropriate build, compiler, type-check, or test command for the project using `<run_command>` (e.g., `npm run build` or `npx tsc` for Svelte/Vite/TS/JS, `cargo check` for Rust, `dart analyze` for Flutter).
+   - Read the output of the command to find exactly which file and line number have the error.
+   - Use `<read_file>` to view only the relevant lines around the error in that file (do not read the entire file if it is very large).
+   - Propose precise SEARCH/REPLACE blocks using `<propose_diff>` to fix the specific lines causing the error.
+   - Run the build/check command again to verify that the error has been successfully resolved. Repeat until the build compiles with zero errors.
 "#;
 
 pub fn generate_line_diff(original: &str, new_text: &str) -> String {
@@ -97,6 +121,120 @@ pub fn generate_line_diff(original: &str, new_text: &str) -> String {
     }
     diff_lines.reverse();
     diff_lines.join("\n")
+}
+
+pub fn apply_search_replace(original: &str, edit_block: &str) -> Result<String, String> {
+    let mut current_text = original.replace("\r\n", "\n");
+    let normalized_edit = edit_block.replace("\r\n", "\n");
+
+    let has_search_marker = normalized_edit.contains("<<<<<<< SEARCH") 
+        || normalized_edit.contains("<search>") 
+        || normalized_edit.contains("<SEARCH>");
+        
+    if !has_search_marker {
+        // Fallback: it's the entire new content
+        return Ok(edit_block.to_string());
+    }
+
+    let mut last_pos = 0;
+    
+    let find_first_of = |text: &str, patterns: &[&'static str], start: usize| -> Option<(usize, &'static str)> {
+        let mut min_pos = None;
+        let mut chosen_pattern = "";
+        for &pattern in patterns {
+            if let Some(pos) = text[start..].find(pattern) {
+                let abs_pos = start + pos;
+                if min_pos.is_none() || abs_pos < min_pos.unwrap() {
+                    min_pos = Some(abs_pos);
+                    chosen_pattern = pattern;
+                }
+            }
+        }
+        min_pos.map(move |pos| (pos, chosen_pattern))
+    };
+
+    let start_markers = &["<<<<<<< SEARCH", "<search>", "<SEARCH>"];
+    let boundary_markers = &["=======", "<<<<<<< REPLACE", "<replace>", "<REPLACE>", "</search>", "</SEARCH>"];
+    let end_markers = &[">>>>>>> REPLACE", "</replace>", "</REPLACE>"];
+
+    while let Some((start_idx, start_marker)) = find_first_of(&normalized_edit, start_markers, last_pos) {
+        let search_start_content = start_idx + start_marker.len();
+        
+        let Some((boundary_idx, boundary_marker)) = find_first_of(&normalized_edit, boundary_markers, search_start_content) else {
+            return Err("Malformed edit block: could not find boundary (like ======= or <replace>) after search block start.".to_string());
+        };
+        
+        let mut replace_start_content = boundary_idx + boundary_marker.len();
+        
+        // Skip optional intermediate markers
+        let mut temp_pos = replace_start_content;
+        while temp_pos < normalized_edit.len() {
+            let next_char = normalized_edit[temp_pos..].chars().next().unwrap_or(' ');
+            if next_char.is_whitespace() {
+                temp_pos += next_char.len_utf8();
+            } else if normalized_edit[temp_pos..].starts_with("<replace>") {
+                temp_pos += "<replace>".len();
+                replace_start_content = temp_pos;
+            } else if normalized_edit[temp_pos..].starts_with("<REPLACE>") {
+                temp_pos += "<REPLACE>".len();
+                replace_start_content = temp_pos;
+            } else if normalized_edit[temp_pos..].starts_with("<<<<<<< REPLACE") {
+                temp_pos += "<<<<<<< REPLACE".len();
+                replace_start_content = temp_pos;
+            } else {
+                break;
+            }
+        }
+
+        let end_idx = match find_first_of(&normalized_edit, end_markers, replace_start_content) {
+            Some((pos, _)) => pos,
+            None => {
+                match find_first_of(&normalized_edit, start_markers, replace_start_content) {
+                    Some((pos, _)) => pos,
+                    None => normalized_edit.len()
+                }
+            }
+        };
+
+        let mut search_content = &normalized_edit[search_start_content..boundary_idx];
+        let mut replace_content = &normalized_edit[replace_start_content..end_idx];
+
+        if search_content.starts_with('\n') {
+            search_content = &search_content[1..];
+        }
+        if search_content.ends_with('\n') {
+            search_content = &search_content[..search_content.len() - 1];
+        }
+        
+        if replace_content.starts_with('\n') {
+            replace_content = &replace_content[1..];
+        }
+        if replace_content.ends_with('\n') {
+            replace_content = &replace_content[..replace_content.len() - 1];
+        }
+
+        if let Some(pos) = current_text.find(search_content) {
+            current_text.replace_range(pos..pos + search_content.len(), replace_content);
+        } else {
+            let trimmed_search = search_content.trim();
+            if !trimmed_search.is_empty() {
+                if let Some(pos) = current_text.find(trimmed_search) {
+                    current_text.replace_range(pos..pos + trimmed_search.len(), replace_content.trim());
+                    last_pos = end_idx + 1;
+                    continue;
+                }
+            }
+
+            return Err(format!(
+                "Could not find the SEARCH block in the file. Make sure the SEARCH block matches the file content EXACTLY (including whitespace and comments).\n\nSEARCH block:\n```\n{}\n```",
+                search_content
+            ));
+        }
+
+        last_pos = end_idx + 1;
+    }
+
+    Ok(current_text)
 }
 
 fn sanitize_path(path: &str) -> String {
@@ -183,6 +321,43 @@ fn extract_tag_value(content: &str, tag_name: &str) -> Option<String> {
     None
 }
 
+fn strip_markdown_code_block(content: &str) -> String {
+    let mut content = content.trim().to_string();
+
+    // Strip leaked closing think tags at the end
+    if content.ends_with("</think>") {
+        content = content[..content.len() - "</think>".len()].trim().to_string();
+    }
+
+    // Strip leaked opening and closing think tags at the start/middle
+    if content.starts_with("<think>") {
+        if let Some(think_end) = content.find("</think>") {
+            content = content[think_end + "</think>".len()..].trim().to_string();
+        }
+    }
+
+    // Strip markdown code block wrappers
+    if content.starts_with("```") {
+        if let Some(first_newline) = content.find('\n') {
+            let after_first_line = &content[first_newline + 1..];
+            if after_first_line.ends_with("```") {
+                content = after_first_line[..after_first_line.len() - 3].trim().to_string();
+            } else {
+                content = after_first_line.trim().to_string();
+            }
+        }
+    } else if content.ends_with("```") {
+        content = content[..content.len() - 3].trim().to_string();
+    }
+
+    // Check again just in case thinking tag was inside the markdown block
+    if content.ends_with("</think>") {
+        content = content[..content.len() - "</think>".len()].trim().to_string();
+    }
+
+    content
+}
+
 fn parse_tool_call(content: &str) -> Option<ToolCall> {
     // 1. Propose Diff (highest priority as it contains multiline file contents)
     if let Some(start_idx) = content.find("<propose_diff") {
@@ -228,7 +403,7 @@ fn parse_tool_call(content: &str) -> Option<ToolCall> {
                         end_idx = end_idx.min(idx);
                     }
                 }
-                let new_content = body[..end_idx].to_string();
+                let new_content = strip_markdown_code_block(&body[..end_idx]);
                 return Some(ToolCall::ProposeDiff { path, new_content });
             }
         }
@@ -278,7 +453,7 @@ fn parse_tool_call(content: &str) -> Option<ToolCall> {
                         end_idx = end_idx.min(idx);
                     }
                 }
-                let content = body[..end_idx].to_string();
+                let content = strip_markdown_code_block(&body[..end_idx]);
                 return Some(ToolCall::WriteFile { path, content });
             }
         }
@@ -308,46 +483,185 @@ fn parse_tool_call(content: &str) -> Option<ToolCall> {
 }
 
 async fn call_llm(
+    project_path: &str,
     settings: &Settings,
     messages: Vec<ChatMessage>
 ) -> Result<String, String> {
-    let url = if settings.ai_endpoint.ends_with("/chat/completions") {
+    let url = if settings.ai_endpoint.contains("/api/v1/chat") {
+        settings.ai_endpoint.clone()
+    } else if settings.ai_endpoint.ends_with("/chat/completions") {
         settings.ai_endpoint.clone()
     } else {
         format!("{}/chat/completions", settings.ai_endpoint.trim_end_matches('/'))
     };
 
-    let mut request = gloo_net::http::Request::post(&url)
-        .header("Content-Type", "application/json");
+    let is_native_lm = url.contains("/api/v1/chat");
+    let body = if is_native_lm {
+        let system_prompt = messages.iter().find(|m| m.role == "system").map(|m| m.content.clone()).unwrap_or_default();
+        
+        let mut conversation_text = String::new();
+        let mut first_system = true;
+        for msg in &messages {
+            if msg.role == "system" {
+                if first_system {
+                    first_system = false;
+                    continue;
+                }
+                conversation_text.push_str(&format!("System (Tool Output):\n{}\n\n", msg.content));
+            } else {
+                let role_name = match msg.role.as_str() {
+                    "user" => "User",
+                    "assistant" => "Assistant",
+                    _ => "User",
+                };
+                conversation_text.push_str(&format!("{}:\n{}\n\n", role_name, msg.content));
+            }
+        }
 
-    if !settings.ai_api_key.is_empty() {
-        request = request.header("Authorization", &format!("Bearer {}", settings.ai_api_key));
+        let input = if conversation_text.is_empty() {
+            messages.last().map(|m| m.content.clone()).unwrap_or_default()
+        } else {
+            conversation_text
+        };
+
+        serde_json::json!({
+            "model": settings.ai_model,
+            "system_prompt": system_prompt,
+            "input": input
+        })
+    } else {
+        serde_json::json!({
+            "model": settings.ai_model,
+            "messages": messages,
+            "temperature": 0.2
+        })
+    };
+
+    let json_str = serde_json::to_string(&body).map_err(|e| format!("Failed to serialize request body: {}", e))?;
+    
+    let temp_filename = ".codedroid_temp_llm.json";
+    let temp_out_filename = ".codedroid_temp_llm_out.json";
+    let temp_status_filename = ".codedroid_temp_llm_status.txt";
+    let temp_err_filename = ".codedroid_temp_llm_err.txt";
+
+    let auth_header = if !settings.ai_api_key.is_empty() {
+        format!("-H \"Authorization: Bearer {}\" ", settings.ai_api_key)
+    } else {
+        "".to_string()
+    };
+
+    // Use heredoc to write the JSON content directly inside the shell,
+    // avoiding the backend sync_file API which has directory creation quirks.
+    let combined_cmd = format!(
+        "cat << 'EOF' > {}\n{}\nEOF\ncurl -s -X POST {} -H \"Content-Type: application/json\" -d @{} \"{}\" > {} 2> {} && echo done > {}",
+        temp_filename,
+        json_str,
+        auth_header,
+        temp_filename,
+        url,
+        temp_out_filename,
+        temp_err_filename,
+        temp_status_filename
+    );
+
+    // Spawn the shell command
+    let cmd_res = api::run_command_api(project_path, &combined_cmd).await;
+
+    let spawn_success = match &cmd_res {
+        Ok(resp) => resp.success,
+        Err(_) => false,
+    };
+
+    let mut response_content = None;
+    let mut poll_error = None;
+
+    if spawn_success {
+        let mut attempts = 0;
+        let max_attempts = 100; // 100 * 500ms = 50 seconds max wait
+        let mut completed = false;
+
+        let check_cmd = format!("cat {} 2>/dev/null || type {} 2>nul", temp_status_filename, temp_status_filename);
+
+        while attempts < max_attempts {
+            gloo_timers::future::TimeoutFuture::new(500).await;
+            attempts += 1;
+
+            if let Ok(resp) = api::run_command_api(project_path, &check_cmd).await {
+                if resp.success && resp.output.trim() == "done" {
+                    completed = true;
+                    break;
+                }
+            }
+        }
+
+        if completed {
+            let read_out_cmd = format!("cat {} 2>/dev/null || type {} 2>nul", temp_out_filename, temp_out_filename);
+            match api::run_command_api(project_path, &read_out_cmd).await {
+                Ok(resp) => {
+                    if resp.success {
+                        response_content = Some(resp.output);
+                    } else {
+                        poll_error = Some(format!("Failed to read LLM response: {}", resp.error));
+                    }
+                }
+                Err(e) => {
+                    poll_error = Some(format!("Failed to read LLM response: {}", e));
+                }
+            }
+        } else {
+            let read_err_cmd = format!("cat {} 2>/dev/null || type {} 2>nul", temp_err_filename, temp_err_filename);
+            let mut err_msg = "LLM request timed out after 50 seconds.".to_string();
+            if let Ok(resp) = api::run_command_api(project_path, &read_err_cmd).await {
+                if resp.success && !resp.output.trim().is_empty() {
+                    err_msg = format!("LLM request failed: {}", resp.output.trim());
+                }
+            }
+            poll_error = Some(err_msg);
+        }
+    } else {
+        poll_error = Some(match cmd_res {
+            Ok(resp) => format!("Failed to spawn curl: {}. Stderr: {}", resp.output, resp.error),
+            Err(e) => format!("Failed to spawn curl: {}", e),
+        });
     }
 
-    let body = serde_json::json!({
-        "model": settings.ai_model,
-        "messages": messages,
-        "temperature": 0.2
-    });
+    // Clean up temporary files using shell commands
+    let cleanup_cmd = format!(
+        "rm -f {} {} {} {} 2>/dev/null || del /f /q {} {} {} {} 2>nul",
+        temp_filename, temp_out_filename, temp_err_filename, temp_status_filename,
+        temp_filename, temp_out_filename, temp_err_filename, temp_status_filename
+    );
+    let _ = api::run_command_api(project_path, &cleanup_cmd).await;
 
-    let resp = request.json(&body)
-        .map_err(|e| e.to_string())?
-        .send()
-        .await
-        .map_err(|e| format!("LLM request failed: {}", e))?;
-
-    if !resp.ok() {
-        let text = resp.text().await.unwrap_or_default();
-        return Err(format!("LLM API returned error ({}): {}", resp.status(), text));
+    if let Some(err) = poll_error {
+        return Err(err);
     }
 
-    let json_val: serde_json::Value = resp.json()
-        .await
-        .map_err(|e| format!("Failed to parse response: {}", e))?;
+    let stdout_text = response_content.unwrap_or_default();
+    let stdout_text = stdout_text.trim();
+    if stdout_text.is_empty() {
+        return Err("Local LLM server returned empty response".to_string());
+    }
 
-    let content = json_val["choices"][0]["message"]["content"]
-        .as_str()
-        .ok_or_else(|| "No message content found".to_string())?;
+    let json_val: serde_json::Value = serde_json::from_str(stdout_text)
+        .map_err(|e| format!("Failed to parse JSON response: {}. Raw response: {}", e, stdout_text))?;
+
+    if let Some(err_val) = json_val.get("error") {
+        let err_msg = err_val.get("message")
+            .and_then(|m| m.as_str())
+            .unwrap_or_else(|| err_val.as_str().unwrap_or("Unknown error"));
+        return Err(format!("LLM API returned error: {}", err_msg));
+    }
+
+    let content = if is_native_lm {
+        json_val["output"][0]["content"]
+            .as_str()
+            .ok_or_else(|| format!("No output content found in native response: {}", json_val))?
+    } else {
+        json_val["choices"][0]["message"]["content"]
+            .as_str()
+            .ok_or_else(|| format!("No message content found in OpenAI response: {}", json_val))?
+    };
 
     Ok(content.to_string())
 }
@@ -366,6 +680,18 @@ pub fn AgentPanel(
     let agent_status = RwSignal::new(String::new());
     let proposed_changes = RwSignal::new(Vec::<(String, String)>::new());
     let abort_requested = RwSignal::new(false);
+
+    let resolved_path = RwSignal::new(project_path.clone());
+    spawn_local({
+        let project_path = project_path.clone();
+        async move {
+            if let Ok(resp) = api::run_command_api(&project_path, "pwd 2>/dev/null || cd").await {
+                if resp.success {
+                    resolved_path.set(resp.output.trim().to_string());
+                }
+            }
+        }
+    });
 
     // Load initial proposed changes from storage index if any
     Effect::new({
@@ -389,13 +715,13 @@ pub fn AgentPanel(
     });
 
     let accept_change = {
-        let project_path = project_path.clone();
+        let resolved_path = resolved_path.clone();
         let project_id = project_id.clone();
         let open_file = open_file.clone();
         let show_snack = show_snack.clone();
         let refresh_files = refresh_files.clone();
         move |path: String, content: String| {
-            let full_path = format!("{}/{}", project_path, path);
+            let full_path = format!("{}/{}", resolved_path.get_untracked(), path);
             let path_clone = path.clone();
             let content_clone = content.clone();
             let open_file = open_file.clone();
@@ -455,7 +781,7 @@ pub fn AgentPanel(
     // Inline action handlers are used below to avoid FnOnce constraint issues
 
     let run_agent_loop = {
-        let project_path = project_path.clone();
+        let resolved_path = resolved_path.clone();
         let project_id = project_id.clone();
         let open_file = open_file.clone();
         let show_snack = show_snack.clone();
@@ -469,7 +795,7 @@ pub fn AgentPanel(
                 return;
             }
 
-            let project_path = project_path.clone();
+            let resolved_path = resolved_path.clone();
             let project_id = project_id.clone();
             let open_file = open_file.clone();
             let show_snack = show_snack.clone();
@@ -479,6 +805,7 @@ pub fn AgentPanel(
                 abort_requested.set(false);
                 agent_status.set("Thinking...".to_string());
                 
+                let resolved_path_str = resolved_path.get_untracked();
                 let mut loop_count = 0;
                 const MAX_LOOPS: usize = 10;
 
@@ -494,16 +821,21 @@ pub fn AgentPanel(
                         break;
                     }
                     
-                    // Build the API message stack
+                    // Build the API message stack with workspace context
+                    let mut system_prompt = SYSTEM_PROMPT.to_string();
+                    system_prompt.push_str("\n\n=== WORKSPACE CONTEXT ===");
+                    system_prompt.push_str(&format!("\nProject Root: {}", resolved_path_str));
+                    system_prompt.push_str("\n=========================");
+
                     let mut api_messages = vec![
                         ChatMessage {
                             role: "system".to_string(),
-                            content: SYSTEM_PROMPT.to_string(),
+                            content: system_prompt,
                         }
                     ];
                     api_messages.extend(history.clone());
 
-                    let llm_res = call_llm(&settings, api_messages).await;
+                    let llm_res = call_llm(&resolved_path_str, &settings, api_messages).await;
                     if abort_requested.get() {
                         history.push(ChatMessage {
                             role: "system".to_string(),
@@ -527,7 +859,7 @@ pub fn AgentPanel(
                                 match tool {
                                     ToolCall::ReadFile { path } => {
                                         agent_status.set(format!("Reading file: {}...", path));
-                                        let full_path = format!("{}/{}", project_path, path);
+                                        let full_path = format!("{}/{}", resolved_path_str, path);
                                         let result_msg = match api::read_file_api(&full_path).await {
                                             Ok(resp) => {
                                                 if resp.error.is_empty() {
@@ -544,9 +876,9 @@ pub fn AgentPanel(
                                         });
                                         chat_history.set(history.clone());
                                     }
-                                    ToolCall::ProposeDiff { path, new_content } => {
+                                    ToolCall::ProposeDiff { path, new_content: edit_block } => {
                                         agent_status.set(format!("Proposing diff: {}...", path));
-                                        let full_path = format!("{}/{}", project_path, path);
+                                        let full_path = format!("{}/{}", resolved_path_str, path);
                                         
                                         // Read existing content to build line diff
                                         let current_content = match api::read_file_api(&full_path).await {
@@ -554,33 +886,44 @@ pub fn AgentPanel(
                                             _ => String::new(),
                                         };
 
-                                        let diff = generate_line_diff(&current_content, &new_content);
-                                        
-                                        // Store diff in LocalStorage
-                                        let diff_key = format!("agent-diff:{}:{}", project_id, path);
-                                        let _ = gloo_storage::LocalStorage::set(&diff_key, &diff);
+                                        match apply_search_replace(&current_content, &edit_block) {
+                                            Ok(new_content) => {
+                                                let diff = generate_line_diff(&current_content, &new_content);
+                                                
+                                                // Store diff in LocalStorage
+                                                let diff_key = format!("agent-diff:{}:{}", project_id, path);
+                                                let _ = gloo_storage::LocalStorage::set(&diff_key, &diff);
 
-                                        // Update proposed changes list
-                                        proposed_changes.update(|list| {
-                                            list.retain(|(p, _)| p != &path);
-                                            list.push((path.clone(), new_content.clone()));
-                                        });
+                                                // Update proposed changes list
+                                                proposed_changes.update(|list| {
+                                                    list.retain(|(p, _)| p != &path);
+                                                    list.push((path.clone(), new_content.clone()));
+                                                });
 
-                                        show_snack.run(format!("Diff proposed for {}!", path));
-                                        
-                                        // Open virtual diff view
-                                        open_file.run(format!("agent-diff://{}", path));
+                                                show_snack.run(format!("Diff proposed for {}!", path));
+                                                
+                                                // Open virtual diff view
+                                                open_file.run(format!("agent-diff://{}", path));
 
-                                        history.push(ChatMessage {
-                                            role: "system".to_string(),
-                                            content: format!("Successfully proposed diff for {}. Waiting for user's approval (Accept/Reject).", path),
-                                        });
-                                        chat_history.set(history.clone());
-                                        break; // Pause loop to wait for user accept/reject
+                                                history.push(ChatMessage {
+                                                    role: "system".to_string(),
+                                                    content: format!("Successfully proposed diff for {}. Waiting for user's approval (Accept/Reject).", path),
+                                                });
+                                                chat_history.set(history.clone());
+                                                break; // Pause loop to wait for user accept/reject
+                                            }
+                                            Err(err_msg) => {
+                                                history.push(ChatMessage {
+                                                    role: "system".to_string(),
+                                                    content: format!("Error applying search/replace block: {}", err_msg),
+                                                });
+                                                chat_history.set(history.clone());
+                                            }
+                                        }
                                     }
                                     ToolCall::WriteFile { path, content } => {
                                         agent_status.set(format!("Writing file: {}...", path));
-                                        let full_path = format!("{}/{}", project_path, path);
+                                        let full_path = format!("{}/{}", resolved_path_str, path);
                                         let path_clone = path.clone();
                                         let content_clone = content.clone();
                                         let result_msg = match api::save_file_api(&full_path, &content_clone).await {
@@ -610,7 +953,7 @@ pub fn AgentPanel(
                                     }
                                     ToolCall::ScanProject => {
                                         agent_status.set("Scanning directory...".to_string());
-                                        let scan_res = api::scan_project_api(&project_path).await;
+                                        let scan_res = api::scan_project_api(&resolved_path_str).await;
                                         if abort_requested.get() {
                                             history.push(ChatMessage {
                                                 role: "system".to_string(),
@@ -635,7 +978,7 @@ pub fn AgentPanel(
                                     }
                                     ToolCall::RunCommand { command } => {
                                         agent_status.set(format!("Running command: {}...", command));
-                                        let cmd_res = api::run_command_api(&project_path, &command).await;
+                                        let cmd_res = api::run_command_api(&resolved_path_str, &command).await;
                                         if abort_requested.get() {
                                             history.push(ChatMessage {
                                                 role: "system".to_string(),
@@ -658,7 +1001,7 @@ pub fn AgentPanel(
                                     }
                                     ToolCall::DeleteFile { path } => {
                                         agent_status.set(format!("Deleting file: {}...", path));
-                                        let full_path = format!("{}/{}", project_path, path);
+                                        let full_path = format!("{}/{}", resolved_path_str, path);
                                         let path_clone = path.clone();
                                         let result_msg = match api::delete_file_api(&full_path, false).await {
                                             Ok(_) => {

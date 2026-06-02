@@ -233,6 +233,49 @@ pub fn SettingsPage() -> impl IntoView {
                                 save();
                             }
                         />
+                        {move || (settings.get().ai_provider == "lm-studio" && 
+                                  (settings.get().ai_endpoint.contains("localhost") || settings.get().ai_endpoint.contains("127.0.0.1")))
+                            .then(|| {
+                                let api_url = settings.get().api_url;
+                                let mut ip_suggestion = "http://<YOUR_PC_IP>:1234/v1".to_string();
+                                if !api_url.is_empty() {
+                                    if let Some(host) = api_url.strip_prefix("http://") {
+                                        let clean_host = if let Some(slash_idx) = host.find('/') {
+                                            &host[..slash_idx]
+                                        } else {
+                                            host
+                                        };
+                                        if let Some(colon_idx) = clean_host.find(':') {
+                                            let ip = &clean_host[..colon_idx];
+                                            if ip != "localhost" && ip != "127.0.0.1" {
+                                                ip_suggestion = format!("http://{}:1234/v1", ip);
+                                            }
+                                        } else if !clean_host.is_empty() && clean_host != "localhost" && clean_host != "127.0.0.1" {
+                                            ip_suggestion = format!("http://{}:1234/v1", clean_host);
+                                        }
+                                    }
+                                }
+                                
+                                view! {
+                                    <div style="margin-top:4px; padding:10px 12px; background:rgba(234,179,8,0.1); border:1px solid rgba(234,179,8,0.25); border-radius:6px; font-size:12px; color:#facc15; display:flex; flex-direction:column; gap:6px; line-height:1.4; width:100%">
+                                        <div style="display:flex; align-items:center; gap:6px; font-weight:600">
+                                            <span>"📱 Mobile Phone Access Tip"</span>
+                                        </div>
+                                        <div>
+                                            "If you are accessing CodeDroid from your mobile phone, "
+                                            <strong style="color:#fff">"localhost"</strong>
+                                            " refers to the phone itself. Change the endpoint above to: "
+                                        </div>
+                                        <div>
+                                            <code style="background:rgba(0,0,0,0.2); padding:2px 6px; border-radius:4px; font-family:monospace; color:#fff; word-break:break-all">{ip_suggestion}</code>
+                                        </div>
+                                        <div style="font-size:11px; opacity:0.8">
+                                            "Make sure your PC and mobile phone are on the same Wi-Fi network, and that LM Studio's Network Connection is enabled (binding to 0.0.0.0)."
+                                        </div>
+                                    </div>
+                                }
+                            })
+                        }
                     </div>
                 </div>
 

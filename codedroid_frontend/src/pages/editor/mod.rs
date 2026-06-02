@@ -13,6 +13,7 @@ pub mod search_bar;
 pub mod suggestions;
 pub mod utils;
 pub mod git_panel;
+pub mod agent_panel;
 
 use crate::api;
 use crate::components::icon::LucideIcon;
@@ -20,6 +21,7 @@ use crate::components::snackbar::Snackbar;
 use crate::models::{lang_icon, Project, Settings};
 use crate::store;
 use git_panel::GitPanel;
+use agent_panel::AgentPanel;
 use code_area::EditorCodeArea;
 use components::*;
 use operations::*;
@@ -427,6 +429,8 @@ pub fn EditorPage() -> impl IntoView {
     );
 
     let ppath = project.path.clone();
+    let sidebar_ppath = ppath.clone();
+    let sidebar_pid = pid.clone();
     let save_current = make_save_current(
         pid.clone(),
         ppath.clone(),
@@ -521,12 +525,15 @@ pub fn EditorPage() -> impl IntoView {
         RwSignal::new(store::load_sidebar_open(&project.id));
     let sidebar_mode: RwSignal<usize> =
         RwSignal::new(store::load_sidebar_mode(&project.id)); // 0=files, 1=search, 2=git
+    let chat_open: RwSignal<bool> =
+        RwSignal::new(store::load_chat_open(&project.id));
 
     Effect::new({
         let project_id = project.id.clone();
         move || {
             store::save_sidebar_open(&project_id, sidebar_open.get());
             store::save_sidebar_mode(&project_id, sidebar_mode.get());
+            store::save_chat_open(&project_id, chat_open.get());
         }
     });
 
@@ -732,6 +739,18 @@ pub fn EditorPage() -> impl IntoView {
                         <LucideIcon name="columns" size="14" />
                     </button>
                     
+                    <button class=move || {
+                        let active = chat_open.get();
+                        if active { "btn-titlebar-action active" } else { "btn-titlebar-action" }
+                    }
+                        title="AI Assistant (Antigravity)"
+                        on:click=move |_| {
+                            chat_open.update(|v| *v = !*v);
+                        }>
+                        <LucideIcon name="sparkles" size="14" />
+                        <span class="btn-text">"Antigravity"</span>
+                    </button>
+                    
                     {move || if is_running.get() || current_pid.get().is_some() {
                         view! {
                             <button class="btn-titlebar-action btn-stop" title="Stop Project" on:click=move |_| stop_code.run(())>
@@ -874,16 +893,16 @@ pub fn EditorPage() -> impl IntoView {
                                 sidebar_open=sidebar_open.into()
                                 toggle_sidebar=Callback::new(move |_: ()| sidebar_open.set(false))
                                 _sidebar_mode=sidebar_mode
-                                project_path=ppath.clone()
-                                project_id=pid.clone()
+                                project_path=sidebar_ppath.clone()
+                                project_id=sidebar_pid.clone()
                                 terminal_trigger=terminal_trigger
                                 git_status=git_status.into()
                             />
                         }.into_any(),
                         1 => view! {
                             <ProjectSearchReplacePanel
-                                project_id=pid.clone()
-                                project_path=ppath.clone()
+                                project_id=sidebar_pid.clone()
+                                project_path=sidebar_ppath.clone()
                                 file_tree=file_tree_data.into()
                                 file_tree_data=file_tree_data
                                 active_tab=active_tab
@@ -900,7 +919,7 @@ pub fn EditorPage() -> impl IntoView {
                             />
                         }.into_any(),
                         2 => {
-                            let ppath = ppath.clone();
+                            let ppath = sidebar_ppath.clone();
                             let open_file = open_file.clone();
                             let show_snack = show_snack.clone();
                             let close_sidebar = Callback::new(move |_: ()| sidebar_open.set(false));
@@ -916,6 +935,7 @@ pub fn EditorPage() -> impl IntoView {
                                 />
                             }.into_any()
                         }
+                        3 => view! {}.into_any(),
                         _ => view! {}.into_any()
                     }
                 }}
@@ -1061,6 +1081,40 @@ pub fn EditorPage() -> impl IntoView {
                     />
 
                 </div>
+
+                {move || {
+                    if chat_open.get() {
+                        let ppath = ppath.clone();
+                        let pid_clone = pid.clone();
+                        let open_file = open_file.clone();
+                        let show_snack = show_snack.clone();
+                        let close_sidebar = Callback::new(move |_: ()| chat_open.set(false));
+                        let file_tree_data_clone = file_tree_data.clone();
+                        
+                        let ppath_for_refresh = ppath.clone();
+                        let refresh_files = Callback::new(move |_: ()| {
+                            let pid_c = pid_clone.clone();
+                            let ppath_c = ppath_for_refresh.clone();
+                            let file_tree_c = file_tree_data_clone.clone();
+                            spawn_local(async move {
+                                crate::pages::editor::operations::sync_from_disk_async(&pid_c, &ppath_c, file_tree_c).await;
+                            });
+                        });
+
+                        view! {
+                            <AgentPanel
+                                project_path=ppath
+                                project_id=pid.clone()
+                                open_file=open_file
+                                show_snack=show_snack
+                                close_sidebar=close_sidebar
+                                refresh_files=refresh_files
+                            />
+                        }.into_any()
+                    } else {
+                        view! {}.into_any()
+                    }
+                }}
 
                 <PreviewPanel
                     preview_url=preview_url.into()

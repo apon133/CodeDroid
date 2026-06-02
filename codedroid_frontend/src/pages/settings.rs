@@ -145,6 +145,98 @@ pub fn SettingsPage() -> impl IntoView {
                 </div>
 
                 <div class="settings-section">
+                    <div class="settings-section-title">"🤖 AI Assistant Settings"</div>
+
+                    <div class="setting-row">
+                        <div>
+                            <div class="setting-label">"Provider"</div>
+                            <div class="setting-desc">"Select OpenRouter or local LM Studio"</div>
+                        </div>
+                        <select class="input"
+                            prop:value=move || settings.get().ai_provider.clone()
+                            on:change=move |e: Event| {
+                                let val = event_target_value(&e);
+                                settings.update(|s| {
+                                    s.ai_provider = val.clone();
+                                    if val == "openrouter" {
+                                        s.ai_endpoint = "https://openrouter.ai/api/v1".to_string();
+                                        s.ai_model = "meta-llama/llama-3-8b-instruct:free".to_string();
+                                    } else if val == "lm-studio" {
+                                        s.ai_endpoint = "http://localhost:1234/v1".to_string();
+                                        s.ai_model = "meta-llama-3-8b-instruct".to_string();
+                                    }
+                                });
+                                save();
+                            }
+                        >
+                            <option value="openrouter">"OpenRouter"</option>
+                            <option value="lm-studio">"LM Studio (Local)"</option>
+                        </select>
+                    </div>
+
+                    {move || (settings.get().ai_provider == "openrouter").then(|| view! {
+                        <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:10px">
+                            <div style="width: 100%">
+                                <div class="setting-label">"API Key"</div>
+                                <div class="setting-desc">"Enter your OpenRouter API key"</div>
+                            </div>
+                            <input
+                                type="password"
+                                class="input"
+                                style="width:100%;font-size:13px"
+                                placeholder="sk-or-v1-..."
+                                prop:value=move || settings.get().ai_api_key.clone()
+                                on:input=move |e: Event| {
+                                    settings.update(|s| s.ai_api_key = event_target_value(&e));
+                                    save();
+                                }
+                            />
+                        </div>
+                    })}
+
+                    <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:10px">
+                        <div style="width: 100%">
+                            <div class="setting-label">"Model Name"</div>
+                            <div class="setting-desc">"The name of the LLM model to run"</div>
+                        </div>
+                        <input
+                            type="text"
+                            class="input"
+                            style="width:100%;font-size:13px"
+                            placeholder=move || {
+                                if settings.get().ai_provider == "openrouter" {
+                                    "meta-llama/llama-3-8b-instruct:free"
+                                } else {
+                                    "meta-llama-3-8b-instruct"
+                                }
+                            }
+                            prop:value=move || settings.get().ai_model.clone()
+                            on:input=move |e: Event| {
+                                settings.update(|s| s.ai_model = event_target_value(&e));
+                                save();
+                            }
+                        />
+                    </div>
+
+                    <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:10px">
+                        <div style="width: 100%">
+                            <div class="setting-label">"Endpoint / Base URL"</div>
+                            <div class="setting-desc">"API Endpoint URL for LLM requests"</div>
+                        </div>
+                        <input
+                            type="url"
+                            class="input"
+                            style="width:100%;font-size:13px"
+                            prop:value=move || settings.get().ai_endpoint.clone()
+                            on:input=move |e: Event| {
+                                settings.update(|s| s.ai_endpoint = event_target_value(&e));
+                                save();
+                            }
+                        />
+                    </div>
+                </div>
+
+                <div class="settings-section">
                     <div class="settings-section-title">"🌐 Backend Server"</div>
 
                     <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:10px">

@@ -113,6 +113,14 @@ pub fn save_sidebar_mode(project_id: &str, mode: usize) {
     let _ = LocalStorage::set(&format!("codedroid_sidebar_mode_{}", project_id), &mode);
 }
 
+pub fn load_chat_open(project_id: &str) -> bool {
+    LocalStorage::get(&format!("codedroid_chat_open_{}", project_id)).unwrap_or(false)
+}
+
+pub fn save_chat_open(project_id: &str, open: bool) {
+    let _ = LocalStorage::set(&format!("codedroid_chat_open_{}", project_id), &open);
+}
+
 // ── Terminal Command History ──────────────────────────────────────────────
 pub fn load_terminal_history(project_id: &str) -> Vec<String> {
     LocalStorage::get(&format!("codedroid_term_history_{}", project_id)).unwrap_or_default()

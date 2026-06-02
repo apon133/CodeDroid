@@ -15,6 +15,23 @@ pub fn make_open_file(
     trigger_diagnostics: Callback<String>,
 ) -> Callback<String> {
     Callback::new(move |name: String| {
+        if name.starts_with("agent-diff://") {
+            open_tabs.update(|t| {
+                if !t.contains(&name) {
+                    t.push(name.clone());
+                }
+            });
+            active_tab.set(Some(name.clone()));
+            dirty.set(false);
+
+            let file_path = name.strip_prefix("agent-diff://").unwrap_or(&name).to_string();
+            let key = format!("agent-diff:{}:{}", pid, file_path);
+            let diff_content = gloo_storage::LocalStorage::get::<String>(&key)
+                .unwrap_or_else(|_| "No changes proposed for this file.".to_string());
+            code.set(diff_content);
+            return;
+        }
+
         if name.starts_with("git-diff://") {
             open_tabs.update(|t| {
                 if !t.contains(&name) {

@@ -466,6 +466,36 @@ pub async fn hover_api(
 }
 
 #[derive(serde::Serialize)]
+pub struct CommandRequest {
+    pub command: String,
+    pub project_path: String,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct CommandResponse {
+    pub output: String,
+    pub error: String,
+    pub success: bool,
+    pub pid: Option<u32>,
+}
+
+pub async fn run_command_api(project_path: &str, command: &str) -> Result<CommandResponse, String> {
+    let body = CommandRequest {
+        project_path: project_path.to_string(),
+        command: command.to_string(),
+    };
+    Request::post(&format!("{}/run_command", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<CommandResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[derive(serde::Serialize)]
 pub struct ScanProjectRequest {
     pub project_path: String,
 }

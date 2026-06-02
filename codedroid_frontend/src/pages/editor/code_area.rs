@@ -80,7 +80,7 @@ pub fn EditorCodeArea(
             {move || {
                 let s = settings.get();
                 let content = code.get();
-                let is_diff_view = active_tab.get().map(|t| t.starts_with("git-diff://")).unwrap_or(false);
+                let is_diff_view = active_tab.get().map(|t| t.starts_with("git-diff://") || t.starts_with("agent-diff://")).unwrap_or(false);
                 let ext = active_tab.get().map(|n| file_extension(&n).to_string()).unwrap_or_default();
                 let highlighted_lines = if is_diff_view {
                     content.split('\n').map(|l| {
@@ -558,7 +558,7 @@ pub fn EditorCodeArea(
                             node_ref=textarea_ref
                             class="code-layer code-editor"
                             spellcheck="false"
-                            prop:readonly=move || active_tab.get().map(|t| t.starts_with("git-diff://")).unwrap_or(false)
+                            prop:readonly=move || active_tab.get().map(|t| t.starts_with("git-diff://") || t.starts_with("agent-diff://")).unwrap_or(false)
                             prop:value=move || code.get()
                             on:mousemove={
                                 let on_mousemove = on_mousemove.clone();

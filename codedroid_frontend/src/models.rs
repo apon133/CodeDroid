@@ -29,6 +29,27 @@ pub struct Settings {
     pub auto_save: bool,
     pub tab_size: usize,
     pub api_url: String,
+    #[serde(default = "default_ai_provider")]
+    pub ai_provider: String,
+    #[serde(default = "default_ai_key")]
+    pub ai_api_key: String,
+    #[serde(default = "default_ai_model")]
+    pub ai_model: String,
+    #[serde(default = "default_ai_endpoint")]
+    pub ai_endpoint: String,
+}
+
+fn default_ai_provider() -> String {
+    "openrouter".to_string()
+}
+fn default_ai_key() -> String {
+    "".to_string()
+}
+fn default_ai_model() -> String {
+    "meta-llama/llama-3-8b-instruct:free".to_string()
+}
+fn default_ai_endpoint() -> String {
+    "https://openrouter.ai/api/v1".to_string()
 }
 
 impl Default for Settings {
@@ -41,6 +62,10 @@ impl Default for Settings {
             auto_save: true,
             tab_size: 4,
             api_url: "http://localhost:3000".to_string(),
+            ai_provider: "openrouter".to_string(),
+            ai_api_key: "".to_string(),
+            ai_model: "meta-llama/llama-3-8b-instruct:free".to_string(),
+            ai_endpoint: "https://openrouter.ai/api/v1".to_string(),
         }
     }
 }

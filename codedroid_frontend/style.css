@@ -1037,51 +1037,6 @@ body {
   .terminal-session-select-wrapper {
     display: block;
   }
-}
-
-/* ── Terminal mobile touch auxiliary keys row ── */
-.terminal-mobile-keys {
-  display: none; /* hidden by default on desktop */
-}
-
-@media (max-width: 768px) {
-  .terminal-mobile-keys {
-    display: none !important;
-  }
-  /* Hide scrollbar for key row */
-  .terminal-mobile-keys::-webkit-scrollbar {
-    display: none;
-  }
-  .terminal-mobile-keys {
-    scrollbar-width: none;
-  }
-  .terminal-key-btn {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #e2e8f0;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 6px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    user-select: none;
-    -webkit-user-select: none;
-  }
-  .terminal-key-btn:active {
-    background: var(--accent);
-    color: #fff;
-    transform: scale(0.95);
-  }
-  .terminal-key-btn.command-chip {
-    background: rgba(34, 141, 242, 0.15);
-    border-color: rgba(34, 141, 242, 0.3);
-    color: #a5b4fc;
-  }
-  .terminal-key-btn.command-chip:active {
-    background: var(--accent);
-    color: #fff;
-  }
   .terminal-input {
     font-size: 16px !important; /* Prevents auto-zoom viewport shift on iOS Safari */
   }
@@ -1897,10 +1852,76 @@ select.input { width: auto; min-width: 160px; }
   .status-bar-item {
     padding: 0 6px !important;
   }
+
+  /* Compact Activity Bar for mobile viewports */
+  .activity-bar {
+    width: 40px !important;
+    padding: 4px 0 !important;
+  }
+  .activity-btn {
+    height: 40px !important;
+  }
+  .activity-btn svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+
+  /* Vertical stacking for split editor workspace */
+  .editor-workspace {
+    flex-direction: column !important;
+  }
+  .editor-pane + .editor-pane {
+    border-left: none !important;
+    border-top: 1px solid var(--border) !important;
+  }
+
+  /* Compact editor tabs */
+  .editor-tab {
+    padding: 0 12px !important;
+    height: 36px !important;
+    font-size: 11px !important;
+  }
+  .editor-tabs::-webkit-scrollbar {
+    height: 2px !important;
+  }
+
+  /* Prevent breadcrumbs from overflowing and pushing action buttons off-screen */
+  .titlebar-breadcrumbs {
+    max-width: 40% !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+  }
+
+  /* Force font-size to 16px to prevent iOS Safari auto-zooming on focus */
+  .code-editor, .code-container {
+    font-size: 16px !important;
+  }
+
+  /* Prevent suggestions popup overflow */
+  .suggestions-floating {
+    max-width: 90vw !important;
+    min-width: 150px !important;
+  }
+
+  /* Compact Terminal Prompt */
+  .terminal-prompt {
+    max-width: 150px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
 }
 
 /* Extra small mobile styles */
 @media (max-width: 480px) {
+  .titlebar-breadcrumbs {
+    display: none !important;
+  }
+  .lang-badge {
+    padding: 2px 6px !important;
+    font-size: 9px !important;
+  }
   .app-bar {
     padding: 0 12px;
   }

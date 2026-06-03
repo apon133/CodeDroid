@@ -1379,78 +1379,7 @@ pub fn BottomPanel(
         }
     };
 
-    let send_tab = move |_| {
-        let val = command_input.get_untracked();
-        command_input.set(format!("{}\t", val));
-        if let Some(input) = input_ref.get() {
-            let _ = input.focus();
-        }
-    };
 
-    let send_ctrl_c = move |_| {
-        if let Some(session_id) = terminal_session_id.get_untracked() {
-            spawn_local(async move {
-                let _ = crate::api::send_terminal_input_api(&session_id, "\x03").await;
-            });
-        } else {
-            output.set(String::new());
-        }
-        if let Some(input) = input_ref.get() {
-            let _ = input.focus();
-        }
-    };
-
-    let send_ctrl_d = move |_| {
-        if let Some(session_id) = terminal_session_id.get_untracked() {
-            spawn_local(async move {
-                let _ = crate::api::send_terminal_input_api(&session_id, "\x04").await;
-            });
-        }
-        if let Some(input) = input_ref.get() {
-            let _ = input.focus();
-        }
-    };
-
-    let send_arrow_up = move |_| {
-        let hist = terminal_history.get_untracked();
-        if !hist.is_empty() {
-            let next_idx = match history_index.get_untracked() {
-                None => hist.len() - 1,
-                Some(idx) => if idx > 0 { idx - 1 } else { 0 }
-            };
-            history_index.set(Some(next_idx));
-            command_input.set(hist[next_idx].clone());
-        }
-        if let Some(input) = input_ref.get() {
-            let _ = input.focus();
-        }
-    };
-
-    let send_arrow_down = move |_| {
-        let hist = terminal_history.get_untracked();
-        if !hist.is_empty() {
-            if let Some(idx) = history_index.get_untracked() {
-                if idx + 1 < hist.len() {
-                    let next_idx = idx + 1;
-                    history_index.set(Some(next_idx));
-                    command_input.set(hist[next_idx].clone());
-                } else {
-                    history_index.set(None);
-                    command_input.set(String::new());
-                }
-            }
-        }
-        if let Some(input) = input_ref.get() {
-            let _ = input.focus();
-        }
-    };
-
-    let run_quick_cmd = move |cmd: String| {
-        submit_cmd_fn(cmd);
-        if let Some(input) = input_ref.get() {
-            let _ = input.focus();
-        }
-    };
 
     let on_session_change = move |e: web_sys::Event| {
         use wasm_bindgen::JsCast;
@@ -1817,43 +1746,7 @@ pub fn BottomPanel(
                                 {move || output.get()}
                             </div>
                             
-                            <div class="terminal-mobile-keys" on:click=move |e| e.stop_propagation()>
-                                <button class="terminal-key-btn" on:click=send_tab>"TAB"</button>
-                                <button class="terminal-key-btn" on:click=send_ctrl_c>"CTRL+C"</button>
-                                <button class="terminal-key-btn" on:click=send_ctrl_d>"CTRL+D"</button>
-                                <button class="terminal-key-btn" on:click=send_arrow_up>"↑"</button>
-                                <button class="terminal-key-btn" on:click=send_arrow_down>"↓"</button>
-                                <button class="terminal-key-btn" on:click=move |_| {
-                                    output.set(String::new());
-                                    sessions.update(|s_list| {
-                                        let active = active_idx.get_untracked();
-                                        if active < s_list.len() {
-                                            s_list[active].output = String::new();
-                                        }
-                                    });
-                                }>"CLEAR"</button>
-                                
-                                <button class="terminal-key-btn command-chip" on:click=move |_| run_quick_cmd("ls".to_string())>"ls"</button>
-                                <button class="terminal-key-btn command-chip" on:click=move |_| run_quick_cmd("cd ..".to_string())>"cd .."</button>
-                                <button class="terminal-key-btn command-chip" on:click=move |_| run_quick_cmd("git status".to_string())>"git status"</button>
-                                {move || {
-                                    let lang = language.get().to_lowercase();
-                                    match lang.as_str() {
-                                        "rust" => view! {
-                                            <button class="terminal-key-btn command-chip" on:click=move |_| run_quick_cmd("cargo check".to_string())>"cargo check"</button>
-                                            <button class="terminal-key-btn command-chip" on:click=move |_| run_quick_cmd("cargo test".to_string())>"cargo test"</button>
-                                        }.into_any(),
-                                        "javascript" | "typescript" => view! {
-                                            <button class="terminal-key-btn command-chip" on:click=move |_| run_quick_cmd("npm run dev".to_string())>"npm run dev"</button>
-                                            <button class="terminal-key-btn command-chip" on:click=move |_| run_quick_cmd("npm install".to_string())>"npm install"</button>
-                                        }.into_any(),
-                                        "python" => view! {
-                                            <button class="terminal-key-btn command-chip" on:click=move |_| run_quick_cmd("python3 main.py".to_string())>"python3"</button>
-                                        }.into_any(),
-                                        _ => view! { "" }.into_any()
-                                    }
-                                }}
-                            </div>
+
                             
                             <div class="terminal-input-line">
                                 <span class="terminal-prompt">

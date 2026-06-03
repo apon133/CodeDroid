@@ -12,7 +12,8 @@ void main() async {
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: Colors.black,
+    statusBarBrightness: Brightness.dark,
+    systemNavigationBarColor: Color(0xFF181818), // Matches webapp background
     systemNavigationBarIconBrightness: Brightness.light,
   ));
 
@@ -33,8 +34,15 @@ class CodeDroidApp extends StatelessWidget {
     return MaterialApp(
       title: 'CodeDroid',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF1E1E2E), // Premium dark theme matching CodeDroid
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF181818), // Match webapp background exactly (#181818)
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF228DF2), // Accent blue
+          secondary: Color(0xFF15AC91), // Accent green
+          surface: Color(0xFF1D1D1D),
+        ),
       ),
       home: const WebViewContainer(),
     );
@@ -121,9 +129,9 @@ class _WebViewContainerState extends State<WebViewContainer> {
               },
             ),
             if (isLoading)
-              const Center(
+              Center(
                 child: CircularProgressIndicator(
-                  color: Color(0xFF89B4FA), // Cute pastel blue accent
+                  color: Theme.of(context).colorScheme.primary, // Matches theme accent blue
                 ),
               ),
             if (loadError != null)
@@ -153,7 +161,7 @@ class _WebViewContainerState extends State<WebViewContainer> {
                         icon: const Icon(Icons.refresh),
                         label: const Text('Retry'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF89B4FA),
+                          backgroundColor: Theme.of(context).colorScheme.primary,
                           foregroundColor: Colors.black,
                         ),
                       ),

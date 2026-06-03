@@ -476,6 +476,7 @@ pub struct CommandResponse {
     pub output: String,
     pub error: String,
     pub success: bool,
+    #[allow(dead_code)]
     pub pid: Option<u32>,
 }
 

@@ -47,24 +47,24 @@
 2. [Application Preview](#-application-preview)
 3. [Key Capabilities & Features](#-key-capabilities--features)
 4. [Ecosystem & Architectural Blueprints](#-ecosystem--architectural-blueprints)
-5. [Supported Languages & Setup Directory](#-supported-languages--setup-directory)
-6. [Smart Code Suggestions & AI Rule Engine](#-smart-code-suggestions--ai-rule-engine)
-7. [API Endpoint Specifications (No Code Payloads)](#-api-endpoint-specifications-no-code-payloads)
-8. [Termux Android Installation Details](#-termux-android-installation-details)
-9. [Cross-Device & iOS Network Connectivity](#-cross-device--ios-network-connectivity)
-10. [LSP Binary Executable Path Resolution](#-lsp-binary-executable-path-resolution)
-11. [Upcoming Features & Roadmap](#-upcoming-features--roadmap)
-12. [Contributing](#-contributing)
-13. [License](#-license)
+5. [Native Wrapper Applications (Tauri & Flutter)](#-native-wrapper-applications-tauri--flutter)
+6. [Supported Languages & Setup Directory](#-supported-languages--setup-directory)
+7. [Smart Code Suggestions & AI Rule Engine](#-smart-code-suggestions--ai-rule-engine)
+8. [API Endpoint Specifications (No Code Payloads)](#-api-endpoint-specifications-no-code-payloads)
+9. [Termux Android Installation Details](#-termux-android-installation-details)
+10. [Cross-Device & iOS Network Connectivity](#-cross-device--ios-network-connectivity)
+11. [LSP Binary Executable Path Resolution](#-lsp-binary-executable-path-resolution)
+12. [Upcoming Features & Roadmap](#-upcoming-features--roadmap)
+13. [Contributing](#-contributing)
+14. [License](#-license)
 
 ---
 
-## 🔍 What is CodeDroid?
-
-CodeDroid is a high-performance **mobile programming environment** that compiles and runs your code directly on-device with zero virtualization. It is built as two decoupled modules:
+CodeDroid is a high-performance **mobile programming environment** that compiles and runs your code directly on-device with zero virtualization. It is built as three integrated modules:
 
 1. **`codedroid_api` (Backend Engine)**: A lightweight, multi-threaded server written in **Rust (Axum)**. It directly invokes system compilers (`rustc`, `gcc`, `kotlinc`, `javac`, etc.), manages asynchronous execution streams, coordinates multiple concurrent Language Server Protocol (LSP) instances, and handles local dependency installation.
 2. **`codedroid_frontend` (Web IDE)**: A reactive, mobile-first IDE built using the **Leptos** web framework and compiled to **WebAssembly (WASM)**. It runs entirely inside any web browser (Safari, Chrome, Firefox) and utilizes high-performance code-rendering pipelines to provide syntax highlighting, bracket matching, file drawers, autocomplete drop-downs, and compiler error overlays.
+3. **`apps` (Native Wrappers)**: Cross-platform native wrappers bundling the WebAssembly frontend. Includes **Tauri** for desktop platforms (macOS, Windows, Linux) and **Flutter** for mobile platforms (Android) running a lightweight, local web server background task to bypass browser WebAssembly restrictions.
 
 Unlike typical cloud-based sandboxes or emulated JS runtimes, CodeDroid exposes the *real* filesystem and *real* binaries of your host device (like a Termux Android shell or local macOS/Linux installation). 
 
@@ -103,7 +103,7 @@ Unlike typical cloud-based sandboxes or emulated JS runtimes, CodeDroid exposes 
 
 ### Codebase Directory Structures & Module Overview
 
-The CodeDroid architecture divides logical responsibilities across two modular crates. Below is a structural mapping of all modules and their roles:
+The CodeDroid architecture divides logical responsibilities across the system components. Below is a structural mapping of the codebase modules and directories:
 
 ```
 CodeDroid Root
@@ -136,6 +136,11 @@ CodeDroid Root
  │    │              ├── footer.rs   # Console drawer outputs and terminal triggers
  │    │              └── utils.rs    # Syntect themes converter mapping styles
  │    └── Cargo.toml                 # Frontend WASM configurations & packages
+ │
+ └── apps (Native Wrappers Directory)
+      ├── flutter_android/            # Flutter app wrapping frontend for Android with localhost server
+      ├── tauri_desktop/              # Tauri wrapper bundling frontend for macOS, Windows, Linux
+      └── sync_assets.sh              # Asset synchronization builder and compiler script
 ```
 
 ### Flow Diagram: Document Sync & Compilation Lifecycle
@@ -166,9 +171,37 @@ CodeDroid Root
          │                               │◄── publishDiagnostics ───────│
          │                               │    (Async stderr stream)     │
          │                               │                              │
-         │◄── Return Diagnostics ────────│                              │
-         │    (JSON range & severity)    │                              │
+          │◄── Return Diagnostics ────────│                              │
+          │    (JSON range & severity)    │                              │
 ```
+
+---
+
+## 📱 Native Wrapper Applications (Tauri & Flutter)
+
+CodeDroid offers native client wrappers that bundle the `codedroid_frontend` WebAssembly package directly into target app environments.
+
+### 🔄 Asset Synchronization Flow
+Whenever the Leptos frontend code is modified, it must be compiled and synchronized to both the Flutter and Tauri directories. An automated build script is provided:
+
+```bash
+# Run from repository root
+./apps/sync_assets.sh
+```
+
+This script builds `codedroid_frontend` in release mode and mirrors the static outputs to both application directories automatically.
+
+### 📱 Flutter (Android) Wrapper
+Located in [`apps/flutter_android/`](./apps/flutter_android/). It launches a background `InAppLocalhostServer` on port `8080` to serve the static assets offline.
+- **Why Localhost?** Modern mobile WebViews block WebAssembly streaming compile calls if executed over the `file://` protocol. The local server enables WebAssembly and provides cookies/LocalStorage persistence.
+- **Theme & Style**: Tailored with a custom Material 3 Dark theme matching the web IDE, featuring matching system bar colors and transparent status integrations.
+- For run and build instructions, see the [Flutter Android README](./apps/flutter_android/README.md).
+
+### 💻 Tauri (Desktop) Wrapper
+Located in [`apps/tauri_desktop/`](./apps/tauri_desktop/). It uses Tauri to pack the WebAssembly interface into native desktop clients.
+- **Ultra-lightweight**: Compiles to under 20MB, utilizing the native system web engines (Webkit2GTK / WebView2) to reduce RAM usage.
+- **Cross-Platform**: Supports native macOS, Windows, and Linux window environments.
+- For run and build instructions, see the [Tauri Desktop README](./apps/tauri_desktop/README.md).
 
 ---
 

@@ -1076,7 +1076,7 @@ pub fn AgentPanel(
     };
 
     view! {
-        <div class="sidebar-panel" style="display:flex; flex-direction:column; height:100%; background:var(--bg-sidebar); border-left:1px solid var(--border); width:360px; flex-shrink:0">
+        <div class="sidebar-panel" style="display:flex; flex-direction:column; height:100%; background:var(--bg-sidebar); border-left:1px solid var(--border); width:var(--agent-width, 360px); flex-shrink:0">
             <style>
                 "@keyframes agent-spin {
                     to { transform: rotate(360deg); }

@@ -789,6 +789,7 @@ pub fn BottomPanel(
     is_running: RwSignal<bool>,
     terminal_history: RwSignal<Vec<String>>,
     terminal_trigger: RwSignal<Option<String>>,
+    close_terminal: Callback<()>,
 ) -> impl IntoView {
     let expanded_idx = RwSignal::new(Option::<usize>::None);
     let suggestions_state = RwSignal::new(Option::<Vec<crate::api::CodeSuggestion>>::None);
@@ -1194,6 +1195,37 @@ pub fn BottomPanel(
         kill_session_by_index(current_idx);
     };
 
+    let on_close_click = {
+        let sessions = sessions.clone();
+        let active_idx = active_idx.clone();
+        let terminal_session_id = terminal_session_id.clone();
+        let output = output.clone();
+        let is_running = is_running.clone();
+        let close_terminal = close_terminal.clone();
+        let project_id_stored = project_id_stored.clone();
+        move |e: MouseEvent| {
+            e.stop_propagation();
+            let list = sessions.get_untracked();
+            for s in list {
+                let sid = s.id.clone();
+                spawn_local(async move {
+                    let _ = crate::api::stop_terminal_api(&sid).await;
+                });
+            }
+            sessions.set(Vec::new());
+            active_idx.set(0);
+            terminal_session_id.set(None);
+            output.set(String::new());
+            
+            let project_id_for_clear = project_id_stored.get_value();
+            let _ = gloo_storage::LocalStorage::delete(&format!("codedroid_term_sessions_{}", project_id_for_clear));
+            let _ = gloo_storage::LocalStorage::delete(&format!("codedroid_term_active_idx_{}", project_id_for_clear));
+            
+            is_running.set(false);
+            close_terminal.run(());
+        }
+    };
+
     let stop_command = move || {
         let proj_id_clone = project_id_stored.get_value();
         let proj_path_clone = project_path.get_untracked();
@@ -1498,6 +1530,11 @@ pub fn BottomPanel(
                         <LucideIcon name="trash" size="16" />
                     </button>
                 })}
+                <button class="btn btn-icon" style="font-size:12px; margin-right: 8px;" title="Close Panel"
+                    on:click=on_close_click
+                >
+                    <LucideIcon name="x" size="16" />
+                </button>
             </div>
             {move || {
                 if bottom_tab.get() == 1 {

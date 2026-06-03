@@ -50,6 +50,7 @@ pub fn EditorPage() -> impl IntoView {
     let project = project.unwrap();
     let project_lang_str = StoredValue::new(project.language.clone());
     let project_path_str = StoredValue::new(project.path.clone());
+    let project_id_stored = StoredValue::new(project.id.clone());
 
     // State
     let settings: RwSignal<Settings> = RwSignal::new(store::load_settings());
@@ -286,6 +287,7 @@ pub fn EditorPage() -> impl IntoView {
     let preview_url: RwSignal<Option<String>> = RwSignal::new(None);
     let show_desktop_preview: RwSignal<bool> = RwSignal::new(true);
     let bottom_tab: RwSignal<usize> = RwSignal::new(0); // 0=terminal 1=preview
+    let bottom_open: RwSignal<bool> = RwSignal::new(store::load_bottom_open(&project.id));
     let show_mobile_full_preview: RwSignal<bool> = RwSignal::new(false);
     let refresh_key: RwSignal<u32> = RwSignal::new(0);
 
@@ -498,6 +500,7 @@ pub fn EditorPage() -> impl IntoView {
         show_snack.clone(),
         file_tree_data.clone(),
         terminal_history,
+        bottom_open,
     );
 
     let stop_code = make_stop_code(current_pid, output, preview_url, bottom_tab, terminal_session_id, is_running);
@@ -535,12 +538,18 @@ pub fn EditorPage() -> impl IntoView {
     let chat_open: RwSignal<bool> =
         RwSignal::new(store::load_chat_open(&project.id));
 
+    let sidebar_width = store::load_sidebar_width(&project.id);
+    let agent_width = store::load_agent_width(&project.id);
+    let bottom_height = store::load_bottom_height(&project.id);
+    let preview_width = store::load_preview_width(&project.id);
+
     Effect::new({
         let project_id = project.id.clone();
         move || {
             store::save_sidebar_open(&project_id, sidebar_open.get());
             store::save_sidebar_mode(&project_id, sidebar_mode.get());
             store::save_chat_open(&project_id, chat_open.get());
+            store::save_bottom_open(&project_id, bottom_open.get());
         }
     });
 
@@ -823,7 +832,7 @@ pub fn EditorPage() -> impl IntoView {
                 </div>
             </div>
 
-            <div class="editor-layout">
+            <div class="editor-layout" data-project-id=project.id.clone() style=format!("--sidebar-width: {}px; --agent-width: {}px; --bottom-height: {}px; --preview-width: {}px;", sidebar_width, agent_width, bottom_height, preview_width)>
                 <div class="activity-bar">
                     <div class="activity-bar-top">
                         <button 
@@ -985,6 +994,10 @@ pub fn EditorPage() -> impl IntoView {
                     }
                 }}
 
+                {move || sidebar_open.get().then(|| view! {
+                    <div class="sidebar-resize-gutter"></div>
+                })}
+
                 <div class="editor-main">
                     <div class="editor-workspace">
                         <div class=move || if active_pane.get() == 0 { "editor-pane active" } else { "editor-pane" }
@@ -1104,26 +1117,32 @@ pub fn EditorPage() -> impl IntoView {
                         })}
                     </div>
 
-                    <BottomPanel 
-                        bottom_tab=bottom_tab
-                        output=output
-                        _is_error=is_error.into()
-                        show_snack=show_snack
-                        diagnostics_list=diagnostics_list.into()
-                        on_click_problem=on_click_problem
-                        code=code
-                        language=Signal::derive(move || project_lang_str.get_value())
-                        references_list=references_list
-                        on_click_reference=on_click_reference
-                        active_tab=active_tab.into()
-                        project_path=Signal::derive(move || project_path_str.get_value())
-                        project_id=project.id.clone()
-                        file_tree_data=file_tree_data
-                        terminal_session_id=terminal_session_id
-                        is_running=is_running
-                        terminal_history=terminal_history
-                        terminal_trigger=terminal_trigger
-                    />
+                    {move || bottom_open.get().then(move || view! {
+                        <>
+                        <div class="bottom-resize-gutter"></div>
+                        <BottomPanel 
+                            bottom_tab=bottom_tab
+                            output=output
+                            _is_error=is_error.into()
+                            show_snack=show_snack
+                            diagnostics_list=diagnostics_list.into()
+                            on_click_problem=on_click_problem
+                            code=code
+                            language=Signal::derive(move || project_lang_str.get_value())
+                            references_list=references_list
+                            on_click_reference=on_click_reference
+                            active_tab=active_tab.into()
+                            project_path=Signal::derive(move || project_path_str.get_value())
+                            project_id=project_id_stored.get_value()
+                            file_tree_data=file_tree_data
+                            terminal_session_id=terminal_session_id
+                            is_running=is_running
+                            terminal_history=terminal_history
+                            terminal_trigger=terminal_trigger
+                            close_terminal=Callback::new(move |_: ()| bottom_open.set(false))
+                        />
+                        </>
+                    })}
 
                 </div>
 
@@ -1147,6 +1166,8 @@ pub fn EditorPage() -> impl IntoView {
                         });
 
                         view! {
+                            <>
+                            <div class="agent-resize-gutter"></div>
                             <AgentPanel
                                 project_path=ppath
                                 project_id=pid.clone()
@@ -1155,6 +1176,7 @@ pub fn EditorPage() -> impl IntoView {
                                 close_sidebar=close_sidebar
                                 refresh_files=refresh_files
                             />
+                            </>
                         }.into_any()
                     } else {
                         view! {}.into_any()
@@ -1191,14 +1213,14 @@ pub fn EditorPage() -> impl IntoView {
                         let (errors, warnings) = error_warning_counts.get();
                         if errors > 0 || warnings > 0 {
                             view! {
-                                <div class="status-bar-item status-bar-problems" on:click=move |_| bottom_tab.set(1) title="Show Problems">
+                                <div class="status-bar-item status-bar-problems" on:click=move |_| { bottom_tab.set(1); bottom_open.set(true); } title="Show Problems">
                                     <LucideIcon name="alert-triangle" size="14" />
                                     {format!("{} 🔴  {} 🟡", errors, warnings)}
                                 </div>
                             }.into_any()
                         } else {
                             view! {
-                                <div class="status-bar-item status-bar-problems" on:click=move |_| bottom_tab.set(1) title="No Problems">
+                                <div class="status-bar-item status-bar-problems" on:click=move |_| { bottom_tab.set(1); bottom_open.set(true); } title="No Problems">
                                     "✓ No Problems"
                                 </div>
                             }.into_any()

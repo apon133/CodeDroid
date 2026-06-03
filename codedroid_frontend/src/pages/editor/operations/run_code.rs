@@ -153,6 +153,7 @@ pub fn make_run_code(
     show_snack: Callback<String>,
     file_tree_data: RwSignal<Vec<FileEntry>>,
     terminal_history: RwSignal<Vec<String>>,
+    bottom_open: RwSignal<bool>,
 ) -> Callback<()> {
     Callback::new(move |_: ()| {
         if is_running.get_untracked() {
@@ -190,6 +191,7 @@ pub fn make_run_code(
             };
             
             is_running.set(true);
+            bottom_open.set(true);
             bottom_tab.set(0); // Switch to Terminal tab
             output.set(String::new()); // Clear output for a clean run
             
@@ -244,6 +246,7 @@ pub fn make_run_code(
         } else {
             // Run in background (Web Projects)
             is_running.set(true);
+            bottom_open.set(true);
             output.set("Starting dev server...".to_string());
             is_error.set(false);
             

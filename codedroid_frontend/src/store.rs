@@ -121,6 +121,14 @@ pub fn save_chat_open(project_id: &str, open: bool) {
     let _ = LocalStorage::set(&format!("codedroid_chat_open_{}", project_id), &open);
 }
 
+pub fn load_bottom_open(project_id: &str) -> bool {
+    LocalStorage::get(&format!("codedroid_bottom_open_{}", project_id)).unwrap_or(true)
+}
+
+pub fn save_bottom_open(project_id: &str, open: bool) {
+    let _ = LocalStorage::set(&format!("codedroid_bottom_open_{}", project_id), &open);
+}
+
 // ── Terminal Command History ──────────────────────────────────────────────
 pub fn load_terminal_history(project_id: &str) -> Vec<String> {
     LocalStorage::get(&format!("codedroid_term_history_{}", project_id)).unwrap_or_default()
@@ -129,3 +137,41 @@ pub fn load_terminal_history(project_id: &str) -> Vec<String> {
 pub fn save_terminal_history(project_id: &str, history: &[String]) {
     let _ = LocalStorage::set(&format!("codedroid_term_history_{}", project_id), history);
 }
+
+// ── Side Panel Sizes ──────────────────────────────────────────────────────
+pub fn load_sidebar_width(project_id: &str) -> i32 {
+    LocalStorage::get(&format!("codedroid_sidebar_width_{}", project_id)).unwrap_or(240)
+}
+
+#[allow(dead_code)]
+pub fn save_sidebar_width(project_id: &str, width: i32) {
+    let _ = LocalStorage::set(&format!("codedroid_sidebar_width_{}", project_id), &width);
+}
+
+pub fn load_agent_width(project_id: &str) -> i32 {
+    LocalStorage::get(&format!("codedroid_agent_width_{}", project_id)).unwrap_or(360)
+}
+
+#[allow(dead_code)]
+pub fn save_agent_width(project_id: &str, width: i32) {
+    let _ = LocalStorage::set(&format!("codedroid_agent_width_{}", project_id), &width);
+}
+
+pub fn load_bottom_height(project_id: &str) -> i32 {
+    LocalStorage::get(&format!("codedroid_bottom_height_{}", project_id)).unwrap_or(240)
+}
+
+#[allow(dead_code)]
+pub fn save_bottom_height(project_id: &str, height: i32) {
+    let _ = LocalStorage::set(&format!("codedroid_bottom_height_{}", project_id), &height);
+}
+
+pub fn load_preview_width(project_id: &str) -> i32 {
+    LocalStorage::get(&format!("codedroid_preview_width_{}", project_id)).unwrap_or(360)
+}
+
+#[allow(dead_code)]
+pub fn save_preview_width(project_id: &str, width: i32) {
+    let _ = LocalStorage::set(&format!("codedroid_preview_width_{}", project_id), &width);
+}
+

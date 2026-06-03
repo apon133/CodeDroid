@@ -1494,14 +1494,19 @@ fn scan_dir_recursive(
             let path = entry.path();
 
             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                let is_inside_target = path.components().any(|c| c.as_os_str() == "target");
                 if name == ".git"
                     || name == ".DS_Store"
                     || name == ".dart_tool"
                     || name == ".gradle"
                     || name == ".idea"
                     || name == "node_modules"
-                    || name == "build"
-                    || name == "target"
+                    || name == "__pycache__"
+                    || name == ".pytest_cache"
+                    || name == ".fingerprint"
+                    || name == "incremental"
+                    || name == "deps"
+                    || (name == "build" && is_inside_target)
                 {
                     continue;
                 }

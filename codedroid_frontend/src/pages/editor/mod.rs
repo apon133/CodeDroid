@@ -601,8 +601,13 @@ pub fn EditorPage() -> impl IntoView {
     let ppath_clone = project.path.clone();
     let file_tree_data_clone = file_tree_data.clone();
     spawn_local(async move {
-        crate::pages::editor::operations::sync_from_disk_async(&pid_clone, &ppath_clone, file_tree_data_clone).await;
+        crate::pages::editor::operations::sync_from_disk_async(&pid_clone, &ppath_clone, file_tree_data_clone.clone()).await;
         crate::pages::editor::operations::sync_project_async(&pid_clone, &ppath_clone).await;
+
+        loop {
+            gloo_timers::future::TimeoutFuture::new(3000).await;
+            crate::pages::editor::operations::sync_from_disk_async(&pid_clone, &ppath_clone, file_tree_data_clone.clone()).await;
+        }
     });
 
     // Open default file on mount

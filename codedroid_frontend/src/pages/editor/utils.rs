@@ -673,6 +673,19 @@ pub fn resolve_completion(item: &crate::api::CompletionItem) -> (String, Option<
                 i += 1;
             }
         }
+        if cursor_offset.is_none() {
+            let utf16_chars: Vec<u16> = result.encode_utf16().collect();
+            for idx in 0..utf16_chars.len().saturating_sub(1) {
+                let first = utf16_chars[idx];
+                let second = utf16_chars[idx + 1];
+                if (first == b'(' as u16 && second == b')' as u16) ||
+                   (first == b'{' as u16 && second == b'}' as u16) ||
+                   (first == b'[' as u16 && second == b']' as u16) {
+                    cursor_offset = Some(idx + 1);
+                    break;
+                }
+            }
+        }
         (result, cursor_offset)
     } else {
         let label = &item.label;
@@ -686,7 +699,20 @@ pub fn resolve_completion(item: &crate::api::CompletionItem) -> (String, Option<
             let cleaned = label.replace("[...]", "[]");
             (cleaned, Some(pos + 1))
         } else {
-            (label.clone(), None)
+            let cleaned = label.clone();
+            let mut cursor_offset = None;
+            let utf16_chars: Vec<u16> = cleaned.encode_utf16().collect();
+            for idx in 0..utf16_chars.len().saturating_sub(1) {
+                let first = utf16_chars[idx];
+                let second = utf16_chars[idx + 1];
+                if (first == b'(' as u16 && second == b')' as u16) ||
+                   (first == b'{' as u16 && second == b'}' as u16) ||
+                   (first == b'[' as u16 && second == b']' as u16) {
+                    cursor_offset = Some(idx + 1);
+                    break;
+                }
+            }
+            (cleaned, cursor_offset)
         }
     }
 }

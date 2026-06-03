@@ -4,10 +4,12 @@ use leptos::prelude::*;
 #[component]
 pub fn PreviewPanel(
     preview_url: Signal<Option<String>>,
+    show_preview: Signal<bool>,
     refresh_key: RwSignal<u32>,
 ) -> impl IntoView {
     view! {
-        {move || preview_url.get().map(|url| {
+        {move || (preview_url.get().is_some() && show_preview.get()).then(|| {
+            let url = preview_url.get().unwrap();
             let final_url = move || {
                 let k = refresh_key.get();
                 if url.contains('?') {

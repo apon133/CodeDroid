@@ -3482,13 +3482,22 @@ body.dragging-preview iframe {
   color: #f87171;
 }
 .btn-titlebar-action.btn-preview {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #c5c5c5;
+}
+.btn-titlebar-action.btn-preview.active {
   background: rgba(34, 141, 242, 0.15);
   color: #818cf8;
   border: 1px solid rgba(34, 141, 242, 0.25);
 }
-.btn-titlebar-action.btn-preview:hover {
+.btn-titlebar-action.btn-preview.active:hover {
   background: rgba(34, 141, 242, 0.25);
   color: #a5b4fc;
+}
+.btn-titlebar-action.btn-preview:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
 }
 
 /* ── Activity Bar ── */

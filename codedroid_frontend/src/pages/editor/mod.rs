@@ -284,9 +284,16 @@ pub fn EditorPage() -> impl IntoView {
     let is_running: RwSignal<bool> = RwSignal::new(false);
     let current_pid: RwSignal<Option<u32>> = RwSignal::new(None);
     let preview_url: RwSignal<Option<String>> = RwSignal::new(None);
+    let show_desktop_preview: RwSignal<bool> = RwSignal::new(true);
     let bottom_tab: RwSignal<usize> = RwSignal::new(0); // 0=terminal 1=preview
     let show_mobile_full_preview: RwSignal<bool> = RwSignal::new(false);
     let refresh_key: RwSignal<u32> = RwSignal::new(0);
+
+    Effect::new(move |_| {
+        if preview_url.get().is_some() {
+            show_desktop_preview.set(true);
+        }
+    });
     let show_search: RwSignal<bool> = RwSignal::new(false);
     let find_text: RwSignal<String> = RwSignal::new(String::new());
     let find_index: RwSignal<usize> = RwSignal::new(0);
@@ -767,13 +774,46 @@ pub fn EditorPage() -> impl IntoView {
                         }.into_any()
                     }}
 
-                    {move || preview_url.get().is_some().then(|| view! {
-                        <button class="btn-titlebar-action btn-preview"
-                            title="Show Preview"
-                            on:click=move |_| show_mobile_full_preview.set(true)>
-                            <LucideIcon name="eye" size="14" />
-                            <span class="btn-text">"Preview"</span>
-                        </button>
+                    {move || preview_url.get().is_some().then(|| {
+                        let is_active = move || {
+                            let is_mobile = web_sys::window()
+                                .and_then(|w| w.inner_width().ok())
+                                .and_then(|w| w.as_f64())
+                                .map(|w| w <= 768.0)
+                                .unwrap_or(false);
+                            if is_mobile {
+                                show_mobile_full_preview.get()
+                            } else {
+                                show_desktop_preview.get()
+                            }
+                        };
+                        view! {
+                            <button 
+                                class=move || {
+                                    if is_active() {
+                                        "btn-titlebar-action btn-preview active"
+                                    } else {
+                                        "btn-titlebar-action btn-preview"
+                                    }
+                                }
+                                title="Toggle Preview"
+                                on:click=move |_| {
+                                    let is_mobile = web_sys::window()
+                                        .and_then(|w| w.inner_width().ok())
+                                        .and_then(|w| w.as_f64())
+                                        .map(|w| w <= 768.0)
+                                        .unwrap_or(false);
+                                    if is_mobile {
+                                        show_mobile_full_preview.update(|v| *v = !*v);
+                                    } else {
+                                        show_desktop_preview.update(|v| *v = !*v);
+                                    }
+                                }
+                            >
+                                <LucideIcon name="eye" size="14" />
+                                <span class="btn-text">"Preview"</span>
+                            </button>
+                        }
                     })}
                 </div>
             </div>
@@ -1118,6 +1158,7 @@ pub fn EditorPage() -> impl IntoView {
 
                 <PreviewPanel
                     preview_url=preview_url.into()
+                    show_preview=show_desktop_preview.into()
                     refresh_key=refresh_key
                 />
             </div>

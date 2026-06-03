@@ -17,6 +17,7 @@ web-sys = { version = "0.3", features = [
     "Navigator", "Clipboard", "Storage", "Location",
     "Event", "KeyboardEvent", "MouseEvent", "EventTarget",
     "InputEvent", "TouchEvent", "Touch", "TouchList", "console", "DomRect",
+    "History",
 ] }
 js-sys = "0.3"
 serde = { version = "1", features = ["derive"] }

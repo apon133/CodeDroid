@@ -12,6 +12,14 @@ pub fn AppBar(
 ) -> impl IntoView {
     let navigate = use_navigate();
     let on_back = move |_: MouseEvent| {
+        let history = web_sys::window().and_then(|w| w.history().ok());
+        if let Some(history) = history {
+            if history.length().unwrap_or(0) > 1 {
+                if history.back().is_ok() {
+                    return;
+                }
+            }
+        }
         navigate("/", Default::default());
     };
 

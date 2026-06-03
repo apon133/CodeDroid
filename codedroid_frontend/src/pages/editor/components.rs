@@ -435,7 +435,15 @@ pub fn FileTree(
                                         set_selected_path.set(Some(fname_click.clone()));
                                         if !f_click.is_dir {
                                             open_file.run(fname_click.clone());
-                                            toggle_sidebar.run(()); // Auto-close drawer on mobile when clicking file
+                                            if let Some(window) = web_sys::window() {
+                                                if let Ok(width_val) = window.inner_width() {
+                                                    if let Some(w) = width_val.as_f64() {
+                                                        if w <= 768.0 {
+                                                            toggle_sidebar.run(());
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         } else {
                                             set_collapsed_dirs.update(|set| {
                                                 if set.contains(&fname_click) {

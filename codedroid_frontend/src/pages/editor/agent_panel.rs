@@ -495,7 +495,7 @@ async fn call_llm(
         format!("{}/chat/completions", settings.ai_endpoint.trim_end_matches('/'))
     };
 
-    let is_native_lm = url.contains("/api/v1/chat");
+    let is_native_lm = url.contains("/api/v1/chat") && !url.contains("openrouter.ai") && settings.ai_provider != "openrouter";
     let body = if is_native_lm {
         let system_prompt = messages.iter().find(|m| m.role == "system").map(|m| m.content.clone()).unwrap_or_default();
         

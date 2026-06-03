@@ -1264,24 +1264,11 @@ pub fn BottomPanel(
         command_input.set(String::new());
         history_index.set(None);
 
-        if cmd.is_empty() {
-            let mut current = output.get_untracked();
-            current.push_str("\n");
-            output.set(current);
-
-            if let Some(session_id) = terminal_session_id.get_untracked() {
-                spawn_local(async move {
-                    let _ = crate::api::send_terminal_input_api(&session_id, "\n").await;
-                });
-            }
-            return;
-        }
-
         let proj_path = project_path.get_untracked();
         let proj_name = project_name.get_untracked();
         let proj_id = project_id_stored.get_value();
 
-        if cmd.trim() == "clear" || cmd.trim() == "cls" {
+        if !cmd.is_empty() && (cmd.trim() == "clear" || cmd.trim() == "cls") {
             output.set(String::new());
             sessions.update(|s_list| {
                 let active = active_idx.get_untracked();
@@ -1299,7 +1286,11 @@ pub fn BottomPanel(
         }
 
         let mut current = output.get_untracked();
-        current.push_str(&format!("{} $ {}\n", proj_name, cmd));
+        if cmd.is_empty() {
+            current.push_str("\n");
+        } else {
+            current.push_str(&format!("{} $ {}\n", proj_name, cmd));
+        }
         output.set(current.clone());
         
         sessions.update(|s_list| {
@@ -1309,29 +1300,91 @@ pub fn BottomPanel(
             }
         });
 
-        let mut hist = terminal_history.get_untracked();
-        if hist.last() != Some(&cmd) {
-            hist.push(cmd.clone());
-            crate::store::save_terminal_history(&proj_id, &hist);
-            terminal_history.set(hist);
+        if !cmd.is_empty() {
+            let mut hist = terminal_history.get_untracked();
+            if hist.last() != Some(&cmd) {
+                hist.push(cmd.clone());
+                crate::store::save_terminal_history(&proj_id, &hist);
+                terminal_history.set(hist);
+            }
         }
 
-        if let Some(session_id) = terminal_session_id.get_untracked() {
-            let proj_id_clone = project_id_stored.get_value();
-            let file_tree_data_clone = file_tree_data.clone();
-            let cmd_clone = cmd.clone();
-            let proj_path_clone = proj_path.clone();
-            spawn_local(async move {
-                let _ = crate::api::send_terminal_input_api(&session_id, &format!("{}\n", cmd_clone)).await;
+        let session_id_opt = terminal_session_id.get_untracked();
+        let proj_id_clone = project_id_stored.get_value();
+        let file_tree_data_clone = file_tree_data.clone();
+        let cmd_clone = cmd.clone();
+        let proj_path_clone = proj_path.clone();
+        let terminal_session_id_clone = terminal_session_id;
+        let sessions_clone = sessions;
+        let active_idx_clone = active_idx;
+        let start_polling_clone = start_polling.clone();
+        let output_clone = output;
 
+        spawn_local(async move {
+            let session_id = match session_id_opt {
+                Some(id) => id,
+                None => "".to_string(),
+            };
+
+            let input_str = if cmd_clone.is_empty() { "\n".to_string() } else { format!("{}\n", cmd_clone) };
+
+            let mut sent = false;
+            if !session_id.is_empty() {
+                if let Ok(true) = crate::api::send_terminal_input_api(&session_id, &input_str).await {
+                    sent = true;
+                }
+            }
+
+            if !sent {
+                // Session is dead or not found! Start a new one.
+                match crate::api::start_terminal_api(&proj_path_clone).await {
+                    Ok(new_id) => {
+                        terminal_session_id_clone.set(Some(new_id.clone()));
+                        
+                        let active = active_idx_clone.get_untracked();
+                        sessions_clone.update(|s_list| {
+                            if active < s_list.len() {
+                                s_list[active].id = new_id.clone();
+                                let mut current_out = output_clone.get_untracked();
+                                if current_out.contains("[Process completed]") {
+                                    current_out = current_out.replace("\n[Process completed]\n", "");
+                                    current_out = current_out.replace("[Process completed]", "");
+                                }
+                                s_list[active].output = current_out;
+                            } else {
+                                let next_num = s_list.len() + 1;
+                                let name = format!("sh ({})", next_num);
+                                let new_sess = SessionState {
+                                    id: new_id.clone(),
+                                    name,
+                                    output: output_clone.get_untracked(),
+                                    path: Some(proj_path_clone.clone()),
+                                };
+                                s_list.push(new_sess);
+                                active_idx_clone.set(s_list.len() - 1);
+                            }
+                        });
+
+                        start_polling_clone(new_id.clone());
+                        let _ = crate::api::send_terminal_input_api(&new_id, &input_str).await;
+                    }
+                    Err(e) => {
+                        let mut current = output_clone.get_untracked();
+                        current.push_str(&format!("❌ Failed to initialize terminal session: {}\n", e));
+                        output_clone.set(current);
+                    }
+                }
+            }
+
+            if !cmd_clone.is_empty() {
                 gloo_timers::future::TimeoutFuture::new(500).await;
                 crate::pages::editor::operations::sync_from_disk(
                     proj_id_clone,
                     proj_path_clone,
                     file_tree_data_clone,
                 );
-            });
-        }
+            }
+        });
     };
 
     let on_keydown = move |e: web_sys::KeyboardEvent| {

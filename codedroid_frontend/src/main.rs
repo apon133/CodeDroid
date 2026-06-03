@@ -20,6 +20,7 @@ pub fn App() -> impl IntoView {
             <div id="root">
                 <Routes fallback=|| view! { <div class="home-empty"><p>"Page not found"</p></div> }>
                     <Route path=path!("/") view=HomePage />
+                    <Route path=path!("/index.html") view=HomePage />
                     <Route path=path!("/editor/:id") view=EditorPage />
                     <Route path=path!("/settings") view=SettingsPage />
                     <Route path=path!("/docs") view=DocsPage />

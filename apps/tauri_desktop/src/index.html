@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="CodeDroid - A powerful web-based IDE built with Rust and Leptos">
+    <title>CodeDroid IDE</title>
+    <link rel="stylesheet" href="/style-f1c26bd002211c46.css" integrity="sha384-rMB85hC58H2GilRDrogXKPJT6u34h98lVqgjx99u/BsxPMHZCupCbU5wYN9qMno7"/>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <link rel="manifest" href="manifest.json">
+    
+    
+    
+<script type="module">
+import init, * as bindings from '/codedroid_frontend-5d9cc7b14a09a79e.js';
+const wasm = await init({ module_or_path: '/codedroid_frontend-5d9cc7b14a09a79e_bg.wasm' });
+
+
+window.wasmBindings = bindings;
+
+
+dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
+
+</script>
+<link rel="modulepreload" href="/codedroid_frontend-5d9cc7b14a09a79e.js" crossorigin="anonymous" integrity="sha384-ap+E5CycUZY50UaFCwKab55IMk+P2kMniL22/DiXQjKkFQctdFqijKEr/znYMYFU"><link rel="preload" href="/codedroid_frontend-5d9cc7b14a09a79e_bg.wasm" crossorigin="anonymous" integrity="sha384-CYa04YIOqE+LGWcu9QfDUUQbG9W3Q82g7QI/pWD+G3qPNoFeAaNGBak2LjK41KuT" as="fetch" type="application/wasm"></head>
+<body>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js', { scope: './' })
+                    .then(reg => {
+                        console.log('✅ CodeDroid SW Registered! Scope:', reg.scope);
+                    })
+                    .catch(err => {
+                        console.error('❌ CodeDroid SW Registration failed:', err);
+                    });
+            });
+        } else {
+            console.warn('⚠️ Service Workers are not supported in this browser.');
+        }
+
+        // Drag-to-resize handler for Desktop Live Preview panel
+        document.addEventListener('mousedown', function(e) {
+            if (e.target.classList.contains('preview-resize-gutter')) {
+                e.preventDefault();
+                const panel = document.querySelector('.desktop-preview-panel');
+                if (!panel) return;
+                
+                const startX = e.clientX;
+                const startWidth = panel.getBoundingClientRect().width;
+                
+                // Add dragging class to body to prevent iframe from capturing pointer events
+                document.body.classList.add('dragging-preview');
+                
+                function onMouseMove(moveEvent) {
+                    const deltaX = moveEvent.clientX - startX;
+                    // Dragging left increases size, dragging right decreases it
+                    const newWidth = Math.max(250, Math.min(1000, startWidth - deltaX));
+                    panel.style.width = newWidth + 'px';
+                    panel.style.flex = 'none'; // Lock the flex width
+                }
+                
+                function onMouseUp() {
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                    document.body.style.cursor = 'default';
+                    document.body.classList.remove('dragging-preview');
+                }
+                
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+                document.body.style.cursor = 'col-resize';
+            }
+        });
+    </script>
+</body>
+</html>

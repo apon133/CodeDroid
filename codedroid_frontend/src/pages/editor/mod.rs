@@ -59,13 +59,21 @@ pub fn EditorPage() -> impl IntoView {
     let code: RwSignal<String> = RwSignal::new(String::new());
     let dirty: RwSignal<bool> = RwSignal::new(false);
 
+    // Load persisted tab/split states
+    let left_tabs_init = store::load_open_tabs(&project.id);
+    let left_active_init = store::load_active_tab(&project.id);
+    let right_tabs_init = store::load_right_open_tabs(&project.id);
+    let right_active_init = store::load_right_active_tab(&project.id);
+    let split_active_init = store::load_split_active(&project.id);
+    let active_pane_init = store::load_active_pane(&project.id);
+
     // Split Editor State
-    let active_pane = RwSignal::new(0usize);
-    let split_active = RwSignal::new(false);
-    let left_open_tabs = RwSignal::new(Vec::<String>::new());
-    let right_open_tabs = RwSignal::new(Vec::<String>::new());
-    let left_active_tab = RwSignal::new(None::<String>);
-    let right_active_tab = RwSignal::new(None::<String>);
+    let active_pane = RwSignal::new(active_pane_init);
+    let split_active = RwSignal::new(split_active_init);
+    let left_open_tabs = RwSignal::new(left_tabs_init);
+    let right_open_tabs = RwSignal::new(right_tabs_init);
+    let left_active_tab = RwSignal::new(left_active_init);
+    let right_active_tab = RwSignal::new(right_active_init);
     let left_code = RwSignal::new(String::new());
     let right_code = RwSignal::new(String::new());
     let left_dirty = RwSignal::new(false);
@@ -277,6 +285,50 @@ pub fn EditorPage() -> impl IntoView {
             active_pane.set(0);
         }
     });
+
+    // Save tab states to LocalStorage on change
+    {
+        let pid = project.id.clone();
+        Effect::new(move |_| {
+            let tabs = left_open_tabs.get();
+            store::save_open_tabs(&pid, &tabs);
+        });
+    }
+    {
+        let pid = project.id.clone();
+        Effect::new(move |_| {
+            let tab = left_active_tab.get();
+            store::save_active_tab(&pid, tab.as_deref());
+        });
+    }
+    {
+        let pid = project.id.clone();
+        Effect::new(move |_| {
+            let tabs = right_open_tabs.get();
+            store::save_right_open_tabs(&pid, &tabs);
+        });
+    }
+    {
+        let pid = project.id.clone();
+        Effect::new(move |_| {
+            let tab = right_active_tab.get();
+            store::save_right_active_tab(&pid, tab.as_deref());
+        });
+    }
+    {
+        let pid = project.id.clone();
+        Effect::new(move |_| {
+            let split = split_active.get();
+            store::save_split_active(&pid, split);
+        });
+    }
+    {
+        let pid = project.id.clone();
+        Effect::new(move |_| {
+            let pane = active_pane.get();
+            store::save_active_pane(&pid, pane);
+        });
+    }
     let output: RwSignal<String> = RwSignal::new(
         "Welcome to CodeDroid Terminal\nType commands below (e.g. ls, cargo test, git status)\n\n"
             .to_string(),
@@ -702,6 +754,20 @@ pub fn EditorPage() -> impl IntoView {
                     open_file.run(default_file);
                 }
             });
+        }
+    });
+
+    // Restore and open persisted files on mount
+    let left_open_file_c = left_open_file.clone();
+    let right_open_file_c = right_open_file.clone();
+    let project_id_stored_c = project_id_stored.clone();
+    Effect::new(move |_| {
+        let pid = project_id_stored_c.get_value();
+        if let Some(left_active) = store::load_active_tab(&pid) {
+            left_open_file_c.run(left_active);
+        }
+        if let Some(right_active) = store::load_right_active_tab(&pid) {
+            right_open_file_c.run(right_active);
         }
     });
 

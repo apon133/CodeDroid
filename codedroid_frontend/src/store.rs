@@ -175,3 +175,52 @@ pub fn save_preview_width(project_id: &str, width: i32) {
     let _ = LocalStorage::set(&format!("codedroid_preview_width_{}", project_id), &width);
 }
 
+// ── Open Tabs & Active Tab Persistence ────────────────────────────────────
+pub fn load_open_tabs(project_id: &str) -> Vec<String> {
+    LocalStorage::get(&format!("codedroid_open_tabs_{}", project_id)).unwrap_or_default()
+}
+
+pub fn save_open_tabs(project_id: &str, tabs: &[String]) {
+    let _ = LocalStorage::set(&format!("codedroid_open_tabs_{}", project_id), tabs);
+}
+
+pub fn load_active_tab(project_id: &str) -> Option<String> {
+    LocalStorage::get(&format!("codedroid_active_tab_{}", project_id)).ok()
+}
+
+pub fn save_active_tab(project_id: &str, tab: Option<&str>) {
+    let _ = LocalStorage::set(&format!("codedroid_active_tab_{}", project_id), &tab);
+}
+
+pub fn load_right_open_tabs(project_id: &str) -> Vec<String> {
+    LocalStorage::get(&format!("codedroid_right_open_tabs_{}", project_id)).unwrap_or_default()
+}
+
+pub fn save_right_open_tabs(project_id: &str, tabs: &[String]) {
+    let _ = LocalStorage::set(&format!("codedroid_right_open_tabs_{}", project_id), tabs);
+}
+
+pub fn load_right_active_tab(project_id: &str) -> Option<String> {
+    LocalStorage::get(&format!("codedroid_right_active_tab_{}", project_id)).ok()
+}
+
+pub fn save_right_active_tab(project_id: &str, tab: Option<&str>) {
+    let _ = LocalStorage::set(&format!("codedroid_right_active_tab_{}", project_id), &tab);
+}
+
+pub fn load_split_active(project_id: &str) -> bool {
+    LocalStorage::get(&format!("codedroid_split_active_{}", project_id)).unwrap_or(false)
+}
+
+pub fn save_split_active(project_id: &str, active: bool) {
+    let _ = LocalStorage::set(&format!("codedroid_split_active_{}", project_id), &active);
+}
+
+pub fn load_active_pane(project_id: &str) -> usize {
+    LocalStorage::get(&format!("codedroid_active_pane_{}", project_id)).unwrap_or(0)
+}
+
+pub fn save_active_pane(project_id: &str, pane: usize) {
+    let _ = LocalStorage::set(&format!("codedroid_active_pane_{}", project_id), &pane);
+}
+

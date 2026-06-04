@@ -863,4 +863,54 @@ pub async fn create_project_api(req: CreateProjectRequest) -> Result<CreateProje
         .map_err(|e| e.to_string())
 }
 
+#[derive(serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct LiveServerStatusResponse {
+    pub running: bool,
+    pub port: Option<u16>,
+    pub project_path: Option<String>,
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct LiveServerStopResponse {
+    pub success: bool,
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct LiveServerStartResponse {
+    pub port: u16,
+}
+
+pub async fn start_live_server_api(project_path: &str) -> Result<LiveServerStartResponse, String> {
+    let body = serde_json::json!({ "project_path": project_path });
+    Request::post(&format!("{}/live-server/start", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<LiveServerStartResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn stop_live_server_api() -> Result<LiveServerStopResponse, String> {
+    Request::post(&format!("{}/live-server/stop", get_api_url()))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<LiveServerStopResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn get_live_server_status_api() -> Result<LiveServerStatusResponse, String> {
+    Request::get(&format!("{}/live-server/status", get_api_url()))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<LiveServerStatusResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
 

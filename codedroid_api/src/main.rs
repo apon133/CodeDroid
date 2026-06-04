@@ -13,6 +13,7 @@ mod models;
 mod runner;
 mod terminal;
 mod utils;
+mod live_server;
 
 use handlers::{
     add_package, copy_file, create_dir, create_project, delete_file, format_code, get_completions, get_definition,
@@ -51,6 +52,7 @@ async fn main() {
         .route("/ping", get(|| async { "pong" }))
         .nest("/terminal", terminal::router())
         .nest("/git", git::router())
+        .nest("/live-server", live_server::router())
         .layer(CorsLayer::permissive());
 
     let addr = "0.0.0.0:3000";

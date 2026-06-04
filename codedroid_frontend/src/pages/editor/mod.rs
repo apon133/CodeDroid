@@ -81,6 +81,9 @@ pub fn EditorPage() -> impl IntoView {
     let left_dirty = RwSignal::new(false);
     let right_dirty = RwSignal::new(false);
 
+    let live_server_port = RwSignal::new(None::<u16>);
+    let live_server_running = RwSignal::new(false);
+
     let git_status = RwSignal::new(None::<api::GitStatusResponse>);
     let left_git_diff_lines = RwSignal::new(None::<api::GitDiffLinesResponse>);
     let right_git_diff_lines = RwSignal::new(None::<api::GitDiffLinesResponse>);
@@ -604,6 +607,19 @@ pub fn EditorPage() -> impl IntoView {
             store::save_sidebar_mode(&project_id, sidebar_mode.get());
             store::save_chat_open(&project_id, chat_open.get());
             store::save_bottom_open(&project_id, bottom_open.get());
+        }
+    });
+
+    Effect::new({
+        let live_port = live_server_port.clone();
+        let live_running = live_server_running.clone();
+        move |_| {
+            spawn_local(async move {
+                if let Ok(res) = api::get_live_server_status_api().await {
+                    live_running.set(res.running);
+                    live_port.set(res.port);
+                }
+            });
         }
     });
 
@@ -1438,6 +1454,65 @@ pub fn EditorPage() -> impl IntoView {
                     }}
                 </div>
                 <div class="status-bar-right">
+                    {move || {
+                        let is_html = active_tab.get().as_ref().map_or(false, |tab| tab.ends_with(".html") || tab.ends_with(".htm"));
+                        if is_html {
+                            let running = live_server_running.get();
+                            let port = live_server_port.get();
+                            
+                            let onclick = {
+                                let project_path = project.path.clone();
+                                let live_port = live_server_port.clone();
+                                let live_running = live_server_running.clone();
+                                let show_snack = show_snack.clone();
+                                let active_tab = active_tab.clone();
+                                move |_| {
+                                    let project_path = project_path.clone();
+                                    let live_port = live_port.clone();
+                                    let live_running = live_running.clone();
+                                    let show_snack = show_snack.clone();
+                                    let active_tab = active_tab.clone();
+                                    spawn_local(async move {
+                                        if running {
+                                            if let Ok(_) = api::stop_live_server_api().await {
+                                                live_running.set(false);
+                                                live_port.set(None);
+                                                show_snack.run("Live Server stopped.".to_string());
+                                            }
+                                        } else {
+                                            if let Ok(res) = api::start_live_server_api(&project_path).await {
+                                                live_running.set(true);
+                                                live_port.set(Some(res.port));
+                                                show_snack.run(format!("Live Server running at http://127.0.0.1:{}", res.port));
+                                                
+                                                if let Some(window) = web_sys::window() {
+                                                    let active_file = active_tab.get().unwrap_or_default();
+                                                    let rel_path = uri_to_relative(&active_file, &project_path);
+                                                    let url = format!("http://127.0.0.1:{}/{}", res.port, rel_path);
+                                                    let _ = window.open_with_url_and_target(&url, "_blank");
+                                                }
+                                            }
+                                        }
+                                    });
+                                }
+                            };
+                            
+                            view! {
+                                <div class=format!("status-bar-item status-bar-live {}", if running { "live-active" } else { "" })
+                                     on:click=onclick
+                                     title=if running { "Click to stop Live Server" } else { "Click to run Live Server" }>
+                                    <LucideIcon name="radio" size="14" />
+                                    {if running {
+                                        format!("Port: {}", port.unwrap_or(5500))
+                                    } else {
+                                        "Go Live".to_string()
+                                    }}
+                                </div>
+                            }.into_any()
+                        } else {
+                            view! {}.into_any()
+                        }
+                    }}
                     <div class="status-bar-item status-bar-cursor">
                         {move || {
                             let (line, col) = cursor_line_col.get();

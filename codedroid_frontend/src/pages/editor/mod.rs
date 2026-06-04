@@ -58,6 +58,8 @@ pub fn EditorPage() -> impl IntoView {
     let active_tab: RwSignal<Option<String>> = RwSignal::new(None);
     let code: RwSignal<String> = RwSignal::new(String::new());
     let dirty: RwSignal<bool> = RwSignal::new(false);
+    let left_markdown_preview = RwSignal::new(false);
+    let right_markdown_preview = RwSignal::new(false);
 
     // Load persisted tab/split states
     let left_tabs_init = store::load_open_tabs(&project.id);
@@ -1068,13 +1070,37 @@ pub fn EditorPage() -> impl IntoView {
                     <div class="editor-workspace">
                         <div class=move || if active_pane.get() == 0 { "editor-pane active" } else { "editor-pane" }
                             on:mousedown=move |_| { if active_pane.get_untracked() != 0 { active_pane.set(0); } }>
-                            <TabStrip 
-                                open_tabs=left_open_tabs.into()
-                                active_tab=left_active_tab.into()
-                                dirty=left_dirty.into()
-                                open_file=left_open_file
-                                close_tab=left_close_tab
-                            />
+                            <div class="editor-pane-header">
+                                <TabStrip 
+                                    open_tabs=left_open_tabs.into()
+                                    active_tab=left_active_tab.into()
+                                    dirty=left_dirty.into()
+                                    open_file=left_open_file
+                                    close_tab=left_close_tab
+                                />
+                                {move || {
+                                    let active = left_active_tab.get();
+                                    let is_md = active.as_ref().map_or(false, |tab| tab.ends_with(".md") || tab.ends_with(".markdown"));
+                                    if is_md {
+                                        let is_preview = left_markdown_preview.get();
+                                        view! {
+                                            <button 
+                                                class=format!("btn-pane-action {}", if is_preview { "active" } else { "" })
+                                                on:click=move |e| {
+                                                    e.stop_propagation();
+                                                    left_markdown_preview.update(|v| *v = !*v);
+                                                }
+                                                title=if is_preview { "Show Source" } else { "Open Preview" }
+                                            >
+                                                <LucideIcon name=if is_preview { "code" } else { "eye" } size="14" />
+                                                <span>{if is_preview { "Source" } else { "Preview" }}</span>
+                                            </button>
+                                        }.into_any()
+                                    } else {
+                                        view! {}.into_any()
+                                    }
+                                }}
+                            </div>
 
                             <SearchBar 
                                 show_search=show_search
@@ -1089,6 +1115,14 @@ pub fn EditorPage() -> impl IntoView {
                                         <LucideIcon name="code" size="48" class="empty-editor-icon" />
                                         <p>"No file open"</p>
                                         <span class="empty-editor-sub">"Select a file from the explorer to start editing"</span>
+                                    </div>
+                                }.into_any()
+                            } else if left_markdown_preview.get() && left_active_tab.get().as_ref().map_or(false, |tab| tab.ends_with(".md") || tab.ends_with(".markdown")) {
+                                let md_content = left_code.get();
+                                let html_content = render_markdown(&md_content, &project_path_str.get_value());
+                                view! {
+                                    <div class="markdown-preview-container">
+                                        <div class="markdown-body" inner_html=html_content></div>
                                     </div>
                                 }.into_any()
                             } else {
@@ -1126,13 +1160,37 @@ pub fn EditorPage() -> impl IntoView {
                         {move || split_active.get().then(|| view! {
                             <div class=move || if active_pane.get() == 1 { "editor-pane active" } else { "editor-pane" }
                                 on:mousedown=move |_| { if active_pane.get_untracked() != 1 { active_pane.set(1); } }>
-                                <TabStrip 
-                                    open_tabs=right_open_tabs.into()
-                                    active_tab=right_active_tab.into()
-                                    dirty=right_dirty.into()
-                                    open_file=right_open_file
-                                    close_tab=right_close_tab
-                                />
+                                <div class="editor-pane-header">
+                                    <TabStrip 
+                                        open_tabs=right_open_tabs.into()
+                                        active_tab=right_active_tab.into()
+                                        dirty=right_dirty.into()
+                                        open_file=right_open_file
+                                        close_tab=right_close_tab
+                                    />
+                                    {move || {
+                                        let active = right_active_tab.get();
+                                        let is_md = active.as_ref().map_or(false, |tab| tab.ends_with(".md") || tab.ends_with(".markdown"));
+                                        if is_md {
+                                            let is_preview = right_markdown_preview.get();
+                                            view! {
+                                                <button 
+                                                    class=format!("btn-pane-action {}", if is_preview { "active" } else { "" })
+                                                    on:click=move |e| {
+                                                        e.stop_propagation();
+                                                        right_markdown_preview.update(|v| *v = !*v);
+                                                    }
+                                                    title=if is_preview { "Show Source" } else { "Open Preview" }
+                                                >
+                                                    <LucideIcon name=if is_preview { "code" } else { "eye" } size="14" />
+                                                    <span>{if is_preview { "Source" } else { "Preview" }}</span>
+                                                </button>
+                                            }.into_any()
+                                        } else {
+                                            view! {}.into_any()
+                                        }
+                                    }}
+                                </div>
 
                                 <SearchBar 
                                     show_search=show_search
@@ -1147,6 +1205,14 @@ pub fn EditorPage() -> impl IntoView {
                                             <LucideIcon name="code" size="48" class="empty-editor-icon" />
                                             <p>"No file open"</p>
                                             <span class="empty-editor-sub">"Select a file from the explorer to start editing"</span>
+                                        </div>
+                                    }.into_any()
+                                } else if right_markdown_preview.get() && right_active_tab.get().as_ref().map_or(false, |tab| tab.ends_with(".md") || tab.ends_with(".markdown")) {
+                                    let md_content = right_code.get();
+                                    let html_content = render_markdown(&md_content, &project_path_str.get_value());
+                                    view! {
+                                        <div class="markdown-preview-container">
+                                            <div class="markdown-body" inner_html=html_content></div>
                                         </div>
                                     }.into_any()
                                 } else {

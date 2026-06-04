@@ -883,3 +883,45 @@ pub fn update_cursor_coords(val: &str, start: u32) -> Option<(f64, f64)> {
         None
     }
 }
+
+pub fn render_markdown(md: &str, project_path: &str) -> String {
+    let mut options = pulldown_cmark::Options::empty();
+    options.insert(pulldown_cmark::Options::ENABLE_TABLES);
+    options.insert(pulldown_cmark::Options::ENABLE_FOOTNOTES);
+    options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
+    options.insert(pulldown_cmark::Options::ENABLE_TASKLISTS);
+    options.insert(pulldown_cmark::Options::ENABLE_HEADING_ATTRIBUTES);
+    
+    let parser = pulldown_cmark::Parser::new_ext(md, options);
+    let mut html_output = String::new();
+    pulldown_cmark::html::push_html(&mut html_output, parser);
+
+    // Rewrite relative image source paths to route through our backend API file endpoint
+    if let Ok(re) = regex::Regex::new(r#"(<img\b[^>]*?\bsrc\s*=\s*["'])([^"'\s]+)(["'])"#) {
+        let api_url = api::get_api_url();
+        let encoded_project_path = js_sys::encode_uri_component(project_path);
+        
+        let result = re.replace_all(&html_output, |caps: &regex::Captures| {
+            let prefix = &caps[1];
+            let src = &caps[2];
+            let suffix = &caps[3];
+            
+            // Check if it is already an absolute/external url or data URI
+            if src.starts_with("http://") 
+                || src.starts_with("https://") 
+                || src.starts_with("data:") 
+                || src.starts_with('/') 
+            {
+                format!("{}{}{}", prefix, src, suffix)
+            } else {
+                let encoded_rel_path = js_sys::encode_uri_component(src);
+                let new_src = format!("{}/file?project_path={}&rel_path={}", api_url, encoded_project_path, encoded_rel_path);
+                format!("{}{}{}", prefix, new_src, suffix)
+            }
+        });
+        return result.into_owned();
+    }
+    
+    html_output
+}
+

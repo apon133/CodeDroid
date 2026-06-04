@@ -11,6 +11,7 @@ use std::path::Path;
 use crate::runner::*;
 use crate::utils::resolve_project_dir;
 use axum::Json;
+use axum::response::IntoResponse;
 use std::fs;
 use std::io::Read;
 use std::process::{Command, Stdio};
@@ -2054,6 +2055,62 @@ pub async fn create_project(
     })
 }
 
+pub async fn serve_raw_file(axum::extract::Query(params): axum::extract::Query<RawFileParams>) -> impl axum::response::IntoResponse {
+    let project_dir = resolve_project_dir(&params.project_path);
+    let file_path = Path::new(&project_dir).join(&params.rel_path);
+    
+    // Security check to avoid directory traversal
+    let canonical_project_dir = match fs::canonicalize(&project_dir) {
+        Ok(p) => p,
+        Err(_) => return (axum::http::StatusCode::NOT_FOUND, "Project directory not found").into_response(),
+    };
+    
+    let canonical_file_path = match fs::canonicalize(&file_path) {
+        Ok(p) => p,
+        Err(_) => return (axum::http::StatusCode::NOT_FOUND, "File not found").into_response(),
+    };
+    
+    if !canonical_file_path.starts_with(&canonical_project_dir) {
+        return (axum::http::StatusCode::FORBIDDEN, "Access denied").into_response();
+    }
+
+    match fs::read(&canonical_file_path) {
+        Ok(bytes) => {
+            let ext = canonical_file_path.extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            let mime_type = match ext.as_str() {
+                "png" => "image/png",
+                "jpg" | "jpeg" => "image/jpeg",
+                "gif" => "image/gif",
+                "webp" => "image/webp",
+                "svg" => "image/svg+xml",
+                "css" => "text/css",
+                "js" => "application/javascript",
+                "html" => "text/html",
+                "pdf" => "application/pdf",
+                _ => "application/octet-stream",
+            };
+            
+            (
+                axum::http::StatusCode::OK,
+                [
+                    (axum::http::header::CONTENT_TYPE, mime_type),
+                    (axum::http::header::CACHE_CONTROL, "public, max-age=31536000"),
+                ],
+                bytes,
+            ).into_response()
+        }
+        Err(_) => (axum::http::StatusCode::NOT_FOUND, "Failed to read file").into_response(),
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct RawFileParams {
+    pub project_path: String,
+    pub rel_path: String,
+}
 
 #[cfg(test)]
 mod tests {

@@ -873,9 +873,11 @@ pub fn update_cursor_coords(val: &str, start: u32) -> Option<(f64, f64)> {
         span.set_text_content(Some("|"));
         mirror.append_child(&span).ok()?;
         let span_el = span.dyn_into::<web_sys::HtmlElement>().ok()?;
+        let container = textarea.parent_element()?;
+        let rect = container.get_bounding_client_rect();
         Some((
-            span_el.offset_left() as f64 - scroll_left,
-            span_el.offset_top() as f64 + 20.0 - scroll_top,
+            rect.left() + span_el.offset_left() as f64 - scroll_left,
+            rect.top() + span_el.offset_top() as f64 + 20.0 - scroll_top,
         ))
     } else {
         None

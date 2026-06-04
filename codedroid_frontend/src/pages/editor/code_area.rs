@@ -194,8 +194,8 @@ pub fn EditorCodeArea(
                                         hover_visible.set(true);
                                         hover_error.set(None);
 
-                                        let card_x = mouse_x - rect.left();
-                                        let card_y = mouse_y - rect.top() + 20.0;
+                                        let card_x = mouse_x;
+                                        let card_y = mouse_y + 20.0;
                                         hover_coords.set((card_x, card_y));
 
                                         if is_word_char {

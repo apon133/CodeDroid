@@ -925,3 +925,22 @@ pub fn render_markdown(md: &str, project_path: &str) -> String {
     html_output
 }
 
+pub fn is_media_file(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    lower.ends_with(".png")
+        || lower.ends_with(".jpg")
+        || lower.ends_with(".jpeg")
+        || lower.ends_with(".gif")
+        || lower.ends_with(".webp")
+        || lower.ends_with(".svg")
+        || lower.ends_with(".mp4")
+        || lower.ends_with(".webm")
+        || lower.ends_with(".ogg")
+        || lower.ends_with(".mov")
+        || lower.ends_with(".mp3")
+        || lower.ends_with(".wav")
+        || lower.ends_with(".aac")
+        || lower.ends_with(".m4a")
+}
+
+

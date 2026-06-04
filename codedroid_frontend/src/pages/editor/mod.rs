@@ -1125,6 +1125,45 @@ pub fn EditorPage() -> impl IntoView {
                                         <div class="markdown-body" inner_html=html_content></div>
                                     </div>
                                 }.into_any()
+                            } else if left_active_tab.get().as_ref().map_or(false, |tab| is_media_file(tab)) {
+                                let tab_name = left_active_tab.get().unwrap();
+                                let ppath = project_path_str.get_value();
+                                let api_url = api::get_api_url();
+                                let encoded_project_path = js_sys::encode_uri_component(&ppath);
+                                let encoded_rel_path = js_sys::encode_uri_component(&tab_name);
+                                let src_url = format!("{}/file?project_path={}&rel_path={}", api_url, encoded_project_path, encoded_rel_path);
+                                let lower = tab_name.to_lowercase();
+                                
+                                view! {
+                                    <div class="media-viewer-container">
+                                        <div class="media-viewer-card">
+                                            {if lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg") || lower.ends_with(".gif") || lower.ends_with(".webp") || lower.ends_with(".svg") {
+                                                view! { <img src=src_url.clone() alt="Image preview" class="media-img" /> }.into_any()
+                                            } else if lower.ends_with(".mp4") || lower.ends_with(".webm") || lower.ends_with(".ogg") || lower.ends_with(".mov") {
+                                                view! { <video controls=true src=src_url.clone() class="media-video"></video> }.into_any()
+                                            } else if lower.ends_with(".mp3") || lower.ends_with(".wav") || lower.ends_with(".aac") || lower.ends_with(".m4a") {
+                                                view! {
+                                                    <div class="audio-card-content" style="display: flex; flex-direction: column; align-items: center; width: 100%;">
+                                                        <div class="audio-icon-wrapper">
+                                                            <LucideIcon name="music" size="48" class="audio-icon" />
+                                                        </div>
+                                                        <audio controls=true src=src_url.clone() class="media-audio"></audio>
+                                                    </div>
+                                                }.into_any()
+                                            } else {
+                                                view! {
+                                                    <div class="unsupported-viewer">
+                                                        <LucideIcon name="alert-triangle" size="48" class="unsupported-icon" />
+                                                        <p>"Unsupported media format"</p>
+                                                    </div>
+                                                }.into_any()
+                                            }}
+                                            <div class="media-metadata">
+                                                <span class="media-filename">{tab_name}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }.into_any()
                             } else {
                                 view! {
                                     <EditorCodeArea
@@ -1213,6 +1252,45 @@ pub fn EditorPage() -> impl IntoView {
                                     view! {
                                         <div class="markdown-preview-container">
                                             <div class="markdown-body" inner_html=html_content></div>
+                                        </div>
+                                    }.into_any()
+                                } else if right_active_tab.get().as_ref().map_or(false, |tab| is_media_file(tab)) {
+                                    let tab_name = right_active_tab.get().unwrap();
+                                    let ppath = project_path_str.get_value();
+                                    let api_url = api::get_api_url();
+                                    let encoded_project_path = js_sys::encode_uri_component(&ppath);
+                                    let encoded_rel_path = js_sys::encode_uri_component(&tab_name);
+                                    let src_url = format!("{}/file?project_path={}&rel_path={}", api_url, encoded_project_path, encoded_rel_path);
+                                    let lower = tab_name.to_lowercase();
+                                    
+                                    view! {
+                                        <div class="media-viewer-container">
+                                            <div class="media-viewer-card">
+                                                {if lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg") || lower.ends_with(".gif") || lower.ends_with(".webp") || lower.ends_with(".svg") {
+                                                    view! { <img src=src_url.clone() alt="Image preview" class="media-img" /> }.into_any()
+                                                } else if lower.ends_with(".mp4") || lower.ends_with(".webm") || lower.ends_with(".ogg") || lower.ends_with(".mov") {
+                                                    view! { <video controls=true src=src_url.clone() class="media-video"></video> }.into_any()
+                                                } else if lower.ends_with(".mp3") || lower.ends_with(".wav") || lower.ends_with(".aac") || lower.ends_with(".m4a") {
+                                                    view! {
+                                                        <div class="audio-card-content" style="display: flex; flex-direction: column; align-items: center; width: 100%;">
+                                                            <div class="audio-icon-wrapper">
+                                                                <LucideIcon name="music" size="48" class="audio-icon" />
+                                                            </div>
+                                                            <audio controls=true src=src_url.clone() class="media-audio"></audio>
+                                                        </div>
+                                                    }.into_any()
+                                                } else {
+                                                    view! {
+                                                        <div class="unsupported-viewer">
+                                                            <LucideIcon name="alert-triangle" size="48" class="unsupported-icon" />
+                                                            <p>"Unsupported media format"</p>
+                                                        </div>
+                                                    }.into_any()
+                                                }}
+                                                <div class="media-metadata">
+                                                    <span class="media-filename">{tab_name}</span>
+                                                </div>
+                                            </div>
                                         </div>
                                     }.into_any()
                                 } else {

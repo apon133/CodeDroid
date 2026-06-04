@@ -1,5 +1,5 @@
 use crate::api;
-use crate::pages::editor::utils::is_absolute_path;
+use crate::pages::editor::utils::{is_absolute_path, is_media_file};
 use crate::store;
 use gloo_storage::Storage;
 use leptos::prelude::*;
@@ -15,6 +15,17 @@ pub fn make_open_file(
     trigger_diagnostics: Callback<String>,
 ) -> Callback<String> {
     Callback::new(move |name: String| {
+        if is_media_file(&name) {
+            open_tabs.update(|t| {
+                if !t.contains(&name) {
+                    t.push(name.clone());
+                }
+            });
+            active_tab.set(Some(name.clone()));
+            code.set(String::new());
+            dirty.set(false);
+            return;
+        }
         if name.starts_with("agent-diff://") {
             open_tabs.update(|t| {
                 if !t.contains(&name) {

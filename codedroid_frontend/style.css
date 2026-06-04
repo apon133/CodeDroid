@@ -4297,4 +4297,116 @@ body.dragging-panel iframe {
   background-color: transparent;
 }
 
+/* Media Viewer Styling */
+.media-viewer-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-dark, #0d0e12);
+  padding: 24px;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+.media-viewer-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: var(--bg-secondary, #151821);
+  border: 1px solid var(--border, #262936);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  max-width: 90%;
+  max-height: 90%;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.media-viewer-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.media-img {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: 8px;
+  background-image: linear-gradient(45deg, #151821 25%, transparent 25%),
+                    linear-gradient(-45deg, #151821 25%, transparent 25%),
+                    linear-gradient(45deg, transparent 75%, #151821 75%),
+                    linear-gradient(-45deg, transparent 75%, #151821 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  background-color: #1a1e2a;
+  border: 1px solid var(--border, #262936);
+}
+
+.media-video {
+  max-width: 100%;
+  max-height: 70vh;
+  border-radius: 8px;
+  outline: none;
+  background-color: #000;
+  border: 1px solid var(--border, #262936);
+}
+
+.audio-card {
+  width: 100%;
+  max-width: 480px;
+  padding: 32px 24px;
+}
+
+.audio-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);
+  border-radius: 50%;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 24px rgba(79, 70, 229, 0.3);
+}
+
+.audio-icon {
+  color: #fff;
+}
+
+.media-audio {
+  width: 100%;
+  margin-top: 8px;
+  outline: none;
+}
+
+.media-metadata {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.media-filename {
+  font-family: var(--font-mono, monospace);
+  font-size: 14px;
+  color: var(--text-primary, #e2e8f0);
+  background-color: var(--bg-primary, #090b10);
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border, #262936);
+  word-break: break-all;
+}
+
+.unsupported-viewer {
+  color: var(--text-secondary, #94a3b8);
+  font-size: 16px;
+  text-align: center;
+}
+
+.unsupported-icon {
+  color: var(--warning, #f59e0b);
+  margin-bottom: 12px;
+}
+
 

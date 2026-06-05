@@ -14,6 +14,7 @@ pub mod suggestions;
 pub mod utils;
 pub mod git_panel;
 pub mod agent_panel;
+pub mod outline;
 
 use crate::api;
 use crate::components::icon::LucideIcon;
@@ -22,6 +23,7 @@ use crate::models::{lang_icon, Project, Settings};
 use crate::store;
 use git_panel::GitPanel;
 use agent_panel::AgentPanel;
+use outline::OutlinePanel;
 use code_area::EditorCodeArea;
 use components::*;
 use operations::*;
@@ -992,6 +994,24 @@ pub fn EditorPage() -> impl IntoView {
                         </button>
 
                         <button 
+                            class=move || {
+                                let active = sidebar_open.get() && sidebar_mode.get() == 3;
+                                if active { "activity-btn active" } else { "activity-btn" }
+                            }
+                            title="Outline"
+                            on:click=move |_| {
+                                if sidebar_open.get() && sidebar_mode.get() == 3 {
+                                    sidebar_open.set(false);
+                                } else {
+                                    sidebar_mode.set(3);
+                                    sidebar_open.set(true);
+                                }
+                            }
+                        >
+                            <LucideIcon name="list" size="22" />
+                        </button>
+
+                        <button 
                             class="activity-btn"
                             title="Package Manager (Dependencies)"
                             on:click=move |_| show_deps.set(true)
@@ -1073,7 +1093,24 @@ pub fn EditorPage() -> impl IntoView {
                                 />
                             }.into_any()
                         }
-                        3 => view! {}.into_any(),
+                        3 => {
+                            let ppath = sidebar_ppath.clone();
+                            let show_snack = show_snack.clone();
+                            let close_sidebar = Callback::new(move |_: ()| sidebar_open.set(false));
+                            view! {
+                                <OutlinePanel
+                                    project_path=ppath
+                                    active_tab=active_tab
+                                    code=code
+                                    cursor_pos=cursor_pos
+                                    cursor_coords=cursor_coords
+                                    check_error_at_cursor=check_error_at_cursor
+                                    show_snack=show_snack
+                                    sidebar_open=sidebar_open.into()
+                                    close_sidebar=close_sidebar
+                                />
+                            }.into_any()
+                        }
                         _ => view! {}.into_any()
                     }
                 }}

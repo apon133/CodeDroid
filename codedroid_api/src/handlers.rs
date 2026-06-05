@@ -5,7 +5,7 @@ use crate::models::{
     DeleteRequest, FileInfo, FormatRequest, FormatResponse, HoverRequest, HoverResponse,
     MoveRequest, PackageRequest, PackageResponse, ReadFileRequest, ReadFileResponse,
     ReferencesRequest, ReferencesResponse, ScanProjectRequest, ScanProjectResponse, StopRequest,
-    SyncRequest, CreateProjectRequest, CreateProjectResponse,
+    SyncRequest, CreateProjectRequest, CreateProjectResponse, SymbolsRequest, SymbolsResponse,
 };
 use std::path::Path;
 use crate::runner::*;
@@ -1032,6 +1032,112 @@ pub async fn format_code(Json(payload): Json<FormatRequest>) -> Json<FormatRespo
             error: Some(err),
         }),
     }
+}
+
+pub async fn get_symbols(Json(payload): Json<SymbolsRequest>) -> Json<SymbolsResponse> {
+    let lang = payload.language.to_lowercase();
+    println!("🔍 Symbols requested for {}", lang);
+
+    let project_dir = resolve_project_dir(&payload.project_path);
+    let file_uri = if let Some(ref rel_path) = payload.file_path {
+        format!("file://{}/{}", project_dir, rel_path)
+    } else {
+        match lang.as_str() {
+            "rust" => format!("file://{}/src/main.rs", project_dir),
+            "python" => format!("file://{}/main.py", project_dir),
+            "javascript" => format!("file://{}/main.js", project_dir),
+            "typescript" => format!("file://{}/main.ts", project_dir),
+            "jsx" => format!("file://{}/main.jsx", project_dir),
+            "tsx" => format!("file://{}/main.tsx", project_dir),
+            "go" => format!("file://{}/main.go", project_dir),
+            "c" => format!("file://{}/main.c", project_dir),
+            "cpp" => format!("file://{}/main.cpp", project_dir),
+            "java" => format!("file://{}/main.java", project_dir),
+            "dart" => format!("file://{}/lib/main.dart", project_dir),
+            "ruby" => format!("file://{}/main.rb", project_dir),
+            "kotlin" => format!("file://{}/main.kt", project_dir),
+            "swift" => format!("file://{}/main.swift", project_dir),
+            "html" => format!("file://{}/index.html", project_dir),
+            "css" => format!("file://{}/style.css", project_dir),
+            "vue" => format!("file://{}/Component.vue", project_dir),
+            "svelte" => format!("file://{}/Component.svelte", project_dir),
+            _ => format!("file://{}/main.txt", project_dir),
+        }
+    };
+
+    let jdtls_data = format!("{}/.jdtls_data", project_dir);
+    let lsp_cmd = match lang.as_str() {
+        "rust" => Some(("rust-analyzer", vec![])),
+        "python" => Some(("pylsp", vec![])),
+        "javascript" | "typescript" | "jsx" | "tsx" => {
+            Some(("typescript-language-server", vec!["--stdio"]))
+        }
+        "go" => Some(("gopls", vec![])),
+        "c" | "cpp" => Some(("clangd", vec![])),
+        "dart" => Some(("dart", vec!["language-server"])),
+        "ruby" => Some(("solargraph", vec!["stdio"])),
+        "kotlin" => Some(("kotlin-language-server", vec![])),
+        "java" => Some(("jdtls", vec!["-data", &jdtls_data])),
+        "swift" => Some(("sourcekit-lsp", vec![])),
+        "html" => Some(("vscode-html-language-server", vec!["--stdio"])),
+        "css" => Some(("vscode-css-language-server", vec!["--stdio"])),
+        "vue" => Some(("vue-language-server", vec!["--stdio"])),
+        "svelte" => Some(("svelteserver", vec!["--stdio"])),
+        _ => None,
+    };
+
+    let mut symbols = vec![];
+
+    if let Some((cmd, args)) = lsp_cmd {
+        let servers_arc = lsp::get_servers();
+        let mut servers = servers_arc.lock().unwrap();
+        if !servers.contains_key(&lang) {
+            let root_uri = format!("file://{}", project_dir);
+            let final_cmd = crate::utils::resolve_lsp_executable(&lang, cmd);
+
+            println!(
+                "🚀 Starting LSP server for symbols: {} (root: {})",
+                final_cmd, root_uri
+            );
+            match lsp::LspClient::new(&final_cmd, &args, Some(&root_uri)) {
+                Ok(client) => {
+                    servers.insert(lang.clone(), client);
+                }
+                Err(e) => {
+                    println!("❌ Failed to start LSP server for {}: {}", lang, e);
+                }
+            }
+        }
+
+        if let Some(client) = servers.get_mut(&lang) {
+            if let Some(ref rel_path) = payload.file_path {
+                let dest_path = format!("{}/{}", project_dir, rel_path);
+                if let Some(parent) = std::path::Path::new(&dest_path).parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                let _ = fs::write(&dest_path, &payload.code);
+            }
+
+            match client.get_symbols(&file_uri, &payload.code, &lang) {
+                Ok(mut syms) => {
+                    symbols.append(&mut syms);
+                }
+                Err(e) => {
+                    println!("❌ LSP get_symbols failed for {}: {}", lang, e);
+                    if e.to_string().contains("Broken pipe") {
+                        println!("🔌 Connection lost for {}, removing from cache...", lang);
+                        servers.remove(&lang);
+                    }
+                }
+            }
+        }
+    }
+
+    if symbols.is_empty() {
+        symbols = lsp::fallback_symbols(&payload.code, &lang);
+    }
+
+    Json(SymbolsResponse { symbols })
 }
 
 pub async fn get_definition(Json(payload): Json<DefinitionRequest>) -> Json<DefinitionResponse> {

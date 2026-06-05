@@ -4716,5 +4716,34 @@ body.dragging-panel iframe {
   to { transform: translateY(0); }
 }
 
+/* ── Outline Panel ── */
+.outline-panel {
+  background: var(--bg2);
+}
+
+.outline-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.outline-item {
+  position: relative;
+  transition: all 0.15s ease;
+  border-left: 2px solid transparent !important;
+}
+
+.outline-item:hover {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+.outline-item:active {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.outline-item:focus {
+  background: rgba(255, 255, 255, 0.04) !important;
+  outline: none;
+}
+
 
 

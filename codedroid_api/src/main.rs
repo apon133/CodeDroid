@@ -18,7 +18,7 @@ mod live_server;
 use handlers::{
     add_package, copy_file, create_dir, create_project, delete_file, format_code, get_completions, get_definition,
     get_hover, get_references, move_file, pick_directory, read_file, run_code, run_command,
-    scan_project, stop_process, sync_file, serve_raw_file,
+    scan_project, stop_process, sync_file, serve_raw_file, get_symbols,
 };
 
 
@@ -41,6 +41,7 @@ async fn main() {
         .route("/format", post(format_code))
         .route("/read_file", post(read_file))
         .route("/hover", post(get_hover))
+        .route("/symbols", post(get_symbols))
         .route("/scan_project", post(scan_project))
         .route("/pick_directory", post(pick_directory))
         .route("/file", get(serve_raw_file))

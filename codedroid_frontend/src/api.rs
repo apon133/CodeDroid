@@ -1140,4 +1140,41 @@ pub async fn get_live_server_status_api() -> Result<LiveServerStatusResponse, St
         .map_err(|e| e.to_string())
 }
 
+#[derive(serde::Deserialize, serde::Serialize, Clone, Debug, PartialEq)]
+pub struct DocumentSymbolResponse {
+    pub name: String,
+    pub kind: u32,
+    pub line: u32,
+    pub character: u32,
+    pub container_name: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct SymbolsResponse {
+    pub symbols: Vec<DocumentSymbolResponse>,
+}
+
+pub async fn get_symbols_api(
+    code: &str,
+    language: &str,
+    project_path: &str,
+    file_path: Option<&str>,
+) -> Result<SymbolsResponse, String> {
+    let body = serde_json::json!({
+        "code": code,
+        "language": language,
+        "project_path": project_path,
+        "file_path": file_path,
+    });
+    Request::post(&format!("{}/symbols", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<SymbolsResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
 

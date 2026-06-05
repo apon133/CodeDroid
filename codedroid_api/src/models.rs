@@ -204,3 +204,16 @@ pub struct CreateProjectResponse {
     pub error: String,
 }
 
+#[derive(Deserialize)]
+pub struct SymbolsRequest {
+    pub code: String,
+    pub language: String,
+    pub project_path: String,
+    pub file_path: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct SymbolsResponse {
+    pub symbols: Vec<lsp::DocumentSymbolResponse>,
+}
+

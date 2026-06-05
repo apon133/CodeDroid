@@ -36,6 +36,16 @@ pub struct Diagnostic {
     pub file: Option<String>,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct DocumentSymbolResponse {
+    pub name: String,
+    pub kind: u32,
+    pub line: u32,
+    pub character: u32,
+    #[serde(rename = "containerName")]
+    pub container_name: Option<String>,
+}
+
 pub fn get_servers() -> Arc<Mutex<HashMap<String, LspClient>>> {
     LSP_SERVERS
         .get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
@@ -221,7 +231,8 @@ impl LspClient {
                         "hover": { "dynamicRegistration": true },
                         "signatureHelp": { "dynamicRegistration": true },
                         "definition": { "dynamicRegistration": true },
-                        "references": { "dynamicRegistration": true }
+                        "references": { "dynamicRegistration": true },
+                        "documentSymbol": { "dynamicRegistration": true, "hierarchicalDocumentSymbolSupport": true }
                     },
                     "workspace": {
                         "workspaceEdit": { "documentChanges": true },
@@ -551,6 +562,51 @@ impl LspClient {
         Ok(None)
     }
 
+    pub fn get_symbols(
+        &mut self,
+        file_uri: &str,
+        code: &str,
+        lang: &str,
+    ) -> std::io::Result<Vec<DocumentSymbolResponse>> {
+        self.notify_file_changed(file_uri, code, lang)?;
+
+        let req_id = self.req_id;
+        let req = json!({
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "method": "textDocument/documentSymbol",
+            "params": {
+                "textDocument": {
+                    "uri": file_uri
+                }
+            }
+        });
+        self.send_request(&req)?;
+        self.req_id += 1;
+
+        let mut symbols = Vec::new();
+        let mut got_response = false;
+        if let Some(resp) = self.wait_for_response(req_id) {
+            let result = &resp["result"];
+            if !result.is_null() {
+                got_response = true;
+                if let Some(arr) = result.as_array() {
+                    for item in arr {
+                        parse_symbol_item(item, &mut symbols, None);
+                    }
+                }
+            }
+        } else {
+            println!("   ⚠️ LSP timed out for documentSymbol request {}", req_id);
+        }
+
+        if !got_response || symbols.is_empty() {
+            symbols = fallback_symbols(code, lang);
+        }
+
+        Ok(symbols)
+    }
+
     pub fn notify_file_changed(
         &mut self,
         file_uri: &str,
@@ -741,6 +797,260 @@ fn parse_location(val: &Value) -> Option<Location> {
                 uri: uri.to_string(),
                 range,
             });
+        }
+    }
+    None
+}
+
+fn parse_symbol_item(val: &Value, list: &mut Vec<DocumentSymbolResponse>, container_name: Option<String>) {
+    if let Some(name) = val["name"].as_str() {
+        let kind = val["kind"].as_u64().unwrap_or(0) as u32;
+        
+        let (line, character) = if let Some(range_val) = val.get("range") {
+            let start = &range_val["start"];
+            (start["line"].as_u64().unwrap_or(0) as u32, start["character"].as_u64().unwrap_or(0) as u32)
+        } else if let Some(loc_val) = val.get("location") {
+            let start = &loc_val["range"]["start"];
+            (start["line"].as_u64().unwrap_or(0) as u32, start["character"].as_u64().unwrap_or(0) as u32)
+        } else {
+            (0, 0)
+        };
+
+        let current_container = val["containerName"]
+            .as_str()
+            .map(|s| s.to_string())
+            .or(container_name.clone());
+
+        list.push(DocumentSymbolResponse {
+            name: name.to_string(),
+            kind,
+            line,
+            character,
+            container_name: current_container.clone(),
+        });
+
+        if let Some(children) = val["children"].as_array() {
+            let next_container = if current_container.is_some() {
+                format!("{}.{}", current_container.as_ref().unwrap(), name)
+            } else {
+                name.to_string()
+            };
+            for child in children {
+                parse_symbol_item(child, list, Some(next_container.clone()));
+            }
+        }
+    }
+}
+
+pub fn fallback_symbols(code: &str, lang: &str) -> Vec<DocumentSymbolResponse> {
+    let mut symbols = Vec::new();
+    let lang_lower = lang.to_lowercase();
+    
+    for (i, line) in code.lines().enumerate() {
+        let line_trimmed = line.trim();
+        if line_trimmed.is_empty() {
+            continue;
+        }
+        
+        match lang_lower.as_str() {
+            "rust" => {
+                if line_trimmed.starts_with("fn ") || line_trimmed.contains(" fn ") {
+                    if let Some(name) = extract_rust_name(line_trimmed, "fn") {
+                        symbols.push(DocumentSymbolResponse {
+                            name,
+                            kind: 12, // Function
+                            line: i as u32,
+                            character: line.find("fn").unwrap_or(0) as u32,
+                            container_name: None,
+                        });
+                    }
+                } else if line_trimmed.starts_with("struct ") || line_trimmed.contains(" struct ") {
+                    if let Some(name) = extract_rust_name(line_trimmed, "struct") {
+                        symbols.push(DocumentSymbolResponse {
+                            name,
+                            kind: 23, // Struct
+                            line: i as u32,
+                            character: line.find("struct").unwrap_or(0) as u32,
+                            container_name: None,
+                        });
+                    }
+                } else if line_trimmed.starts_with("enum ") || line_trimmed.contains(" enum ") {
+                    if let Some(name) = extract_rust_name(line_trimmed, "enum") {
+                        symbols.push(DocumentSymbolResponse {
+                            name,
+                            kind: 10, // Enum
+                            line: i as u32,
+                            character: line.find("enum").unwrap_or(0) as u32,
+                            container_name: None,
+                        });
+                    }
+                } else if line_trimmed.starts_with("impl") {
+                    let parts: Vec<&str> = line_trimmed.split_whitespace().collect();
+                    if parts.len() >= 2 {
+                        let impl_name = parts[1..].join(" ").trim_end_matches('{').trim().to_string();
+                        symbols.push(DocumentSymbolResponse {
+                            name: format!("impl {}", impl_name),
+                            kind: 5, // Class/Implementation
+                            line: i as u32,
+                            character: 0,
+                            container_name: None,
+                        });
+                    }
+                } else if line_trimmed.starts_with("trait ") || line_trimmed.contains(" trait ") {
+                    if let Some(name) = extract_rust_name(line_trimmed, "trait") {
+                        symbols.push(DocumentSymbolResponse {
+                            name,
+                            kind: 11, // Interface/Trait
+                            line: i as u32,
+                            character: line.find("trait").unwrap_or(0) as u32,
+                            container_name: None,
+                        });
+                    }
+                }
+            }
+            "python" => {
+                if line_trimmed.starts_with("def ") {
+                    if let Some(name) = line_trimmed.strip_prefix("def ") {
+                        let name = name.split('(').next().unwrap_or(name).trim().to_string();
+                        let kind = if line.starts_with(' ') || line.starts_with('\t') {
+                            6 // Method
+                        } else {
+                            12 // Function
+                        };
+                        symbols.push(DocumentSymbolResponse {
+                            name,
+                            kind,
+                            line: i as u32,
+                            character: (line.len() - line_trimmed.len()) as u32,
+                            container_name: None,
+                        });
+                    }
+                } else if line_trimmed.starts_with("class ") {
+                    if let Some(name) = line_trimmed.strip_prefix("class ") {
+                        let name = name.split('(').next().unwrap_or(name).split(':').next().unwrap_or(name).trim().to_string();
+                        symbols.push(DocumentSymbolResponse {
+                            name,
+                            kind: 5, // Class
+                            line: i as u32,
+                            character: (line.len() - line_trimmed.len()) as u32,
+                            container_name: None,
+                        });
+                    }
+                }
+            }
+            "javascript" | "typescript" | "jsx" | "tsx" => {
+                if line_trimmed.starts_with("function ") || line_trimmed.contains(" function ") {
+                    if let Some(name) = extract_js_name(line_trimmed, "function") {
+                        symbols.push(DocumentSymbolResponse {
+                            name,
+                            kind: 12, // Function
+                            line: i as u32,
+                            character: line.find("function").unwrap_or(0) as u32,
+                            container_name: None,
+                        });
+                    }
+                } else if line_trimmed.starts_with("class ") || line_trimmed.contains(" class ") {
+                    if let Some(name) = extract_js_name(line_trimmed, "class") {
+                        symbols.push(DocumentSymbolResponse {
+                            name,
+                            kind: 5, // Class
+                            line: i as u32,
+                            character: line.find("class").unwrap_or(0) as u32,
+                            container_name: None,
+                        });
+                    }
+                } else if line_trimmed.starts_with("const ") || line_trimmed.starts_with("let ") || line_trimmed.starts_with("var ") {
+                    if line_trimmed.contains("=>") {
+                        let parts: Vec<&str> = line_trimmed.split('=').collect();
+                        if !parts.is_empty() {
+                            let decl = parts[0].trim();
+                            let name = decl.split_whitespace().last().unwrap_or("").trim();
+                            if !name.is_empty() {
+                                symbols.push(DocumentSymbolResponse {
+                                    name: name.to_string(),
+                                    kind: 12, // Function (Arrow Function)
+                                    line: i as u32,
+                                    character: (line.len() - line_trimmed.len()) as u32,
+                                    container_name: None,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            "go" => {
+                if line_trimmed.starts_with("func ") {
+                    let rest = &line_trimmed[5..];
+                    if rest.starts_with('(') {
+                        if let Some(close_paren_idx) = rest.find(')') {
+                            let method_part = &rest[close_paren_idx + 1 ..].trim();
+                            let name = method_part.split('(').next().unwrap_or(method_part).trim().to_string();
+                            symbols.push(DocumentSymbolResponse {
+                                name,
+                                kind: 6, // Method
+                                line: i as u32,
+                                character: (line.len() - line_trimmed.len()) as u32,
+                                container_name: None,
+                            });
+                        }
+                    } else {
+                        let name = rest.split('(').next().unwrap_or(rest).trim().to_string();
+                        symbols.push(DocumentSymbolResponse {
+                            name,
+                            kind: 12, // Function
+                            line: i as u32,
+                            character: (line.len() - line_trimmed.len()) as u32,
+                            container_name: None,
+                        });
+                    }
+                } else if line_trimmed.starts_with("type ") {
+                    let rest = &line_trimmed[5..];
+                    let parts: Vec<&str> = rest.split_whitespace().collect();
+                    if parts.len() >= 2 {
+                        let name = parts[0];
+                        let type_kind = parts[1];
+                        let kind = if type_kind == "interface" {
+                            11 // Interface
+                        } else {
+                            23 // Struct
+                        };
+                        symbols.push(DocumentSymbolResponse {
+                            name: name.to_string(),
+                            kind,
+                            line: i as u32,
+                            character: (line.len() - line_trimmed.len()) as u32,
+                            container_name: None,
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    symbols
+}
+
+fn extract_rust_name(line: &str, keyword: &str) -> Option<String> {
+    if let Some(idx) = line.find(keyword) {
+        let after = &line[idx + keyword.len() ..].trim();
+        let name = after.split(|c: char| c == '<' || c == '(' || c == '{' || c == ':' || c == ';')
+            .next()?
+            .trim();
+        if !name.is_empty() {
+            return Some(name.to_string());
+        }
+    }
+    None
+}
+
+fn extract_js_name(line: &str, keyword: &str) -> Option<String> {
+    if let Some(idx) = line.find(keyword) {
+        let after = &line[idx + keyword.len() ..].trim();
+        let name = after.split(|c: char| c == '(' || c == '{' || c == '<' || c == ' ' || c == ';')
+            .next()?
+            .trim();
+        if !name.is_empty() {
+            return Some(name.to_string());
         }
     }
     None

@@ -77,6 +77,10 @@ pub fn LucideIcon(
             <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
             <polyline points="21 3 21 8 16 8" />
         }.into_any(),
+        "rotate-ccw" => view! {
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <polyline points="3 3 3 8 8 8" />
+        }.into_any(),
         "arrow-up" => view! {
             <path d="m5 12 7-7 7 7" />
             <path d="M12 19V5" />

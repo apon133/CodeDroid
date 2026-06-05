@@ -89,12 +89,17 @@ Unlike typical cloud-based sandboxes or emulated JS runtimes, CodeDroid exposes 
 ## ✨ Key Capabilities & Features
 
 *   **Mobile-First Touch Architecture**: Designed specifically for small touchscreens (320px–768px). Features a slide-out file explorer overlay drawer, auto-collapsing sidebar upon opening files, persistent touch targets for closing tabs, and custom layout controls utilizing CSS `100dvh` to prevent keyboard resize clipping.
-*   **Real native compilation and execution**: Captures raw `stdout` and `stderr` streams, compiles binaries using system tools, and includes process control signals to terminate long-running scripts or active backend servers (PID-based process termination).
+*   **Universal Drag-to-Resize Layout**: Dynamically adjust sidebars, bottom terminal consoles, and active editor split panes using intuitive touch-and-drag handle borders. Panel dimensions are persistently saved to `LocalStorage` for continuity across sessions.
+*   **Interactive Web Terminal**: Run shell commands directly using a fully connected terminal console (backed by real system PTY shells) with raw stream capturing, exit code detection, and custom termination controls.
+*   **Integrated Git Console**: Stage or unstage workspace changes, view line-by-line colored diff overlays directly inside the editor, generate commit messages with AI suggestions, clone repositories, and push/pull updates directly from the IDE sidebar.
+*   **Live Reload Development Server**: Spin up a local static server inside any project directory that monitors folder modifications and dynamically injects hot-reloading scripts, bypassing manual browser refresh cycles.
+*   **Rich Media & Document Viewers**: Native tab views to render images, video playback, and audio files directly, alongside a side-by-side Markdown layout editor and previewer.
 *   **LSP-powered IntelliSense**: Floating completion panels, in-line diagnostics, hover tooltips, definition lookups, and references. Automatically hides bloated metadata subpanels on narrow screens to prevent viewport clipping.
 *   **Save-Triggered Synchronization**: Supports immediate file-writing to the host disk on save, triggering automatic LSP change notifications (`textDocument/didChange` & `textDocument/didSave`) which instantly update error diagnostics.
 *   **Modern Web Framework Scaffolding**: Bootstrap web apps with optimized templates for React (Vite), Vue (Vite), Svelte (Vite), Next.js (App Router), Remix, and Angular.
 *   **Live Web Preview & Cross-Device Refresh**: Automatically scans development server stdout logs (e.g. Vite, Next.js) for local addresses, launches an in-IDE browser viewport with manual/auto reload, and translates local loops (127.0.0.1) into LAN IPs so iOS and tablet clients can access previews.
 *   **Advanced File Manager**: Create, copy, paste, delete, move, or rename files and directories. Full recursive operations synchronized instantly to local disk and LocalStorage states.
+*   **Persistent Editor State**: Restores open file tabs, split views, active cursor position, and panel visibility structures when reloading.
 *   **Offline Fallback Mode**: Works entirely offline with local-first file caching. If the LSP is unavailable, CodeDroid falls back to an internal regex token parser to provide syntax-matching autocomplete suggestions.
 
 ---
@@ -113,6 +118,9 @@ CodeDroid Root
  │    │    ├── models.rs             # Parameter schema definitions & conversion methods
  │    │    ├── handlers.rs           # Request interceptors mapping inputs to file system and compilers
  │    │    ├── lsp.rs                # Custom JSON-RPC stdin/stdout manager for running LSPs
+ │    │    ├── terminal.rs           # PTY shell session lifecycle and process terminal coordinators
+ │    │    ├── git.rs                # Local git repository managers & AI commit message analyzers
+ │    │    ├── live_server.rs        # Static server watching file system updates & reload injections
  │    │    ├── runner.rs             # Shell executor engine coordinating processes per runtime
  │    │    ├── error_suggestions.rs  # Rule-based diagnostic suggestions compiler
  │    │    ├── diagnostics.rs        # Asynchronous polling coordinator waiting for LSP diagnostics
@@ -132,8 +140,10 @@ CodeDroid Root
  │    │         └── editor (Editor Core Page)
  │    │              ├── mod.rs      # Shell drawer, tabs manager, file navigators, previews
  │    │              ├── code_area.rs# Autocomplete dropdowns, syntax triggers, scroll synchronizers
+ │    │              ├── components.rs# Resize grid panel handles, footer consoles, layout tabs
+ │    │              ├── git_panel.rs# Source control UI, staging, line-diff viewers, AI message inputs
+ │    │              ├── agent_panel.rs# Coding copilot assistant interactive conversation drawers
  │    │              ├── search_bar.rs# Project-wide regex finder UI
- │    │              ├── footer.rs   # Console drawer outputs and terminal triggers
  │    │              └── utils.rs    # Syntect themes converter mapping styles
  │    └── Cargo.toml                 # Frontend WASM configurations & packages
  │
@@ -410,6 +420,19 @@ Runs code in the specified runtime, capturing outputs and dev-server addresses.
 
 ---
 
+### `POST /run_command`
+Executes an arbitrary shell command in the project directory context.
+*   **Inputs**:
+    *   `command`: The command string to run (e.g. `npm install`, `cargo test`).
+    *   `project_path`: The workspace path where the command executes.
+*   **Outputs**:
+    *   `output`: The standard output generated by the shell.
+    *   `error`: The standard error generated by the shell.
+    *   `success`: Boolean indicating if execution was successful.
+    *   `pid`: Optional background process ID if the command remains running.
+
+---
+
 ### `POST /stop`
 Terminates an active runtime process or development server.
 *   **Inputs**:
@@ -559,11 +582,123 @@ Reads the content of a target file.
 
 ---
 
+### `POST /scan_project`
+Recursively scan directory structure for navigation tree, automatically ignoring heavy directories (`node_modules`, `target`, `.git`, `.gradle`, etc.).
+*   **Inputs**:
+    *   `project_path`: Location of the target project.
+*   **Outputs**:
+    *   `files`: Array of `FileInfo` structures containing `rel_path` and `is_dir`.
+    *   `error`: Scan execution errors.
+
+---
+
+### `POST /pick_directory`
+Launches a native folder selection dialog based on the operating system.
+*   **Outputs**:
+    *   `success`: Boolean success flag.
+    *   `path`: Chosen absolute directory path.
+    *   `error`: Selection cancellations or platform failures.
+
+---
+
+### `POST /create_project`
+Bootstraps folders and files for a supported language/framework workspace template.
+*   **Inputs**:
+    *   `name`: Name of the folder and package.
+    *   `language`: Programming language identifier.
+    *   `framework`: Scaffold framework (e.g. `vanilla`, `react`, `nextjs`, `vue`, `svelte`, `remix`).
+    *   `path`: Absolute location.
+*   **Outputs**:
+    *   `success`: Boolean success flag.
+    *   `error`: Bootstrap failures.
+
+---
+
+### `GET /file`
+Serves a static file directly from local storage with the corresponding MIME type.
+*   **Query Parameters**:
+    *   `project_path`: Root folder of the project.
+    *   `rel_path`: Target file path relative to project.
+*   **Outputs**: The raw bytes of the file with matching Content-Type headers (images, videos, audio, PDF, etc.).
+
+---
+
+### 🖥️ Terminal API Router (`/terminal/*`)
+Manages PTY terminal session lifecycle.
+
+*   `POST /terminal/start`: Initiates a command shell session (`sh` or `cmd.exe`).
+    *   **Inputs**: `project_path`
+    *   **Outputs**: `session_id`
+*   `POST /terminal/output`: Reads buffered terminal stdout/stderr stream.
+    *   **Inputs**: `session_id`
+    *   **Outputs**: `output`, `is_alive`
+*   `POST /terminal/input`: Writes raw text data to the terminal's stdin stream.
+    *   **Inputs**: `session_id`, `input`
+    *   **Outputs**: `success`, `error`
+*   `POST /terminal/stop`: Terminate the active shell session process.
+    *   **Inputs**: `session_id`
+    *   **Outputs**: `success`
+
+---
+
+### 🐙 Git API Router (`/git/*`)
+Directly integrates standard git CLI operations.
+
+*   `POST /git/status`: Retrieves branch status and tracked/untracked/modified status of all workspace files.
+    *   **Inputs**: `project_path`
+    *   **Outputs**: `branch`, `files` (array of paths and status), `error`
+*   `POST /git/stage`: Adds file changes to staging area.
+    *   **Inputs**: `project_path`, `file_path`
+    *   **Outputs**: `success`, `output`, `error`
+*   `POST /git/unstage`: Resets staged file changes.
+    *   **Inputs**: `project_path`, `file_path`
+    *   **Outputs**: `success`, `output`, `error`
+*   `POST /git/discard`: Discards modifications or deletes untracked files.
+    *   **Inputs**: `project_path`, `file_path`
+    *   **Outputs**: `success`, `output`, `error`
+*   `POST /git/commit`: Commits staged changes.
+    *   **Inputs**: `project_path`, `message`
+    *   **Outputs**: `success`, `output`, `error`
+*   `POST /git/push`: Pushes committed changes to remote repository.
+    *   **Inputs**: `project_path`
+    *   **Outputs**: `success`, `output`, `error`
+*   `POST /git/pull`: Pulls committed changes from remote repository.
+    *   **Inputs**: `project_path`
+    *   **Outputs**: `success`, `output`, `error`
+*   `POST /git/diff_lines`: Retrieves granular line additions, edits, and deletions for syntax styling.
+    *   **Inputs**: `project_path`, `file_path`
+    *   **Outputs**: `added` (line numbers), `modified` (line numbers), `deleted` (line numbers)
+*   `POST /git/diff_text`: Returns raw console representation of git diff output.
+    *   **Inputs**: `project_path`, `file_path`
+    *   **Outputs**: `success`, `output`, `error`
+*   `POST /git/clone`: Clones a remote repository to local workspaces.
+    *   **Inputs**: `clone_url`, `project_name`, `project_path`
+    *   **Outputs**: `success`, `output`, `error`
+*   `POST /git/log`: Retrieves history logs (commits details).
+    *   **Inputs**: `project_path`
+    *   **Outputs**: `commits` (list of commit hashes, subject, author, relative dates)
+*   `POST /git/ai_commit_message`: Inspects staged changes and compiles recommendations of commit messages.
+    *   **Inputs**: `project_path`
+    *   **Outputs**: `message`, `suggestions` (list of commit strings), `error`
+
+---
+
+### 🔄 Live Server API Router (`/live-server/*`)
+Manages hot-reloading development preview environments.
+
+*   `POST /live-server/start`: Registers file system watcher and starts a local web server (port >= 5500) that auto-injects polling reload scripts into served HTML pages.
+    *   **Inputs**: `project_path`
+    *   **Outputs**: `port`
+*   `POST /live-server/stop`: Shuts down the live development server.
+    *   **Outputs**: `success` (bool)
+*   `GET /live-server/status`: Inspects if a live server instance is active.
+    *   **Outputs**: `running` (bool), `port`, `project_path`
+
+---
+
 ### `GET /ping`
 Checks backend status and responsiveness.
 *   **Outputs**: Returns plain string confirming active server state.
-
----
 
 ## 🛠️ Termux Android Installation Details
 
@@ -659,9 +794,8 @@ The backend implements custom lookup logic inside `utils.rs` (`resolve_lsp_execu
 
 We are expanding CodeDroid into a full-featured desktop-class editor on mobile:
 *   **Origin Private File System (OPFS)**: Integrate the File System Access API to edit local folders on your phone directly from the browser.
-*   **Integrated Git Console**: Stage files, view diffs, make commits, and manage remotes directly from the IDE sidebar.
-*   **Interactive Web Terminal**: Run shell commands directly using a fully connected terminal component (via `xterm.js` and WebSockets).
 *   **Collaborative Sessions**: Support multi-client peer-to-peer pairing over WebRTC for pair programming.
+*   **Offline Native Compiler Toolchains**: Bundle minimal compiler binaries inside wrapper apps to run code completely detached from an external API server.
 
 ---
 

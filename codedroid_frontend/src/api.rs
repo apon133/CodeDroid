@@ -710,6 +710,45 @@ pub async fn git_discard_api(project_path: &str, file_path: &str) -> Result<GitC
         .map_err(|e| e.to_string())
 }
 
+pub async fn git_stage_all_api(project_path: &str) -> Result<GitCommandResponse, String> {
+    let body = GitRequest { project_path: project_path.to_string() };
+    Request::post(&format!("{}/git/stage-all", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitCommandResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_unstage_all_api(project_path: &str) -> Result<GitCommandResponse, String> {
+    let body = GitRequest { project_path: project_path.to_string() };
+    Request::post(&format!("{}/git/unstage-all", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitCommandResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_discard_all_api(project_path: &str) -> Result<GitCommandResponse, String> {
+    let body = GitRequest { project_path: project_path.to_string() };
+    Request::post(&format!("{}/git/discard-all", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitCommandResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
 pub async fn git_commit_api(project_path: &str, message: &str) -> Result<GitCommandResponse, String> {
     let body = GitCommitRequest { project_path: project_path.to_string(), message: message.to_string() };
     Request::post(&format!("{}/git/commit", get_api_url()))
@@ -816,6 +855,194 @@ pub async fn git_log_api(project_path: &str) -> Result<GitLogResponse, String> {
         .await
         .map_err(|e| e.to_string())?
         .json::<GitLogResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[derive(serde::Serialize)]
+pub struct GitBranchRequest {
+    pub project_path: String,
+    pub branch_name: String,
+    pub start_point: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+pub struct GitMergeRequest {
+    pub project_path: String,
+    pub branch_name: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct GitRemoteRequest {
+    pub project_path: String,
+    pub remote_name: String,
+    pub remote_url: Option<String>,
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct GitBranchesResponse {
+    pub current: String,
+    pub local: Vec<String>,
+    pub remote: Vec<String>,
+    pub error: Option<String>,
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct GitRemoteInfo {
+    pub name: String,
+    pub url: String,
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct GitRemotesResponse {
+    pub remotes: Vec<GitRemoteInfo>,
+    pub error: Option<String>,
+}
+
+pub async fn git_list_branches_api(project_path: &str) -> Result<GitBranchesResponse, String> {
+    let body = GitRequest { project_path: project_path.to_string() };
+    Request::post(&format!("{}/git/branches", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitBranchesResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_create_branch_api(
+    project_path: &str,
+    branch_name: &str,
+    start_point: Option<&str>,
+) -> Result<GitCommandResponse, String> {
+    let body = GitBranchRequest {
+        project_path: project_path.to_string(),
+        branch_name: branch_name.to_string(),
+        start_point: start_point.map(|s| s.to_string()),
+    };
+    Request::post(&format!("{}/git/branch/create", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitCommandResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_checkout_branch_api(
+    project_path: &str,
+    branch_name: &str,
+) -> Result<GitCommandResponse, String> {
+    let body = GitBranchRequest {
+        project_path: project_path.to_string(),
+        branch_name: branch_name.to_string(),
+        start_point: None,
+    };
+    Request::post(&format!("{}/git/branch/checkout", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitCommandResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_merge_branch_api(
+    project_path: &str,
+    branch_name: &str,
+) -> Result<GitCommandResponse, String> {
+    let body = GitMergeRequest {
+        project_path: project_path.to_string(),
+        branch_name: branch_name.to_string(),
+    };
+    Request::post(&format!("{}/git/branch/merge", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitCommandResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_list_remotes_api(project_path: &str) -> Result<GitRemotesResponse, String> {
+    let body = GitRequest { project_path: project_path.to_string() };
+    Request::post(&format!("{}/git/remotes", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitRemotesResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_add_remote_api(
+    project_path: &str,
+    remote_name: &str,
+    remote_url: &str,
+) -> Result<GitCommandResponse, String> {
+    let body = GitRemoteRequest {
+        project_path: project_path.to_string(),
+        remote_name: remote_name.to_string(),
+        remote_url: Some(remote_url.to_string()),
+    };
+    Request::post(&format!("{}/git/remote/add", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitCommandResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_remove_remote_api(
+    project_path: &str,
+    remote_name: &str,
+) -> Result<GitCommandResponse, String> {
+    let body = GitRemoteRequest {
+        project_path: project_path.to_string(),
+        remote_name: remote_name.to_string(),
+        remote_url: None,
+    };
+    Request::post(&format!("{}/git/remote/remove", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitCommandResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn git_set_remote_url_api(
+    project_path: &str,
+    remote_name: &str,
+    remote_url: &str,
+) -> Result<GitCommandResponse, String> {
+    let body = GitRemoteRequest {
+        project_path: project_path.to_string(),
+        remote_name: remote_name.to_string(),
+        remote_url: Some(remote_url.to_string()),
+    };
+    Request::post(&format!("{}/git/remote/set-url", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<GitCommandResponse>()
         .await
         .map_err(|e| e.to_string())
 }

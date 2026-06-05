@@ -115,7 +115,7 @@ pub async fn git_status(Json(payload): Json<GitRequest>) -> Json<GitStatusRespon
             };
             files.push(GitFileStatus {
                 path: file_path,
-                status: status.trim().to_string(),
+                status: status,
             });
         }
     }
@@ -222,6 +222,66 @@ pub async fn git_discard(Json(payload): Json<GitFileRequest>) -> Json<GitCommand
         }
     }
 }
+
+pub async fn git_stage_all(Json(payload): Json<GitRequest>) -> Json<GitCommandResponse> {
+    let dir = resolve_project_dir(&payload.project_path);
+    match run_git(&dir, &["add", "-A"]) {
+        Ok(out) => Json(GitCommandResponse {
+            success: true,
+            output: out,
+            error: None,
+        }),
+        Err(e) => Json(GitCommandResponse {
+            success: false,
+            output: String::new(),
+            error: Some(e),
+        }),
+    }
+}
+
+pub async fn git_unstage_all(Json(payload): Json<GitRequest>) -> Json<GitCommandResponse> {
+    let dir = resolve_project_dir(&payload.project_path);
+    match run_git(&dir, &["reset", "HEAD", "--", "."]) {
+        Ok(out) => Json(GitCommandResponse {
+            success: true,
+            output: out,
+            error: None,
+        }),
+        Err(e) => Json(GitCommandResponse {
+            success: false,
+            output: String::new(),
+            error: Some(e),
+        }),
+    }
+}
+
+pub async fn git_discard_all(Json(payload): Json<GitRequest>) -> Json<GitCommandResponse> {
+    let dir = resolve_project_dir(&payload.project_path);
+    
+    // First, run checkout to discard tracked changes
+    if let Err(e) = run_git(&dir, &["checkout", "--", "."]) {
+        return Json(GitCommandResponse {
+            success: false,
+            output: String::new(),
+            error: Some(format!("Failed to checkout tracked changes: {}", e)),
+        });
+    }
+
+    // Second, run clean to discard untracked files
+    match run_git(&dir, &["clean", "-fd"]) {
+        Ok(out) => Json(GitCommandResponse {
+            success: true,
+            output: out,
+            error: None,
+        }),
+        Err(e) => Json(GitCommandResponse {
+            success: false,
+            output: String::new(),
+            error: Some(format!("Failed to clean untracked files: {}", e)),
+        }),
+    }
+}
+
 
 pub async fn git_commit(Json(payload): Json<GitCommitRequest>) -> Json<GitCommandResponse> {
     let dir = resolve_project_dir(&payload.project_path);
@@ -620,12 +680,282 @@ pub async fn git_ai_commit_message(Json(payload): Json<GitRequest>) -> Json<GitC
     }
 }
 
+#[derive(Deserialize)]
+pub struct GitBranchRequest {
+    pub project_path: String,
+    pub branch_name: String,
+    pub start_point: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct GitMergeRequest {
+    pub project_path: String,
+    pub branch_name: String,
+}
+
+#[derive(Deserialize)]
+pub struct GitRemoteRequest {
+    pub project_path: String,
+    pub remote_name: String,
+    pub remote_url: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct GitBranchesResponse {
+    pub current: String,
+    pub local: Vec<String>,
+    pub remote: Vec<String>,
+    pub error: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct GitRemoteInfo {
+    pub name: String,
+    pub url: String,
+}
+
+#[derive(Serialize)]
+pub struct GitRemotesResponse {
+    pub remotes: Vec<GitRemoteInfo>,
+    pub error: Option<String>,
+}
+
+pub async fn git_list_branches(Json(payload): Json<GitRequest>) -> Json<GitBranchesResponse> {
+    let dir = resolve_project_dir(&payload.project_path);
+    
+    if let Err(e) = run_git(&dir, &["status"]) {
+        return Json(GitBranchesResponse {
+            current: "None".to_string(),
+            local: vec![],
+            remote: vec![],
+            error: Some(format!("Not a git repository: {}", e)),
+        });
+    }
+
+    let current = match run_git(&dir, &["rev-parse", "--abbrev-ref", "HEAD"]) {
+        Ok(out) => out.trim().to_string(),
+        Err(_) => "HEAD".to_string(),
+    };
+
+    let local = match run_git(&dir, &["branch"]) {
+        Ok(out) => {
+            let mut list = Vec::new();
+            for line in out.lines() {
+                let name = line.trim().trim_start_matches('*').trim().to_string();
+                if !name.is_empty() {
+                    list.push(name);
+                }
+            }
+            list
+        }
+        Err(_) => vec![],
+    };
+
+    let remote = match run_git(&dir, &["branch", "-r"]) {
+        Ok(out) => {
+            let mut list = Vec::new();
+            for line in out.lines() {
+                let name = line.trim().to_string();
+                if !name.is_empty() && !name.contains("->") {
+                    list.push(name);
+                }
+            }
+            list
+        }
+        Err(_) => vec![],
+    };
+
+    Json(GitBranchesResponse {
+        current,
+        local,
+        remote,
+        error: None,
+    })
+}
+
+pub async fn git_create_branch(Json(payload): Json<GitBranchRequest>) -> Json<GitCommandResponse> {
+    let dir = resolve_project_dir(&payload.project_path);
+    let mut args = vec!["checkout", "-b", &payload.branch_name];
+    if let Some(ref start) = payload.start_point {
+        if !start.trim().is_empty() {
+            args.push(start);
+        }
+    }
+    match run_git(&dir, &args) {
+        Ok(out) => Json(GitCommandResponse {
+            success: true,
+            output: out,
+            error: None,
+        }),
+        Err(e) => Json(GitCommandResponse {
+            success: false,
+            output: String::new(),
+            error: Some(e),
+        }),
+    }
+}
+
+pub async fn git_checkout_branch(Json(payload): Json<GitBranchRequest>) -> Json<GitCommandResponse> {
+    let dir = resolve_project_dir(&payload.project_path);
+    let branch_to_checkout = payload.branch_name.clone();
+    let mut args = vec!["checkout"];
+    if branch_to_checkout.starts_with("origin/") {
+        let local_name = branch_to_checkout.strip_prefix("origin/").unwrap();
+        let local_exists = match run_git(&dir, &["show-ref", "--verify", &format!("refs/heads/{}", local_name)]) {
+            Ok(_) => true,
+            Err(_) => false,
+        };
+        if local_exists {
+            args.push(local_name);
+        } else {
+            args.push("-b");
+            args.push(local_name);
+            args.push("--track");
+            args.push(&payload.branch_name);
+        }
+    } else {
+        args.push(&branch_to_checkout);
+    }
+
+    match run_git(&dir, &args) {
+        Ok(out) => Json(GitCommandResponse {
+            success: true,
+            output: out,
+            error: None,
+        }),
+        Err(e) => Json(GitCommandResponse {
+            success: false,
+            output: String::new(),
+            error: Some(e),
+        }),
+    }
+}
+
+pub async fn git_merge_branch(Json(payload): Json<GitMergeRequest>) -> Json<GitCommandResponse> {
+    let dir = resolve_project_dir(&payload.project_path);
+    match run_git(&dir, &["merge", &payload.branch_name]) {
+        Ok(out) => Json(GitCommandResponse {
+            success: true,
+            output: out,
+            error: None,
+        }),
+        Err(e) => Json(GitCommandResponse {
+            success: false,
+            output: String::new(),
+            error: Some(e),
+        }),
+    }
+}
+
+pub async fn git_list_remotes(Json(payload): Json<GitRequest>) -> Json<GitRemotesResponse> {
+    let dir = resolve_project_dir(&payload.project_path);
+    
+    if let Err(e) = run_git(&dir, &["status"]) {
+        return Json(GitRemotesResponse {
+            remotes: vec![],
+            error: Some(format!("Not a git repository: {}", e)),
+        });
+    }
+
+    match run_git(&dir, &["remote", "-v"]) {
+        Ok(out) => {
+            let mut remotes = Vec::new();
+            let mut seen = std::collections::HashSet::new();
+            for line in out.lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    let name = parts[0].to_string();
+                    let url = parts[1].to_string();
+                    if seen.insert(name.clone()) {
+                        remotes.push(GitRemoteInfo { name, url });
+                    }
+                }
+            }
+            Json(GitRemotesResponse {
+                remotes,
+                error: None,
+            })
+        }
+        Err(e) => Json(GitRemotesResponse {
+            remotes: vec![],
+            error: Some(e),
+        }),
+    }
+}
+
+pub async fn git_add_remote(Json(payload): Json<GitRemoteRequest>) -> Json<GitCommandResponse> {
+    let dir = resolve_project_dir(&payload.project_path);
+    let url = match payload.remote_url {
+        Some(u) => u,
+        None => return Json(GitCommandResponse {
+            success: false,
+            output: String::new(),
+            error: Some("Remote URL is required".to_string()),
+        }),
+    };
+    match run_git(&dir, &["remote", "add", &payload.remote_name, &url]) {
+        Ok(out) => Json(GitCommandResponse {
+            success: true,
+            output: out,
+            error: None,
+        }),
+        Err(e) => Json(GitCommandResponse {
+            success: false,
+            output: String::new(),
+            error: Some(e),
+        }),
+    }
+}
+
+pub async fn git_remove_remote(Json(payload): Json<GitRemoteRequest>) -> Json<GitCommandResponse> {
+    let dir = resolve_project_dir(&payload.project_path);
+    match run_git(&dir, &["remote", "remove", &payload.remote_name]) {
+        Ok(out) => Json(GitCommandResponse {
+            success: true,
+            output: out,
+            error: None,
+        }),
+        Err(e) => Json(GitCommandResponse {
+            success: false,
+            output: String::new(),
+            error: Some(e),
+        }),
+    }
+}
+
+pub async fn git_set_remote_url(Json(payload): Json<GitRemoteRequest>) -> Json<GitCommandResponse> {
+    let dir = resolve_project_dir(&payload.project_path);
+    let url = match payload.remote_url {
+        Some(u) => u,
+        None => return Json(GitCommandResponse {
+            success: false,
+            output: String::new(),
+            error: Some("Remote URL is required".to_string()),
+        }),
+    };
+    match run_git(&dir, &["remote", "set-url", &payload.remote_name, &url]) {
+        Ok(out) => Json(GitCommandResponse {
+            success: true,
+            output: out,
+            error: None,
+        }),
+        Err(e) => Json(GitCommandResponse {
+            success: false,
+            output: String::new(),
+            error: Some(e),
+        }),
+    }
+}
+
 pub fn router() -> Router {
     Router::new()
         .route("/status", post(git_status))
         .route("/stage", post(git_stage))
+        .route("/stage-all", post(git_stage_all))
         .route("/unstage", post(git_unstage))
+        .route("/unstage-all", post(git_unstage_all))
         .route("/discard", post(git_discard))
+        .route("/discard-all", post(git_discard_all))
         .route("/commit", post(git_commit))
         .route("/push", post(git_push))
         .route("/pull", post(git_pull))
@@ -634,4 +964,133 @@ pub fn router() -> Router {
         .route("/clone", post(git_clone))
         .route("/log", post(git_log))
         .route("/ai_commit_message", post(git_ai_commit_message))
+        .route("/branches", post(git_list_branches))
+        .route("/branch/create", post(git_create_branch))
+        .route("/branch/checkout", post(git_checkout_branch))
+        .route("/branch/merge", post(git_merge_branch))
+        .route("/remotes", post(git_list_remotes))
+        .route("/remote/add", post(git_add_remote))
+        .route("/remote/remove", post(git_remove_remote))
+        .route("/remote/set-url", post(git_set_remote_url))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::{self, File};
+    use std::io::Write;
+    use std::process::Command;
+
+    fn init_git_repo(path: &str) {
+        let _ = fs::remove_dir_all(path);
+        fs::create_dir_all(path).unwrap();
+
+        Command::new("git")
+            .arg("init")
+            .current_dir(path)
+            .output()
+            .expect("Failed to init git repo");
+        
+        // Configure local git user for test
+        Command::new("git")
+            .args(&["config", "user.name", "Test User"])
+            .current_dir(path)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(&["config", "user.email", "test@example.com"])
+            .current_dir(path)
+            .output()
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_git_stage_unstage_discard_all() {
+        let project_path = "./temp_git_test".to_string();
+        init_git_repo(&project_path);
+
+        // 1. Create a dummy file
+        let file_path = format!("{}/test.txt", project_path);
+        let mut file = File::create(&file_path).unwrap();
+        writeln!(file, "Initial content").unwrap();
+
+        // Commit it initially so we can test discarding modification
+        Command::new("git").args(&["add", "test.txt"]).current_dir(&project_path).output().unwrap();
+        Command::new("git").args(&["commit", "-m", "Initial commit"]).current_dir(&project_path).output().unwrap();
+
+        // 2. Modify the file and create a new untracked file
+        let mut file = File::create(&file_path).unwrap();
+        writeln!(file, "Modified content").unwrap();
+
+        let untracked_path = format!("{}/untracked.txt", project_path);
+        let mut untracked_file = File::create(&untracked_path).unwrap();
+        writeln!(untracked_file, "Untracked file").unwrap();
+
+        // Verify they are unstaged
+        let status_res = git_status(axum::Json(GitRequest {
+            project_path: project_path.clone(),
+        })).await;
+        
+        let staged_count = |res: &GitStatusResponse| {
+            res.files.iter().filter(|f| {
+                let s = &f.status;
+                s != "??" && s.chars().next().map(|c| c != ' ' && c != '?').unwrap_or(false)
+            }).count()
+        };
+        let unstaged_count = |res: &GitStatusResponse| {
+            res.files.iter().filter(|f| {
+                let s = &f.status;
+                s == "??" || s.chars().nth(1).map(|c| c != ' ').unwrap_or(false)
+            }).count()
+        };
+
+        assert!(unstaged_count(&status_res.0) > 0, "Should have unstaged changes");
+
+        // 3. Stage all
+        let stage_res = git_stage_all(axum::Json(GitRequest {
+            project_path: project_path.clone(),
+        })).await;
+        assert!(stage_res.0.success, "Stage all should succeed");
+
+        let status_res2 = git_status(axum::Json(GitRequest {
+            project_path: project_path.clone(),
+        })).await;
+        assert_eq!(unstaged_count(&status_res2.0), 0, "Should have no unstaged changes after stage-all");
+        assert!(staged_count(&status_res2.0) > 0, "Should have staged changes after stage-all");
+
+        // 4. Unstage all
+        let unstage_res = git_unstage_all(axum::Json(GitRequest {
+            project_path: project_path.clone(),
+        })).await;
+        assert!(unstage_res.0.success, "Unstage all should succeed");
+
+        let status_res3 = git_status(axum::Json(GitRequest {
+            project_path: project_path.clone(),
+        })).await;
+        for f in &status_res3.0.files {
+            eprintln!("DEBUG: path={}, status='{}'", f.path, f.status);
+        }
+        assert!(unstaged_count(&status_res3.0) > 0, "Should have unstaged changes after unstage-all");
+        assert_eq!(staged_count(&status_res3.0), 0, "Should have no staged changes after unstage-all");
+
+        // 5. Discard all
+        let discard_res = git_discard_all(axum::Json(GitRequest {
+            project_path: project_path.clone(),
+        })).await;
+        assert!(discard_res.0.success, "Discard all should succeed");
+
+        let status_res4 = git_status(axum::Json(GitRequest {
+            project_path: project_path.clone(),
+        })).await;
+        assert_eq!(unstaged_count(&status_res4.0), 0, "Should have no unstaged changes after discard-all");
+        assert_eq!(staged_count(&status_res4.0), 0, "Should have no staged changes after discard-all");
+
+        // Verify files were reset/cleaned
+        let content = std::fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content.trim(), "Initial content");
+        assert!(!std::path::Path::new(&untracked_path).exists(), "Untracked file should be deleted");
+
+        // Cleanup
+        let _ = fs::remove_dir_all(&project_path);
+    }
 }

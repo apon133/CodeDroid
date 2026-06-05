@@ -28,6 +28,10 @@ struct ThreadSafeTimeout(Option<gloo_timers::callback::Timeout>);
 unsafe impl Send for ThreadSafeTimeout {}
 unsafe impl Sync for ThreadSafeTimeout {}
 
+const MOBILE_SYMBOLS: &[&str] = &[
+    "{", "}", "[", "]", "(", ")", ";", "<", ">", "/", "\\", "_", "=", "+", "-", "*", "&", "|", "!", "?", "\"", "'", ":", "$", ",", ".", "#", "%", "@", "~"
+];
+
 #[component]
 pub fn EditorCodeArea(
     settings: RwSignal<Settings>,
@@ -74,6 +78,44 @@ pub fn EditorCodeArea(
     let close_context_menu = move || {
         show_context_menu.set(false);
     };
+
+    let insert_symbol = Callback::new(move |sym: &'static str| {
+        if let Some(target) = textarea_ref.get() {
+            use wasm_bindgen::JsCast;
+            let target_el = target.unchecked_into::<web_sys::HtmlTextAreaElement>();
+            let cpos = cursor_pos.get_untracked();
+            let start = target_el.selection_start().unwrap().unwrap_or(cpos);
+            let end = target_el.selection_end().unwrap().unwrap_or(cpos);
+            let val = target_el.value();
+
+            let (new_val, new_start, new_end) = if let Some((nv, ns, ne)) = handle_auto_close_pairs(&val, start, end, sym) {
+                (nv, ns, ne)
+            } else {
+                let val_js = js_sys::JsString::from(val.as_str());
+                let before = String::from(val_js.substring(0, start));
+                let after = String::from(val_js.substring(end, val_js.length()));
+                let nv = format!("{}{}{}", before, sym, after);
+                let new_pos = start + sym.chars().count() as u32;
+                (nv, new_pos, new_pos)
+            };
+
+            code.set(new_val.clone());
+            dirty.set(true);
+            cursor_pos.set(new_start);
+
+            trigger_diagnostics.run(new_val);
+            if settings.get_untracked().auto_save {
+                save_current.run(false);
+            }
+
+            let target_el_clone = target_el.clone();
+            spawn_local(async move {
+                let _ = gloo_timers::future::sleep(std::time::Duration::from_millis(10)).await;
+                let _ = target_el_clone.focus();
+                let _ = target_el_clone.set_selection_range(new_start, new_end);
+            });
+        }
+    });
 
     view! {
         <div class="code-area" style="flex:2">
@@ -957,6 +999,47 @@ pub fn EditorCodeArea(
                     </div>
                 }
             }}
+            <div class="mobile-symbols-bar">
+                {MOBILE_SYMBOLS.iter().map(|&sym| {
+                    let (touch_start, set_touch_start) = signal((0.0, 0.0));
+                    let (has_moved, set_has_moved) = signal(false);
+                    view! {
+                        <button
+                            type="button"
+                            class="mobile-symbol-btn"
+                            on:touchstart=move |e| {
+                                if let Some(t) = e.touches().get(0) {
+                                    set_touch_start.set((t.client_x() as f64, t.client_y() as f64));
+                                    set_has_moved.set(false);
+                                }
+                            }
+                            on:touchmove=move |e| {
+                                if let Some(t) = e.touches().get(0) {
+                                    let start = touch_start.get();
+                                    let dx = t.client_x() as f64 - start.0;
+                                    let dy = t.client_y() as f64 - start.1;
+                                    let dist = (dx * dx + dy * dy).sqrt();
+                                    if dist > 10.0 {
+                                        set_has_moved.set(true);
+                                    }
+                                }
+                            }
+                            on:touchend=move |e| {
+                                if !has_moved.get() {
+                                    e.prevent_default();
+                                    insert_symbol.run(sym);
+                                }
+                            }
+                            on:mousedown=move |e| {
+                                e.prevent_default();
+                                insert_symbol.run(sym);
+                            }
+                        >
+                            {sym}
+                        </button>
+                    }
+                }).collect_view()}
+            </div>
         </div>
     }
 }

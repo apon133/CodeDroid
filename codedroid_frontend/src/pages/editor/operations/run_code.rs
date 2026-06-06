@@ -195,6 +195,11 @@ pub fn make_run_code(
             bottom_tab.set(0); // Switch to Terminal tab
             output.set(String::new()); // Clear output for a clean run
             
+            let is_initializing = terminal_session_id.get_untracked().is_none();
+            if is_initializing {
+                terminal_session_id.set(Some("initializing".to_string()));
+            }
+            
             let terminal_session_id_clone = terminal_session_id.clone();
             let output_clone = output;
             let is_running_clone = is_running;
@@ -204,21 +209,23 @@ pub fn make_run_code(
             
             spawn_local(async move {
                 let mut session_id = terminal_session_id_clone.get_untracked();
-                if session_id.is_none() {
+                if session_id.is_none() || session_id == Some("initializing".to_string()) {
                     match api::start_terminal_api(&path).await {
                         Ok(new_id) => {
                             terminal_session_id_clone.set(Some(new_id.clone()));
                             session_id = Some(new_id);
                             // Wait a short duration for the shell to spawn and initialize
-                            gloo_timers::future::TimeoutFuture::new(200).await;
+                            gloo_timers::future::TimeoutFuture::new(500).await;
                         }
                         Err(e) => {
+                            terminal_session_id_clone.set(None);
                             output_clone.set(format!("❌ Failed to initialize terminal session: {}\n", e));
                             is_running_clone.set(false);
                             return;
                         }
                     }
                 }
+
                 
                 if let Some(ref sid) = session_id {
                     let project_name = if let Some(last_slash) = path.rfind('/') {
@@ -228,7 +235,12 @@ pub fn make_run_code(
                     };
                     
                     // Display the prompt & command as if typed in the terminal
-                    output_clone.set(format!("{} $ {}\n", project_name, run_cmd_clone));
+                    let mut current = output_clone.get_untracked();
+                    if !current.is_empty() && !current.ends_with('\n') {
+                        current.push('\n');
+                    }
+                    current.push_str(&format!("{} $ {}\n", project_name, run_cmd_clone));
+                    output_clone.set(current);
                     
                     // Add to terminal history
                     let mut hist = terminal_history_clone.get_untracked();
@@ -238,9 +250,10 @@ pub fn make_run_code(
                         terminal_history_clone.set(hist);
                     }
                     
-                    // Construct command with the run completion marker
-                    let full_cmd = format!("{} && echo \"[CODE_RUN_ENDED]\" || echo \"[CODE_RUN_ENDED]\"\n", run_cmd_clone);
+                    // Construct command simply and send
+                    let full_cmd = format!("{}\n", run_cmd_clone);
                     let _ = api::send_terminal_input_api(sid, &full_cmd).await;
+                    is_running_clone.set(false);
                 }
             });
         } else {

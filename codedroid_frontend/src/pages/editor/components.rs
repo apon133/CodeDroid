@@ -1019,6 +1019,8 @@ pub fn BottomPanel(
             let output_clone = output;
             let start_polling_clone = start_polling;
             
+            terminal_session_id_clone.set(Some("initializing".to_string()));
+            
             spawn_local(async move {
                 match crate::api::start_terminal_api(&path).await {
                     Ok(session_id) => {
@@ -1037,6 +1039,7 @@ pub fn BottomPanel(
                         start_polling_clone(session_id);
                     }
                     Err(e) => {
+                        terminal_session_id_clone.set(None);
                         let mut current = output_clone.get_untracked();
                         current.push_str(&format!("❌ Failed to initialize terminal session: {}\n", e));
                         output_clone.set(current);
@@ -1049,6 +1052,9 @@ pub fn BottomPanel(
     // Effect to detect external session additions (e.g. from Run Code)
     Effect::new(move |_| {
         if let Some(session_id) = terminal_session_id.get() {
+            if session_id == "initializing" {
+                return;
+            }
             let list = sessions.get_untracked();
             if !list.iter().any(|s| s.id == session_id) {
                 let next_num = list.len() + 1;
@@ -1361,7 +1367,7 @@ pub fn BottomPanel(
         let output_clone = output;
 
         spawn_local(async move {
-            let session_id = match session_id_opt {
+            let mut session_id = match session_id_opt {
                 Some(id) => id,
                 None => "".to_string(),
             };
@@ -1369,14 +1375,28 @@ pub fn BottomPanel(
             let input_str = if cmd_clone.is_empty() { "\n".to_string() } else { format!("{}\n", cmd_clone) };
 
             let mut sent = false;
-            if !session_id.is_empty() {
+            if !session_id.is_empty() && session_id != "initializing" {
                 if let Ok(true) = crate::api::send_terminal_input_api(&session_id, &input_str).await {
                     sent = true;
+                }
+            } else if session_id == "initializing" {
+                for _ in 0..10 {
+                    gloo_timers::future::TimeoutFuture::new(100).await;
+                    if let Some(id) = terminal_session_id_clone.get_untracked() {
+                        if id != "initializing" {
+                            session_id = id;
+                            if let Ok(true) = crate::api::send_terminal_input_api(&session_id, &input_str).await {
+                                sent = true;
+                            }
+                            break;
+                        }
+                    }
                 }
             }
 
             if !sent {
                 // Session is dead or not found! Start a new one.
+                terminal_session_id_clone.set(Some("initializing".to_string()));
                 match crate::api::start_terminal_api(&proj_path_clone).await {
                     Ok(new_id) => {
                         terminal_session_id_clone.set(Some(new_id.clone()));
@@ -1409,6 +1429,7 @@ pub fn BottomPanel(
                         let _ = crate::api::send_terminal_input_api(&new_id, &input_str).await;
                     }
                     Err(e) => {
+                        terminal_session_id_clone.set(None);
                         let mut current = output_clone.get_untracked();
                         current.push_str(&format!("❌ Failed to initialize terminal session: {}\n", e));
                         output_clone.set(current);

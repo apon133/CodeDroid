@@ -256,3 +256,51 @@ pub fn resolve_typescript_sdk() -> String {
     // Last resort: let the LSP server figure it out itself
     "/usr/local/lib/node_modules/typescript/lib".to_string()
 }
+
+pub fn setup_env_path() {
+    let mut paths = Vec::new();
+
+    if let Ok(home) = std::env::var("HOME") {
+        paths.push(format!("{}/.cargo/bin", home));
+        paths.push(format!("{}/.local/bin", home));
+        paths.push(format!("{}/.npm-global/bin", home));
+        paths.push(format!("{}/go/bin", home));
+    }
+
+    paths.push("/opt/homebrew/bin".to_string());
+    paths.push("/opt/homebrew/sbin".to_string());
+    paths.push("/usr/local/bin".to_string());
+    paths.push("/usr/local/sbin".to_string());
+    paths.push("/usr/bin".to_string());
+    paths.push("/bin".to_string());
+    paths.push("/usr/sbin".to_string());
+    paths.push("/sbin".to_string());
+
+    if let Ok(prefix) = std::env::var("PREFIX") {
+        paths.push(format!("{}/bin", prefix));
+    } else {
+        paths.push("/data/data/com.termux/files/usr/bin".to_string());
+    }
+
+    let current_path = std::env::var("PATH").unwrap_or_default();
+    let split_char = if cfg!(windows) { ';' } else { ':' };
+
+    let mut unique_paths = Vec::new();
+    for p in paths {
+        let p_trimmed = p.trim();
+        if !p_trimmed.is_empty() && !unique_paths.contains(&p_trimmed.to_string()) {
+            unique_paths.push(p_trimmed.to_string());
+        }
+    }
+
+    for p in current_path.split(split_char) {
+        let p_trimmed = p.trim();
+        if !p_trimmed.is_empty() && !unique_paths.contains(&p_trimmed.to_string()) {
+            unique_paths.push(p_trimmed.to_string());
+        }
+    }
+
+    let new_path = unique_paths.join(&split_char.to_string());
+    std::env::set_var("PATH", new_path);
+}
+

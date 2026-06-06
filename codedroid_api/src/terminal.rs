@@ -59,6 +59,8 @@ pub async fn start_terminal(Json(payload): Json<StartTerminalRequest>) -> Json<S
 
     let (shell, args): (&str, Vec<&str>) = if cfg!(windows) {
         ("cmd.exe", vec![])
+    } else if cfg!(target_os = "macos") {
+        ("zsh", vec!["-l"])
     } else {
         ("sh", vec![])
     };
@@ -145,7 +147,9 @@ pub async fn get_terminal_output(Json(payload): Json<TerminalOutputRequest>) -> 
         let mut buf = session.output_buffer.lock().unwrap();
         output = std::mem::take(&mut *buf);
 
-        if let Ok(None) = session.child.lock().unwrap().try_wait() {
+        let status = session.child.lock().unwrap().try_wait();
+        println!("🔍 [DEBUG] Session ID {} try_wait status: {:?}", payload.session_id, status);
+        if let Ok(None) = status {
             is_alive = true;
         }
     }

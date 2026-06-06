@@ -23,6 +23,11 @@ pub fn make_stop_code(
                 preview_url_clone.set(None);
             });
         } else if let Some(session_id) = terminal_session_id.get_untracked() {
+            if session_id == "initializing" {
+                terminal_session_id.set(None);
+                is_running.set(false);
+                return;
+            }
             let terminal_session_id_clone = terminal_session_id.clone();
             let output_clone = output;
             spawn_local(async move {

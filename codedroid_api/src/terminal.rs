@@ -60,7 +60,7 @@ pub async fn start_terminal(Json(payload): Json<StartTerminalRequest>) -> Json<S
     let (shell, args): (&str, Vec<&str>) = if cfg!(windows) {
         ("cmd.exe", vec![])
     } else if cfg!(target_os = "macos") {
-        ("zsh", vec!["-l"])
+        ("zsh", vec![])
     } else {
         ("sh", vec![])
     };

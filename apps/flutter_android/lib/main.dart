@@ -1,6 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:http/http.dart' as http;
+import 'linux_manager.dart';
+import 'terminal_screen.dart';
+import 'log_viewer_sheet.dart';
 
 // Start a local server to serve WebAssembly and local assets properly with correct MIME types
 final InAppLocalhostServer localServer = InAppLocalhostServer(port: 8080, documentRoot: 'assets/www');
@@ -16,6 +21,9 @@ void main() async {
     systemNavigationBarColor: Color(0xFF181818), // Matches webapp background
     systemNavigationBarIconBrightness: Brightness.light,
   ));
+
+  // Initialize background Linux environment and Codedroid API
+  await LinuxManager.initialize();
 
   try {
     await localServer.start();
@@ -60,6 +68,36 @@ class _WebViewContainerState extends State<WebViewContainer> {
   InAppWebViewController? webViewController;
   bool isLoading = true;
   String? loadError;
+
+  // --- API Status ---
+  bool _apiRunning = false;
+  Timer? _apiCheckTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkApiStatus();
+    _apiCheckTimer = Timer.periodic(const Duration(seconds: 3), (_) => _checkApiStatus());
+  }
+
+  @override
+  void dispose() {
+    _apiCheckTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _checkApiStatus() async {
+    try {
+      final response = await http
+          .get(Uri.parse('http://localhost:3000/ping'))
+          .timeout(const Duration(seconds: 2));
+      if (mounted) {
+        setState(() => _apiRunning = response.statusCode == 200);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _apiRunning = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -128,10 +166,47 @@ class _WebViewContainerState extends State<WebViewContainer> {
                 );
               },
             ),
+            Positioned(
+              bottom: 12,
+              left: 88,
+              child: GestureDetector(
+                onTap: () => LogViewerSheet.show(context, _apiRunning),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 400),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: _apiRunning
+                        ? Colors.green.withOpacity(0.85)
+                        : Colors.red.withOpacity(0.85),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 6, offset: Offset(0, 2))],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _apiRunning ? Icons.check_circle : Icons.cancel,
+                        color: Colors.white,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        _apiRunning ? 'API: Running' : 'API: Not Running',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
             if (isLoading)
               Center(
                 child: CircularProgressIndicator(
-                  color: Theme.of(context).colorScheme.primary, // Matches theme accent blue
+                  color: Theme.of(context).colorScheme.primary,
                 ),
               ),
             if (loadError != null)
@@ -172,6 +247,19 @@ class _WebViewContainerState extends State<WebViewContainer> {
           ],
         ),
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const InteractiveTerminalScreen(),
+            ),
+          );
+        },
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        child: const Icon(Icons.terminal, color: Colors.black),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
     );
   }
 }

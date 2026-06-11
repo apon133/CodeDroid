@@ -8,26 +8,28 @@ mod diagnostics;
 mod error_suggestions;
 mod git;
 mod handlers;
+mod install_language;
+mod live_server;
 mod lsp;
 mod models;
 mod runner;
 mod terminal;
 mod utils;
-mod live_server;
 
 use handlers::{
-    add_package, copy_file, create_dir, create_project, delete_file, format_code, get_completions, get_definition,
-    get_hover, get_references, move_file, pick_directory, read_file, run_code, run_command,
-    scan_project, stop_process, sync_file, serve_raw_file, get_symbols,
+    add_package, copy_file, create_dir, create_project, delete_file, format_code, get_completions,
+    get_definition, get_hover, get_references, get_symbols, move_file, pick_directory, read_file,
+    run_command, scan_project, serve_raw_file, sync_file, get_logs_handler,
 };
+use runner::{run_code, stop_process};
 
 pub async fn start_server() -> Result<(), std::io::Error> {
     utils::setup_env_path();
 
     let app = Router::new()
         .route("/run", post(run_code))
-        .route("/run_command", post(run_command))
         .route("/stop", post(stop_process))
+        .route("/run_command", post(run_command))
         .route("/add_package", post(add_package))
         .route("/sync_file", post(sync_file))
         .route("/delete_file", post(delete_file))
@@ -50,7 +52,16 @@ pub async fn start_server() -> Result<(), std::io::Error> {
             "/error_suggestions",
             post(error_suggestions::get_error_suggestions_handler),
         )
+        .route("/logs", get(get_logs_handler))
         .route("/ping", get(|| async { "pong" }))
+        .route(
+            "/install_language",
+            post(install_language::install_language_handler),
+        )
+        .route(
+            "/check_language",
+            post(install_language::check_language_handler),
+        )
         .nest("/terminal", terminal::router())
         .nest("/git", git::router())
         .nest("/live-server", live_server::router())

@@ -378,6 +378,8 @@ pub fn EditorPage() -> impl IntoView {
     let terminal_session_id = RwSignal::new(Option::<String>::None);
     let terminal_history = RwSignal::new(store::load_terminal_history(&project.id));
     let terminal_trigger = RwSignal::new(Option::<String>::None);
+    let terminal_auto_cmd = RwSignal::new(Option::<String>::None);
+    let terminal_interrupt = RwSignal::new(0u32);
 
     // Status Bar helper signals
     let cursor_line_col = Signal::derive(move || {
@@ -542,39 +544,41 @@ pub fn EditorPage() -> impl IntoView {
         project_path_str.get_value(),
     );
 
-    let run_code = make_run_code(
-        pid.clone(),
-        ppath.clone(),
-        project.language.clone(),
-        code,
-        is_running,
-        output,
-        is_error,
-        current_pid,
-        preview_url,
-        save_current.clone(),
-        terminal_session_id,
-        bottom_tab,
-        active_tab.into(),
-        show_snack.clone(),
-        file_tree_data.clone(),
-        terminal_history,
-        bottom_open,
-    );
-
-    let stop_code = make_stop_code(current_pid, output, preview_url, bottom_tab, terminal_session_id, is_running);
-
     let format_code = make_format_code(
         ppath.clone(),
         project.language.clone(),
         code,
         dirty,
-        is_running,
         active_tab,
         output,
         is_error,
         bottom_tab,
         trigger_diagnostics.clone(),
+    );
+
+    let run_code = make_run_code(
+        ppath.clone(),
+        project.language.clone(),
+        code,
+        active_tab,
+        is_running,
+        current_pid,
+        preview_url,
+        show_desktop_preview,
+        output,
+        is_error,
+        bottom_tab,
+        bottom_open,
+        terminal_auto_cmd,
+        save_current.clone(),
+    );
+
+    let stop_code = make_stop_code(
+        is_running,
+        current_pid,
+        preview_url,
+        terminal_interrupt,
+        output,
     );
 
     let add_dep = make_add_dep(
@@ -796,7 +800,18 @@ pub fn EditorPage() -> impl IntoView {
     let nav_settings = navigate.clone();
 
     view! {
-        <div class="editor-page-root">
+        <div class="editor-page-root" tabindex="-1"
+            on:keydown=move |e: web_sys::KeyboardEvent| {
+                if e.ctrl_key() && e.alt_key() && (e.key() == "r" || e.key() == "R") {
+                    e.prevent_default();
+                    if is_running.get_untracked() {
+                        stop_code.run(());
+                    } else {
+                        run_code.run(());
+                    }
+                }
+            }
+        >
             <div class="vscode-titlebar">
                 <div class="titlebar-left">
                     <button class="titlebar-back" on:click=move |_| nav_back("/", Default::default()) title="Back to Projects">
@@ -816,6 +831,40 @@ pub fn EditorPage() -> impl IntoView {
                     </div>
                 </div>
                 <div class="titlebar-actions">
+                    {move || if is_running.get() {
+                        view! {
+                            <button class="btn-titlebar-action btn-stop" title="Stop (Ctrl+Alt+R)"
+                                on:click=move |_| stop_code.run(())>
+                                <LucideIcon name="square" size="14" />
+                                <span class="btn-text">"Stop"</span>
+                            </button>
+                        }.into_any()
+                    } else {
+                        view! {
+                            <button class="btn-titlebar-action btn-run" title="Run (Ctrl+Alt+R)"
+                                on:click=move |_| run_code.run(())>
+                                <LucideIcon name="play" size="14" />
+                                <span class="btn-text">"Run"</span>
+                            </button>
+                        }.into_any()
+                    }}
+
+                    {move || preview_url.get().map(|_| view! {
+                        <button
+                            class=move || {
+                                if show_desktop_preview.get() {
+                                    "btn-titlebar-action btn-preview active"
+                                } else {
+                                    "btn-titlebar-action btn-preview"
+                                }
+                            }
+                            title="Toggle Web Preview"
+                            on:click=move |_| show_desktop_preview.update(|v| *v = !*v)>
+                            <LucideIcon name="globe" size="14" />
+                            <span class="btn-text">"Preview"</span>
+                        </button>
+                    })}
+
                     <button class="btn-titlebar-action" title="Find in File (Ctrl+F)"
                         on:click=move |_| show_search.update(|v| *v = !*v)>
                         <LucideIcon name="search" size="14" />
@@ -858,63 +907,6 @@ pub fn EditorPage() -> impl IntoView {
                         <span class="btn-text">"Antigravity"</span>
                     </button>
                     
-                    {move || if is_running.get() || current_pid.get().is_some() {
-                        view! {
-                            <button class="btn-titlebar-action btn-stop" title="Stop Project" on:click=move |_| stop_code.run(())>
-                                <LucideIcon name="square" size="14" />
-                                <span class="btn-text">"Stop"</span>
-                            </button>
-                        }.into_any()
-                    } else {
-                        view! {
-                            <button class="btn-titlebar-action btn-run" title="Run Project (Ctrl+Alt+R)" disabled=move || is_running.get() on:click=move |_| run_code.run(())>
-                                <LucideIcon name="play" size="14" />
-                                <span class="btn-text">"Run"</span>
-                            </button>
-                        }.into_any()
-                    }}
-
-                    {move || preview_url.get().is_some().then(|| {
-                        let is_active = move || {
-                            let is_mobile = web_sys::window()
-                                .and_then(|w| w.inner_width().ok())
-                                .and_then(|w| w.as_f64())
-                                .map(|w| w <= 768.0)
-                                .unwrap_or(false);
-                            if is_mobile {
-                                show_mobile_full_preview.get()
-                            } else {
-                                show_desktop_preview.get()
-                            }
-                        };
-                        view! {
-                            <button 
-                                class=move || {
-                                    if is_active() {
-                                        "btn-titlebar-action btn-preview active"
-                                    } else {
-                                        "btn-titlebar-action btn-preview"
-                                    }
-                                }
-                                title="Toggle Preview"
-                                on:click=move |_| {
-                                    let is_mobile = web_sys::window()
-                                        .and_then(|w| w.inner_width().ok())
-                                        .and_then(|w| w.as_f64())
-                                        .map(|w| w <= 768.0)
-                                        .unwrap_or(false);
-                                    if is_mobile {
-                                        show_mobile_full_preview.update(|v| *v = !*v);
-                                    } else {
-                                        show_desktop_preview.update(|v| *v = !*v);
-                                    }
-                                }
-                            >
-                                <LucideIcon name="eye" size="14" />
-                                <span class="btn-text">"Preview"</span>
-                            </button>
-                        }
-                    })}
                 </div>
             </div>
 
@@ -1402,6 +1394,8 @@ pub fn EditorPage() -> impl IntoView {
                             is_running=is_running
                             terminal_history=terminal_history
                             terminal_trigger=terminal_trigger
+                            terminal_auto_cmd=terminal_auto_cmd
+                            terminal_interrupt=terminal_interrupt
                             close_terminal=Callback::new(move |_: ()| bottom_open.set(false))
                         />
                         </>

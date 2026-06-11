@@ -1,7 +1,7 @@
+use crate::utils::resolve_project_dir;
 use axum::{routing::post, Json, Router};
 use serde::{Deserialize, Serialize};
 use std::process::Command;
-use crate::utils::resolve_project_dir;
 
 #[derive(Deserialize)]
 pub struct GitRequest {
@@ -74,7 +74,7 @@ fn run_git(dir: &str, args: &[&str]) -> Result<String, String> {
 
 pub async fn git_status(Json(payload): Json<GitRequest>) -> Json<GitStatusResponse> {
     let dir = resolve_project_dir(&payload.project_path);
-    
+
     // Check if git is initialized
     if let Err(e) = run_git(&dir, &["status"]) {
         return Json(GitStatusResponse {
@@ -161,7 +161,7 @@ pub async fn git_unstage(Json(payload): Json<GitFileRequest>) -> Json<GitCommand
 
 pub async fn git_discard(Json(payload): Json<GitFileRequest>) -> Json<GitCommandResponse> {
     let dir = resolve_project_dir(&payload.project_path);
-    
+
     // First try checking if the file is tracked
     let is_tracked = match run_git(&dir, &["ls-files", "--error-unmatch", &payload.file_path]) {
         Ok(_) => true,
@@ -257,7 +257,7 @@ pub async fn git_unstage_all(Json(payload): Json<GitRequest>) -> Json<GitCommand
 
 pub async fn git_discard_all(Json(payload): Json<GitRequest>) -> Json<GitCommandResponse> {
     let dir = resolve_project_dir(&payload.project_path);
-    
+
     // First, run checkout to discard tracked changes
     if let Err(e) = run_git(&dir, &["checkout", "--", "."]) {
         return Json(GitCommandResponse {
@@ -281,7 +281,6 @@ pub async fn git_discard_all(Json(payload): Json<GitRequest>) -> Json<GitCommand
         }),
     }
 }
-
 
 pub async fn git_commit(Json(payload): Json<GitCommitRequest>) -> Json<GitCommandResponse> {
     let dir = resolve_project_dir(&payload.project_path);
@@ -387,7 +386,7 @@ fn parse_diff_part(part: &str) -> (usize, usize) {
     let clean = part.trim_start_matches(|c| c == '+' || c == '-');
     if let Some(pos) = clean.find(',') {
         let start = clean[..pos].parse::<usize>().unwrap_or(1);
-        let len = clean[pos+1..].parse::<usize>().unwrap_or(1);
+        let len = clean[pos + 1..].parse::<usize>().unwrap_or(1);
         (start, len)
     } else {
         let start = clean.parse::<usize>().unwrap_or(1);
@@ -397,7 +396,7 @@ fn parse_diff_part(part: &str) -> (usize, usize) {
 
 pub async fn git_diff_text(Json(payload): Json<GitFileRequest>) -> Json<GitCommandResponse> {
     let dir = resolve_project_dir(&payload.project_path);
-    
+
     // Check if the file is tracked
     let is_tracked = match run_git(&dir, &["ls-files", "--error-unmatch", &payload.file_path]) {
         Ok(_) => true,
@@ -421,7 +420,10 @@ pub async fn git_diff_text(Json(payload): Json<GitFileRequest>) -> Json<GitComma
         // For untracked files, git diff HEAD doesn't show anything unless we use a special trick.
         // We can just run git diff --no-index /dev/null <file_path>
         // But since we are inside `dir`, the path to file is relative `payload.file_path`
-        match run_git(&dir, &["diff", "--no-index", "/dev/null", &payload.file_path]) {
+        match run_git(
+            &dir,
+            &["diff", "--no-index", "/dev/null", &payload.file_path],
+        ) {
             Ok(out) => Json(GitCommandResponse {
                 success: true,
                 output: out,
@@ -450,26 +452,32 @@ pub async fn git_diff_text(Json(payload): Json<GitFileRequest>) -> Json<GitComma
 
 pub async fn git_clone(Json(payload): Json<GitCloneRequest>) -> Json<GitCommandResponse> {
     // Determine target directory
-    let virtual_project_path = payload.project_path.clone().unwrap_or_else(|| {
-        format!("/Codedroid_Projects/{}", payload.project_name)
-    });
+    let virtual_project_path = payload
+        .project_path
+        .clone()
+        .unwrap_or_else(|| format!("/Codedroid_Projects/{}", payload.project_name));
     let target_dir = resolve_project_dir(&virtual_project_path);
 
     // Get the parent folder
     let parent_dir = match std::path::Path::new(&target_dir).parent() {
         Some(p) => p.to_string_lossy().into_owned(),
-        None => return Json(GitCommandResponse {
-            success: false,
-            output: String::new(),
-            error: Some("Could not resolve parent directory for project".to_string()),
-        }),
+        None => {
+            return Json(GitCommandResponse {
+                success: false,
+                output: String::new(),
+                error: Some("Could not resolve parent directory for project".to_string()),
+            })
+        }
     };
 
     // Make sure parent dir exists
     let _ = std::fs::create_dir_all(&parent_dir);
 
     // Run git clone clone_url project_name inside parent_dir
-    match run_git(&parent_dir, &["clone", &payload.clone_url, &payload.project_name]) {
+    match run_git(
+        &parent_dir,
+        &["clone", &payload.clone_url, &payload.project_name],
+    ) {
         Ok(out) => Json(GitCommandResponse {
             success: true,
             output: out,
@@ -507,7 +515,7 @@ pub struct GitCommitMessageResponse {
 
 pub async fn git_log(Json(payload): Json<GitRequest>) -> Json<GitLogResponse> {
     let dir = resolve_project_dir(&payload.project_path);
-    
+
     // Check if git is initialized
     if let Err(e) = run_git(&dir, &["status"]) {
         return Json(GitLogResponse {
@@ -516,7 +524,10 @@ pub async fn git_log(Json(payload): Json<GitRequest>) -> Json<GitLogResponse> {
         });
     }
 
-    match run_git(&dir, &["log", "--pretty=format:%h|%s|%d|%an|%ar", "-n", "30"]) {
+    match run_git(
+        &dir,
+        &["log", "--pretty=format:%h|%s|%d|%an|%ar", "-n", "30"],
+    ) {
         Ok(out) => {
             let mut commits = Vec::new();
             for line in out.lines() {
@@ -557,7 +568,7 @@ fn generate_ai_commit_message(dir: &str) -> Result<Vec<String>, String> {
         Ok(d) => d,
         Err(_) => String::new(),
     };
-    
+
     if diff.trim().is_empty() {
         // Fallback to unstaged changes
         diff = match run_git(dir, &["diff", "--name-status"]) {
@@ -610,7 +621,8 @@ fn generate_ai_commit_message(dir: &str) -> Result<Vec<String>, String> {
             scope = "ui";
         }
 
-        let main_items: Vec<String> = modified_files.iter()
+        let main_items: Vec<String> = modified_files
+            .iter()
             .chain(added_files.iter())
             .map(|(_, f)| f.clone())
             .take(3)
@@ -620,8 +632,14 @@ fn generate_ai_commit_message(dir: &str) -> Result<Vec<String>, String> {
             details = main_items.join(", ");
         }
 
-        let has_rust = modified_files.iter().chain(added_files.iter()).any(|(_, f)| f.ends_with(".rs"));
-        let has_css = modified_files.iter().chain(added_files.iter()).any(|(_, f)| f.ends_with(".css"));
+        let has_rust = modified_files
+            .iter()
+            .chain(added_files.iter())
+            .any(|(_, f)| f.ends_with(".rs"));
+        let has_css = modified_files
+            .iter()
+            .chain(added_files.iter())
+            .any(|(_, f)| f.ends_with(".css"));
 
         if has_css {
             suggestions.push("style: refine UI aesthetics and stylesheet layout".to_string());
@@ -629,8 +647,12 @@ fn generate_ai_commit_message(dir: &str) -> Result<Vec<String>, String> {
         }
 
         if !added_files.is_empty() {
-            let added_names: Vec<String> = added_files.iter().map(|(_, f)| f.clone()).take(2).collect();
-            suggestions.push(format!("feat: implement new files ({})", added_names.join(", ")));
+            let added_names: Vec<String> =
+                added_files.iter().map(|(_, f)| f.clone()).take(2).collect();
+            suggestions.push(format!(
+                "feat: implement new files ({})",
+                added_names.join(", ")
+            ));
             if scope == "ui" {
                 suggestions.push("feat(ui): add new components and views".to_string());
             } else {
@@ -646,9 +668,15 @@ fn generate_ai_commit_message(dir: &str) -> Result<Vec<String>, String> {
             suggestions.push(format!("refactor: update and modularize {}", details));
         }
 
-        if modified_files.iter().chain(added_files.iter()).any(|(p, _)| p.contains("git_panel") || p.contains("git.rs")) {
+        if modified_files
+            .iter()
+            .chain(added_files.iter())
+            .any(|(p, _)| p.contains("git_panel") || p.contains("git.rs"))
+        {
             suggestions.push("feat: implement git integration in backend and add auto-language detection to run operations".to_string());
-            suggestions.push("refactor: update git panel layout with premium VS Code-style UX".to_string());
+            suggestions.push(
+                "refactor: update git panel layout with premium VS Code-style UX".to_string(),
+            );
         }
     }
 
@@ -661,11 +689,16 @@ fn generate_ai_commit_message(dir: &str) -> Result<Vec<String>, String> {
     Ok(suggestions)
 }
 
-pub async fn git_ai_commit_message(Json(payload): Json<GitRequest>) -> Json<GitCommitMessageResponse> {
+pub async fn git_ai_commit_message(
+    Json(payload): Json<GitRequest>,
+) -> Json<GitCommitMessageResponse> {
     let dir = resolve_project_dir(&payload.project_path);
     match generate_ai_commit_message(&dir) {
         Ok(suggestions) => {
-            let default_msg = suggestions.first().cloned().unwrap_or_else(|| "style: refine codebase".to_string());
+            let default_msg = suggestions
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "style: refine codebase".to_string());
             Json(GitCommitMessageResponse {
                 message: default_msg,
                 suggestions,
@@ -722,7 +755,7 @@ pub struct GitRemotesResponse {
 
 pub async fn git_list_branches(Json(payload): Json<GitRequest>) -> Json<GitBranchesResponse> {
     let dir = resolve_project_dir(&payload.project_path);
-    
+
     if let Err(e) = run_git(&dir, &["status"]) {
         return Json(GitBranchesResponse {
             current: "None".to_string(),
@@ -795,13 +828,22 @@ pub async fn git_create_branch(Json(payload): Json<GitBranchRequest>) -> Json<Gi
     }
 }
 
-pub async fn git_checkout_branch(Json(payload): Json<GitBranchRequest>) -> Json<GitCommandResponse> {
+pub async fn git_checkout_branch(
+    Json(payload): Json<GitBranchRequest>,
+) -> Json<GitCommandResponse> {
     let dir = resolve_project_dir(&payload.project_path);
     let branch_to_checkout = payload.branch_name.clone();
     let mut args = vec!["checkout"];
     if branch_to_checkout.starts_with("origin/") {
         let local_name = branch_to_checkout.strip_prefix("origin/").unwrap();
-        let local_exists = match run_git(&dir, &["show-ref", "--verify", &format!("refs/heads/{}", local_name)]) {
+        let local_exists = match run_git(
+            &dir,
+            &[
+                "show-ref",
+                "--verify",
+                &format!("refs/heads/{}", local_name),
+            ],
+        ) {
             Ok(_) => true,
             Err(_) => false,
         };
@@ -849,7 +891,7 @@ pub async fn git_merge_branch(Json(payload): Json<GitMergeRequest>) -> Json<GitC
 
 pub async fn git_list_remotes(Json(payload): Json<GitRequest>) -> Json<GitRemotesResponse> {
     let dir = resolve_project_dir(&payload.project_path);
-    
+
     if let Err(e) = run_git(&dir, &["status"]) {
         return Json(GitRemotesResponse {
             remotes: vec![],
@@ -887,11 +929,13 @@ pub async fn git_add_remote(Json(payload): Json<GitRemoteRequest>) -> Json<GitCo
     let dir = resolve_project_dir(&payload.project_path);
     let url = match payload.remote_url {
         Some(u) => u,
-        None => return Json(GitCommandResponse {
-            success: false,
-            output: String::new(),
-            error: Some("Remote URL is required".to_string()),
-        }),
+        None => {
+            return Json(GitCommandResponse {
+                success: false,
+                output: String::new(),
+                error: Some("Remote URL is required".to_string()),
+            })
+        }
     };
     match run_git(&dir, &["remote", "add", &payload.remote_name, &url]) {
         Ok(out) => Json(GitCommandResponse {
@@ -927,11 +971,13 @@ pub async fn git_set_remote_url(Json(payload): Json<GitRemoteRequest>) -> Json<G
     let dir = resolve_project_dir(&payload.project_path);
     let url = match payload.remote_url {
         Some(u) => u,
-        None => return Json(GitCommandResponse {
-            success: false,
-            output: String::new(),
-            error: Some("Remote URL is required".to_string()),
-        }),
+        None => {
+            return Json(GitCommandResponse {
+                success: false,
+                output: String::new(),
+                error: Some("Remote URL is required".to_string()),
+            })
+        }
     };
     match run_git(&dir, &["remote", "set-url", &payload.remote_name, &url]) {
         Ok(out) => Json(GitCommandResponse {
@@ -990,7 +1036,7 @@ mod tests {
             .current_dir(path)
             .output()
             .expect("Failed to init git repo");
-        
+
         // Configure local git user for test
         Command::new("git")
             .args(&["config", "user.name", "Test User"])
@@ -1015,8 +1061,16 @@ mod tests {
         writeln!(file, "Initial content").unwrap();
 
         // Commit it initially so we can test discarding modification
-        Command::new("git").args(&["add", "test.txt"]).current_dir(&project_path).output().unwrap();
-        Command::new("git").args(&["commit", "-m", "Initial commit"]).current_dir(&project_path).output().unwrap();
+        Command::new("git")
+            .args(&["add", "test.txt"])
+            .current_dir(&project_path)
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(&["commit", "-m", "Initial commit"])
+            .current_dir(&project_path)
+            .output()
+            .unwrap();
 
         // 2. Modify the file and create a new untracked file
         let mut file = File::create(&file_path).unwrap();
@@ -1029,66 +1083,111 @@ mod tests {
         // Verify they are unstaged
         let status_res = git_status(axum::Json(GitRequest {
             project_path: project_path.clone(),
-        })).await;
-        
+        }))
+        .await;
+
         let staged_count = |res: &GitStatusResponse| {
-            res.files.iter().filter(|f| {
-                let s = &f.status;
-                s != "??" && s.chars().next().map(|c| c != ' ' && c != '?').unwrap_or(false)
-            }).count()
+            res.files
+                .iter()
+                .filter(|f| {
+                    let s = &f.status;
+                    s != "??"
+                        && s.chars()
+                            .next()
+                            .map(|c| c != ' ' && c != '?')
+                            .unwrap_or(false)
+                })
+                .count()
         };
         let unstaged_count = |res: &GitStatusResponse| {
-            res.files.iter().filter(|f| {
-                let s = &f.status;
-                s == "??" || s.chars().nth(1).map(|c| c != ' ').unwrap_or(false)
-            }).count()
+            res.files
+                .iter()
+                .filter(|f| {
+                    let s = &f.status;
+                    s == "??" || s.chars().nth(1).map(|c| c != ' ').unwrap_or(false)
+                })
+                .count()
         };
 
-        assert!(unstaged_count(&status_res.0) > 0, "Should have unstaged changes");
+        assert!(
+            unstaged_count(&status_res.0) > 0,
+            "Should have unstaged changes"
+        );
 
         // 3. Stage all
         let stage_res = git_stage_all(axum::Json(GitRequest {
             project_path: project_path.clone(),
-        })).await;
+        }))
+        .await;
         assert!(stage_res.0.success, "Stage all should succeed");
 
         let status_res2 = git_status(axum::Json(GitRequest {
             project_path: project_path.clone(),
-        })).await;
-        assert_eq!(unstaged_count(&status_res2.0), 0, "Should have no unstaged changes after stage-all");
-        assert!(staged_count(&status_res2.0) > 0, "Should have staged changes after stage-all");
+        }))
+        .await;
+        assert_eq!(
+            unstaged_count(&status_res2.0),
+            0,
+            "Should have no unstaged changes after stage-all"
+        );
+        assert!(
+            staged_count(&status_res2.0) > 0,
+            "Should have staged changes after stage-all"
+        );
 
         // 4. Unstage all
         let unstage_res = git_unstage_all(axum::Json(GitRequest {
             project_path: project_path.clone(),
-        })).await;
+        }))
+        .await;
         assert!(unstage_res.0.success, "Unstage all should succeed");
 
         let status_res3 = git_status(axum::Json(GitRequest {
             project_path: project_path.clone(),
-        })).await;
+        }))
+        .await;
         for f in &status_res3.0.files {
             eprintln!("DEBUG: path={}, status='{}'", f.path, f.status);
         }
-        assert!(unstaged_count(&status_res3.0) > 0, "Should have unstaged changes after unstage-all");
-        assert_eq!(staged_count(&status_res3.0), 0, "Should have no staged changes after unstage-all");
+        assert!(
+            unstaged_count(&status_res3.0) > 0,
+            "Should have unstaged changes after unstage-all"
+        );
+        assert_eq!(
+            staged_count(&status_res3.0),
+            0,
+            "Should have no staged changes after unstage-all"
+        );
 
         // 5. Discard all
         let discard_res = git_discard_all(axum::Json(GitRequest {
             project_path: project_path.clone(),
-        })).await;
+        }))
+        .await;
         assert!(discard_res.0.success, "Discard all should succeed");
 
         let status_res4 = git_status(axum::Json(GitRequest {
             project_path: project_path.clone(),
-        })).await;
-        assert_eq!(unstaged_count(&status_res4.0), 0, "Should have no unstaged changes after discard-all");
-        assert_eq!(staged_count(&status_res4.0), 0, "Should have no staged changes after discard-all");
+        }))
+        .await;
+        assert_eq!(
+            unstaged_count(&status_res4.0),
+            0,
+            "Should have no unstaged changes after discard-all"
+        );
+        assert_eq!(
+            staged_count(&status_res4.0),
+            0,
+            "Should have no staged changes after discard-all"
+        );
 
         // Verify files were reset/cleaned
         let content = std::fs::read_to_string(&file_path).unwrap();
         assert_eq!(content.trim(), "Initial content");
-        assert!(!std::path::Path::new(&untracked_path).exists(), "Untracked file should be deleted");
+        assert!(
+            !std::path::Path::new(&untracked_path).exists(),
+            "Untracked file should be deleted"
+        );
 
         // Cleanup
         let _ = fs::remove_dir_all(&project_path);

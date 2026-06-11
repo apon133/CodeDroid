@@ -1,12 +1,12 @@
+use crate::utils::resolve_project_dir;
+use axum::{routing::post, Json, Router};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use axum::{routing::post, Json, Router};
-use serde::{Deserialize, Serialize};
-use crate::utils::resolve_project_dir;
 
 pub struct TerminalSession {
     stdin: ChildStdin,
@@ -49,7 +49,9 @@ pub struct StartTerminalResponse {
     pub session_id: String,
 }
 
-pub async fn start_terminal(Json(payload): Json<StartTerminalRequest>) -> Json<StartTerminalResponse> {
+pub async fn start_terminal(
+    Json(payload): Json<StartTerminalRequest>,
+) -> Json<StartTerminalResponse> {
     let project_dir = resolve_project_dir(&payload.project_path);
     let sessions_arc = get_sessions();
     let mut sessions = sessions_arc.lock().unwrap();
@@ -108,7 +110,10 @@ pub async fn start_terminal(Json(payload): Json<StartTerminalRequest>) -> Json<S
 
     let session_id = format!(
         "term_{}",
-        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
     );
 
     sessions.insert(
@@ -135,7 +140,9 @@ pub struct TerminalOutputResponse {
     pub is_alive: bool,
 }
 
-pub async fn get_terminal_output(Json(payload): Json<TerminalOutputRequest>) -> Json<TerminalOutputResponse> {
+pub async fn get_terminal_output(
+    Json(payload): Json<TerminalOutputRequest>,
+) -> Json<TerminalOutputResponse> {
     let sessions_arc = get_sessions();
     let mut sessions = sessions_arc.lock().unwrap();
 
@@ -148,7 +155,10 @@ pub async fn get_terminal_output(Json(payload): Json<TerminalOutputRequest>) -> 
         output = std::mem::take(&mut *buf);
 
         let status = session.child.lock().unwrap().try_wait();
-        println!("🔍 [DEBUG] Session ID {} try_wait status: {:?}", payload.session_id, status);
+        println!(
+            "🔍 [DEBUG] Session ID {} try_wait status: {:?}",
+            payload.session_id, status
+        );
         if let Ok(None) = status {
             is_alive = true;
         }
@@ -169,7 +179,9 @@ pub struct TerminalInputResponse {
     pub error: Option<String>,
 }
 
-pub async fn send_terminal_input(Json(payload): Json<TerminalInputRequest>) -> Json<TerminalInputResponse> {
+pub async fn send_terminal_input(
+    Json(payload): Json<TerminalInputRequest>,
+) -> Json<TerminalInputResponse> {
     let sessions_arc = get_sessions();
     let mut sessions = sessions_arc.lock().unwrap();
 

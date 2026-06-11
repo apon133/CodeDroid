@@ -1,14 +1,6 @@
 use crate::lsp;
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize)]
-pub struct CodeRequest {
-    pub code: String,
-    pub language: String,
-    pub project_path: String,
-    pub cargo_toml: Option<String>,
-}
-
 #[derive(Serialize)]
 pub struct CodeResponse {
     pub output: String,
@@ -17,17 +9,31 @@ pub struct CodeResponse {
     pub url: Option<String>,
 }
 
+#[derive(Deserialize)]
+pub struct RunRequest {
+    pub code: String,
+    pub language: String,
+    pub project_path: String,
+    #[serde(default)]
+    pub cargo_toml: Option<String>,
+    #[serde(default)]
+    pub file_path: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct StopRequest {
+    #[serde(default)]
+    pub pid: Option<u32>,
+    #[serde(default)]
+    pub stop_live_server: Option<bool>,
+}
+
 #[derive(Serialize)]
 pub struct PackageResponse {
     pub output: String,
     pub error: String,
     pub dependency_file_name: Option<String>,
     pub dependency_file_content: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub struct StopRequest {
-    pub pid: u32,
 }
 
 #[derive(Deserialize)]
@@ -216,4 +222,3 @@ pub struct SymbolsRequest {
 pub struct SymbolsResponse {
     pub symbols: Vec<lsp::DocumentSymbolResponse>,
 }
-

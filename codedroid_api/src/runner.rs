@@ -1,264 +1,123 @@
-use crate::models::{CodeRequest, CodeResponse};
-use crate::utils::find_url_in_output;
+use crate::live_server;
+use crate::models::{CodeResponse, RunRequest, StopRequest};
+use crate::utils::resolve_project_dir;
 use axum::Json;
+use regex::Regex;
 use std::fs;
-use std::io::Read;
-use std::process::{Command, Stdio};
-use std::sync::{Arc, Mutex};
+use std::io::{BufRead, BufReader};
+use std::path::Path;
+use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
-#[cfg(unix)]
-use std::os::unix::process::CommandExt;
+static RUNNING_PROCESSES: OnceLock<Arc<Mutex<std::collections::HashMap<u32, Child>>>> =
+    OnceLock::new();
 
-pub fn run_with_timeout(mut cmd: Command) -> Json<CodeResponse> {
-    cmd.stdout(Stdio::piped());
-    cmd.stderr(Stdio::piped());
-
-    #[cfg(unix)]
-    cmd.process_group(0); // Start in a new process group
-
-    let mut child = match cmd.spawn() {
-        Ok(c) => c,
-        Err(e) => {
-            return Json(CodeResponse {
-                output: "".to_string(),
-                error: format!("Failed to spawn process: {}", e),
-                pid: None,
-                url: None,
-            })
-        }
-    };
-
-    let mut stdout = child.stdout.take().unwrap();
-    let mut stderr = child.stderr.take().unwrap();
-
-    let stdout_buf = Arc::new(Mutex::new(String::new()));
-    let stderr_buf = Arc::new(Mutex::new(String::new()));
-
-    let s_out = stdout_buf.clone();
-    thread::spawn(move || {
-        let mut buffer = [0; 1024];
-        while let Ok(n) = stdout.read(&mut buffer) {
-            if n == 0 {
-                break;
-            }
-            let mut buf = s_out.lock().unwrap();
-            buf.push_str(&String::from_utf8_lossy(&buffer[..n]));
-        }
-    });
-
-    let s_err = stderr_buf.clone();
-    thread::spawn(move || {
-        let mut buffer = [0; 1024];
-        while let Ok(n) = stderr.read(&mut buffer) {
-            if n == 0 {
-                break;
-            }
-            let mut buf = s_err.lock().unwrap();
-            buf.push_str(&String::from_utf8_lossy(&buffer[..n]));
-        }
-    });
-
-    let start = std::time::Instant::now();
-    let mut status = None;
-    while start.elapsed() < Duration::from_secs(10) {
-        if let Ok(Some(s)) = child.try_wait() {
-            status = Some(s);
-            break;
-        }
-        thread::sleep(Duration::from_millis(100));
-    }
-
-    // Give pipes a moment to flush
-    thread::sleep(Duration::from_millis(200));
-
-    let out = stdout_buf.lock().unwrap().clone();
-    let err = stderr_buf.lock().unwrap().clone();
-
-    if status.is_none() {
-        Json(CodeResponse {
-            output: format!("{}\n[Server is running...]", out),
-            error: format!("{}\n[Reached 10s timeout - Process active]", err),
-            pid: Some(child.id()),
-            url: None,
-        })
-    } else {
-        Json(CodeResponse {
-            output: out,
-            error: err,
-            pid: None,
-            url: None,
-        })
-    }
+fn running_processes() -> &'static Arc<Mutex<std::collections::HashMap<u32, Child>>> {
+    RUNNING_PROCESSES.get_or_init(|| Arc::new(Mutex::new(std::collections::HashMap::new())))
 }
 
-pub fn run_with_timeout_web(mut cmd: Command) -> Json<CodeResponse> {
-    cmd.stdout(Stdio::piped());
-    cmd.stderr(Stdio::piped());
+pub async fn run_code(Json(payload): Json<RunRequest>) -> Json<CodeResponse> {
+    let project_dir = resolve_project_dir(&payload.project_path);
+    let lang = payload.language.to_lowercase();
 
-    #[cfg(unix)]
-    cmd.process_group(0);
-
-    let mut child = match cmd.spawn() {
-        Ok(c) => c,
-        Err(e) => {
-            return Json(CodeResponse {
-                output: "".to_string(),
-                error: format!("Failed to spawn process: {}", e),
-                pid: None,
-                url: None,
-            })
-        }
-    };
-
-    let mut stdout = child.stdout.take().unwrap();
-    let mut stderr = child.stderr.take().unwrap();
-
-    let stdout_buf = Arc::new(Mutex::new(String::new()));
-    let stderr_buf = Arc::new(Mutex::new(String::new()));
-
-    let s_out = stdout_buf.clone();
-    thread::spawn(move || {
-        let mut buffer = [0; 1024];
-        while let Ok(n) = stdout.read(&mut buffer) {
-            if n == 0 {
-                break;
-            }
-            let mut buf = s_out.lock().unwrap();
-            buf.push_str(&String::from_utf8_lossy(&buffer[..n]));
-        }
-    });
-
-    let s_err = stderr_buf.clone();
-    thread::spawn(move || {
-        let mut buffer = [0; 1024];
-        while let Ok(n) = stderr.read(&mut buffer) {
-            if n == 0 {
-                break;
-            }
-            let mut buf = s_err.lock().unwrap();
-            buf.push_str(&String::from_utf8_lossy(&buffer[..n]));
-        }
-    });
-
-    let start = std::time::Instant::now();
-    let mut status = None;
-    let mut detected_url = None;
-
-    // Wait up to 10 seconds for the server to start and output a URL
-    while start.elapsed() < Duration::from_secs(10) {
-        if let Ok(Some(s)) = child.try_wait() {
-            status = Some(s);
-            break;
-        }
-
-        let out = stdout_buf.lock().unwrap().clone();
-        let err = stderr_buf.lock().unwrap().clone();
-        if let Some(url) = find_url_in_output(&out) {
-            detected_url = Some(url);
-            break;
-        }
-        if let Some(url) = find_url_in_output(&err) {
-            detected_url = Some(url);
-            break;
-        }
-
-        thread::sleep(Duration::from_millis(200));
+    if let Some(response) = try_run_web_project(&project_dir, &payload.project_path).await {
+        return Json(response);
     }
 
-    let out = stdout_buf.lock().unwrap().clone();
-    let err = stderr_buf.lock().unwrap().clone();
-
-    if status.is_none() {
-        Json(CodeResponse {
-            output: format!("{}\n[Server is running...]", out),
-            error: err,
-            pid: Some(child.id()),
-            url: detected_url,
-        })
-    } else {
-        Json(CodeResponse {
-            output: out,
-            error: err,
-            pid: None,
-            url: None,
-        })
-    }
+    let command = resolve_terminal_command(&project_dir, &lang, payload.file_path.as_deref());
+    Json(CodeResponse {
+        output: command,
+        error: String::new(),
+        pid: None,
+        url: None,
+    })
 }
 
-fn get_port_from_package_json(project_dir: &str) -> Option<u16> {
+pub async fn stop_process(Json(payload): Json<StopRequest>) -> Json<CodeResponse> {
+    let mut output = String::new();
+    let mut error = String::new();
+
+    if let Some(pid) = payload.pid {
+        let mut procs = running_processes().lock().unwrap();
+        if let Some(mut child) = procs.remove(&pid) {
+            match child.kill() {
+                Ok(_) => output = format!("Stopped process {}.", pid),
+                Err(e) => error = format!("Failed to stop process {}: {}", pid, e),
+            }
+        } else {
+            #[cfg(unix)]
+            {
+                use std::process::Command as SysCommand;
+                let result = SysCommand::new("kill")
+                    .args(["-TERM", &pid.to_string()])
+                    .status();
+                match result {
+                    Ok(status) if status.success() => {
+                        output = format!("Stopped process {}.", pid);
+                    }
+                    Ok(_) => error = format!("Failed to stop process {}.", pid),
+                    Err(e) => error = format!("Failed to stop process {}: {}", pid, e),
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                error = format!("Process {} not found.", pid);
+            }
+        }
+    }
+
+    if payload.stop_live_server.unwrap_or(false) {
+        live_server::stop_live_server_internal();
+        if output.is_empty() {
+            output = "Stopped live preview server.".to_string();
+        }
+    }
+
+    if output.is_empty() && error.is_empty() {
+        output = "Nothing to stop.".to_string();
+    }
+
+    Json(CodeResponse {
+        output,
+        error,
+        pid: None,
+        url: None,
+    })
+}
+
+async fn try_run_web_project(project_dir: &str, project_path: &str) -> Option<CodeResponse> {
     let pkg_path = format!("{}/package.json", project_dir);
-    if let Ok(content) = fs::read_to_string(pkg_path) {
+    if let Ok(content) = fs::read_to_string(&pkg_path) {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(dev_script) = json
+            if json
                 .get("scripts")
                 .and_then(|s| s.get("dev"))
-                .and_then(|d| d.as_str())
+                .and_then(|v| v.as_str())
+                .is_some()
             {
-                let re_port = regex::Regex::new(r"(?:--port|-p)\s+(\d+)").unwrap();
-                if let Some(caps) = re_port.captures(dev_script) {
-                    if let Some(p_str) = caps.get(1) {
-                        if let Ok(port) = p_str.as_str().parse::<u16>() {
-                            return Some(port);
-                        }
-                    }
-                }
-                if dev_script.contains("vite") {
-                    return Some(5173);
-                }
-                if dev_script.contains("next dev") {
-                    if dev_script.contains("-p ") {
-                        let re_next_port = regex::Regex::new(r"-p\s+(\d+)").unwrap();
-                        if let Some(caps) = re_next_port.captures(dev_script) {
-                            if let Some(p_str) = caps.get(1) {
-                                if let Ok(port) = p_str.as_str().parse::<u16>() {
-                                    return Some(port);
-                                }
-                            }
-                        }
-                    }
-                    return Some(3000);
-                }
-                if dev_script.contains("ng serve") {
-                    return Some(4200);
-                }
+                return Some(spawn_dev_server(project_dir));
             }
         }
     }
-    None
-}
 
-pub fn run_javascript_framework(_payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    // Ensure node_modules exists
-    if !fs::metadata(format!("{}/node_modules", project_dir)).is_ok() {
-        println!("Installing dependencies in {}...", project_dir);
-        let install_output = Command::new("npm")
-            .arg("install")
-            .current_dir(project_dir)
-            .env("NG_CLI_ANALYTICS", "false")
-            .output();
-
-        match install_output {
-            Ok(out) => {
-                if !out.status.success() {
-                    let err = String::from_utf8_lossy(&out.stderr).to_string();
-                    println!("npm install failed: {}", err);
-                    return Json(CodeResponse {
-                        output: "".to_string(),
-                        error: format!("Dependency installation failed. Please check your internet connection or package.json.\n\nError: {}", err),
-                        pid: None,
-                        url: None,
-                    });
-                } else {
-                    println!("npm install completed successfully.");
-                }
+    let index_path = format!("{}/index.html", project_dir);
+    if Path::new(&index_path).is_file() {
+        match live_server::ensure_live_server(project_path).await {
+            Ok(port) => {
+                let url = format!("http://127.0.0.1:{}", port);
+                return Some(CodeResponse {
+                    output: format!("Live preview started at {}\n", url),
+                    error: String::new(),
+                    pid: None,
+                    url: Some(url),
+                });
             }
             Err(e) => {
-                println!("Failed to run npm install: {}", e);
-                return Json(CodeResponse {
-                    output: "".to_string(),
-                    error: format!("Failed to run npm install: {}. Ensure npm is installed.", e),
+                return Some(CodeResponse {
+                    output: String::new(),
+                    error: e,
                     pid: None,
                     url: None,
                 });
@@ -266,391 +125,250 @@ pub fn run_javascript_framework(_payload: CodeRequest, project_dir: &str) -> Jso
         }
     }
 
-    let fallback_port = get_port_from_package_json(project_dir);
+    None
+}
 
-    let mut dev_args = vec!["run", "dev"];
-    let mut custom_args = Vec::new();
+fn spawn_dev_server(project_dir: &str) -> CodeResponse {
+    let cmd = detect_dev_command(project_dir);
+    let (shell, arg) = if cfg!(windows) {
+        ("cmd", "/c")
+    } else {
+        ("sh", "-c")
+    };
 
-    // Check if we should append host binding arguments
-    if let Ok(content) = fs::read_to_string(format!("{}/package.json", project_dir)) {
-        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(dev_script) = json
-                .get("scripts")
-                .and_then(|s| s.get("dev"))
-                .and_then(|d| d.as_str())
-            {
-                if dev_script.contains("vite") || dev_script.contains("astro") || dev_script.contains("nuxt") || dev_script.contains("svelte-kit") {
-                    custom_args.push("--");
-                    custom_args.push("--host=0.0.0.0");
-                } else if dev_script.contains("next") {
-                    custom_args.push("--");
-                    custom_args.push("--hostname=0.0.0.0");
+    let mut child = match Command::new(shell)
+        .arg(arg)
+        .arg(&cmd)
+        .current_dir(project_dir)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return CodeResponse {
+                output: String::new(),
+                error: format!("Failed to start dev server: {}", e),
+                pid: None,
+                url: None,
+            };
+        }
+    };
+
+    let pid = child.id();
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let url_slot: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let url_out = url_slot.clone();
+    let url_err = url_slot.clone();
+
+    if let Some(out) = stdout {
+        thread::spawn(move || {
+            let reader = BufReader::new(out);
+            for line in reader.lines().map_while(Result::ok) {
+                if let Some(url) = extract_url_from_line(&line) {
+                    if let Ok(mut guard) = url_out.lock() {
+                        if guard.is_none() {
+                            *guard = Some(url);
+                        }
+                    }
                 }
+            }
+        });
+    }
+
+    if let Some(err) = stderr {
+        thread::spawn(move || {
+            let reader = BufReader::new(err);
+            for line in reader.lines().map_while(Result::ok) {
+                if let Some(url) = extract_url_from_line(&line) {
+                    if let Ok(mut guard) = url_err.lock() {
+                        if guard.is_none() {
+                            *guard = Some(url);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    running_processes().lock().unwrap().insert(pid, child);
+
+    let mut detected_url = None;
+    for _ in 0..80 {
+        thread::sleep(Duration::from_millis(250));
+        if let Ok(guard) = url_slot.lock() {
+            if guard.is_some() {
+                detected_url = guard.clone();
+                break;
             }
         }
     }
 
-    for arg in &custom_args {
-        dev_args.push(arg);
+    let output = format!("Starting dev server with: {}\n", cmd);
+    CodeResponse {
+        output,
+        error: String::new(),
+        pid: Some(pid),
+        url: detected_url,
     }
+}
 
-    let mut cmd = Command::new("npm");
-    cmd.args(&dev_args)
-        .current_dir(project_dir)
-        .env("NG_CLI_ANALYTICS", "false");
+fn detect_dev_command(project_dir: &str) -> String {
+    if Path::new(&format!("{}/pnpm-lock.yaml", project_dir)).exists() {
+        return "pnpm run dev".to_string();
+    }
+    if Path::new(&format!("{}/yarn.lock", project_dir)).exists() {
+        return "yarn dev".to_string();
+    }
+    if Path::new(&format!("{}/bun.lockb", project_dir)).exists()
+        || Path::new(&format!("{}/bun.lock", project_dir)).exists()
+    {
+        return "bun run dev".to_string();
+    }
+    "npm run dev".to_string()
+}
 
-    let mut response = run_with_timeout_web(cmd);
-    if response.url.is_none() {
-        if let Some(port) = fallback_port {
-            let host = crate::utils::get_local_ip();
-            response.url = Some(format!("http://{}:{}", host, port));
+fn extract_url_from_line(line: &str) -> Option<String> {
+    static URL_RE: OnceLock<Regex> = OnceLock::new();
+    let re = URL_RE.get_or_init(|| {
+        Regex::new(r"https?://(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d+[^\s]*").unwrap()
+    });
+    re.find(line).map(|m| {
+        let url = m.as_str().to_string();
+        url.replace("0.0.0.0", "127.0.0.1")
+    })
+}
+
+fn resolve_terminal_command(project_dir: &str, lang: &str, file_path: Option<&str>) -> String {
+    if Path::new(&format!("{}/Cargo.toml", project_dir)).is_file() {
+        return "cargo run".to_string();
+    }
+    if Path::new(&format!("{}/go.mod", project_dir)).is_file() {
+        if let Some(fp) = file_path.filter(|p| p.ends_with(".go")) {
+            return format!("go run {}", fp);
+        }
+        if Path::new(&format!("{}/main.go", project_dir)).is_file() {
+            return "go run main.go".to_string();
+        }
+        return "go run .".to_string();
+    }
+    if Path::new(&format!("{}/pubspec.yaml", project_dir)).is_file() {
+        return "dart run".to_string();
+    }
+    if Path::new(&format!("{}/Package.swift", project_dir)).is_file() {
+        return "swift run".to_string();
+    }
+    if let Ok(entries) = fs::read_dir(project_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.ends_with(".csproj") {
+                return "dotnet run".to_string();
+            }
+            if name == "pom.xml" {
+                return "mvn compile exec:java".to_string();
+            }
+            if name == "build.gradle" || name == "build.gradle.kts" {
+                return "./gradlew run".to_string();
+            }
+            if name.ends_with(".cabal") {
+                let pkg = name.trim_end_matches(".cabal");
+                return format!("cabal run {}", pkg);
+            }
         }
     }
-    response
-}
 
-pub fn run_vanilla_js(_payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    let mut cmd = Command::new("npx");
-    // Use live-server for auto-reload support
-    cmd.args([
-        "-y",
-        "live-server",
-        ".",
-        "--port=0",
-        "--no-browser",
-        "--host=0.0.0.0",
-        "--wait=50",
-    ])
-    .current_dir(project_dir);
-    run_with_timeout_web(cmd)
-}
-
-pub fn run_java(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    let file_path = format!("{}/Main.java", project_dir);
-    let _ = fs::write(&file_path, payload.code);
-
-    let compile = Command::new("javac")
-        .arg("Main.java")
-        .current_dir(project_dir)
-        .output();
-
-    match compile {
-        Ok(out) if !out.status.success() => {
-            return Json(CodeResponse {
-                output: "".to_string(),
-                error: String::from_utf8_lossy(&out.stderr).to_string(),
-                pid: None,
-                url: None,
-            });
-        }
-        _ => {}
-    }
-
-    let mut cmd = Command::new("java");
-    cmd.arg("Main").current_dir(project_dir);
-    run_with_timeout(cmd)
-}
-
-pub fn run_python(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    let file_path = format!("{}/main.py", project_dir);
-    let _ = fs::write(&file_path, payload.code);
-
-    let mut cmd = Command::new("python3");
-    cmd.arg("main.py")
-        .env("PYTHONUNBUFFERED", "1")
-        .current_dir(project_dir);
-    run_with_timeout(cmd)
-}
-
-pub fn run_kotlin(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    let file_path = format!("{}/main.kt", project_dir);
-    let _ = fs::write(&file_path, payload.code);
-
-    let compile = Command::new("kotlinc")
-        .args(["main.kt", "-include-runtime", "-d", "main.jar"])
-        .current_dir(project_dir)
-        .output();
-
-    match compile {
-        Ok(out) if !out.status.success() => {
-            return Json(CodeResponse {
-                output: "".to_string(),
-                error: String::from_utf8_lossy(&out.stderr).to_string(),
-                pid: None,
-                url: None,
-            });
-        }
-        _ => {}
-    }
-
-    let mut cmd = Command::new("java");
-    cmd.args(["-jar", "main.jar"]).current_dir(project_dir);
-    run_with_timeout(cmd)
-}
-
-pub fn run_swift(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    let file_path = format!("{}/main.swift", project_dir);
-    let _ = fs::write(&file_path, payload.code);
-
-    let mut cmd = Command::new("swift");
-    cmd.arg("main.swift").current_dir(project_dir);
-    run_with_timeout(cmd)
-}
-
-pub fn run_ruby(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    let file_path = format!("{}/main.rb", project_dir);
-    let _ = fs::write(&file_path, payload.code);
-
-    let mut cmd = Command::new("ruby");
-    cmd.arg("main.rb").current_dir(project_dir);
-    run_with_timeout(cmd)
-}
-
-pub fn run_r(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    let file_path = format!("{}/main.R", project_dir);
-    let _ = fs::write(&file_path, payload.code);
-
-    let mut cmd = Command::new("Rscript");
-    cmd.arg("main.R").current_dir(project_dir);
-    run_with_timeout(cmd)
-}
-
-pub fn run_scala(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    let file_path = format!("{}/main.scala", project_dir);
-    let _ = fs::write(&file_path, payload.code);
-
-    let compile = Command::new("scalac")
-        .arg("main.scala")
-        .current_dir(project_dir)
-        .output();
-
-    match compile {
-        Ok(out) if !out.status.success() => {
-            return Json(CodeResponse {
-                output: "".to_string(),
-                error: String::from_utf8_lossy(&out.stderr).to_string(),
-                pid: None,
-                url: None,
-            });
-        }
-        _ => {}
-    }
-
-    let mut cmd = Command::new("scala");
-    cmd.arg("Main").current_dir(project_dir);
-    run_with_timeout(cmd)
-}
-
-pub fn run_perl(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    let file_path = format!("{}/main.pl", project_dir);
-    let _ = fs::write(&file_path, payload.code);
-
-    let mut cmd = Command::new("perl");
-    cmd.arg("main.pl").current_dir(project_dir);
-    run_with_timeout(cmd)
-}
-
-pub fn run_haskell(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    let file_path = format!("{}/main.hs", project_dir);
-    let _ = fs::write(&file_path, payload.code);
-
-    let mut cmd = Command::new("runhaskell");
-    cmd.arg("main.hs").current_dir(project_dir);
-    run_with_timeout(cmd)
-}
-
-pub fn run_pascal(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    let file_path = format!("{}/main.pas", project_dir);
-    let _ = fs::write(&file_path, payload.code);
-    let exec_path = format!("{}/main", project_dir);
-
-    let compile = Command::new("fpc")
-        .arg("main.pas")
-        .current_dir(project_dir)
-        .output();
-
-    match compile {
-        Ok(out) if !out.status.success() => {
-            return Json(CodeResponse {
-                output: "".to_string(),
-                error: String::from_utf8_lossy(&out.stderr).to_string(),
-                pid: None,
-                url: None,
-            });
-        }
-        _ => {}
-    }
-
-    let cmd = Command::new(exec_path);
-    run_with_timeout(cmd)
-}
-
-pub fn run_javascript(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    // If the code starts with <, it's likely HTML, don't run it with node
-    if payload.code.trim().starts_with('<') {
-        return Json(CodeResponse {
-            output: "".to_string(),
-            error: "Cannot run HTML as a JavaScript script. Please ensure package.json or index.html exists for web projects.".to_string(),
-            pid: None,
-            url: None,
-        });
-    }
-
-    let file_path = format!("{}/main.js", project_dir);
-    // If a directory exists with the same name, remove it
-    if let Ok(metadata) = fs::metadata(&file_path) {
-        if metadata.is_dir() {
-            let _ = fs::remove_dir_all(&file_path);
+    if let Some(fp) = file_path {
+        match lang {
+            "python" if fp.ends_with(".py") => return format!("python3 {}", fp),
+            "ruby" if fp.ends_with(".rb") => return format!("ruby {}", fp),
+            "c" if fp.ends_with(".c") => {
+                let bin = fp.trim_end_matches(".c");
+                return format!("gcc {} -o {} && ./{}", fp, bin, bin);
+            }
+            "cpp" if fp.ends_with(".cpp") || fp.ends_with(".cc") => {
+                let bin = fp.split('.').next().unwrap_or("a.out");
+                return format!("g++ {} -o {} && ./{}", fp, bin, bin);
+            }
+            "java" if fp.ends_with(".java") => {
+                return format!("javac {} && java {}", fp, java_class_name(fp));
+            }
+            "kotlin" if fp.ends_with(".kt") => {
+                return format!(
+                    "kotlinc {} -include-runtime -d app.jar && java -jar app.jar",
+                    fp
+                )
+            }
+            "javascript" if fp.ends_with(".js") => return format!("node {}", fp),
+            "typescript" if fp.ends_with(".ts") => return format!("npx ts-node {}", fp),
+            "dart" if fp.ends_with(".dart") => return format!("dart run {}", fp),
+            "scala" if fp.ends_with(".scala") => return format!("scala {}", fp),
+            "haskell" if fp.ends_with(".hs") => return format!("runhaskell {}", fp),
+            "swift" if fp.ends_with(".swift") => return format!("swift {}", fp),
+            _ => {}
         }
     }
-    let _ = fs::write(&file_path, payload.code);
 
-    let mut cmd = Command::new("node");
-    cmd.arg("main.js").current_dir(project_dir);
-    run_with_timeout(cmd)
-}
-
-pub fn run_typescript(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    if payload.code.trim().starts_with('<') {
-        return Json(CodeResponse {
-            output: "".to_string(),
-            error: "Cannot run HTML as a TypeScript script.".to_string(),
-            pid: None,
-            url: None,
-        });
-    }
-
-    let file_path = format!("{}/main.ts", project_dir);
-    // If a directory exists with the same name, remove it
-    if let Ok(metadata) = fs::metadata(&file_path) {
-        if metadata.is_dir() {
-            let _ = fs::remove_dir_all(&file_path);
+    match lang {
+        "rust" => "cargo run".to_string(),
+        "go" => {
+            if Path::new(&format!("{}/main.go", project_dir)).is_file() {
+                "go run main.go".to_string()
+            } else {
+                "go run .".to_string()
+            }
         }
-    }
-    let _ = fs::write(&file_path, payload.code);
-
-    // Ensure node_modules exists (run npm install if missing)
-    if !fs::metadata(format!("{}/node_modules", project_dir)).is_ok() {
-        let _ = Command::new("npm")
-            .arg("install")
-            .current_dir(project_dir)
-            .output();
-    }
-
-    let mut cmd = Command::new("npx");
-    cmd.args(["-y", "tsx", "main.ts"]).current_dir(project_dir);
-    run_with_timeout(cmd)
-}
-
-pub fn run_rust(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    let _ = fs::create_dir_all(format!("{}/src", project_dir));
-    let main_rs_path = format!("{}/src/main.rs", project_dir);
-    let _ = fs::write(&main_rs_path, payload.code);
-
-    if let Some(cargo_toml) = payload.cargo_toml {
-        let _ = fs::write(format!("{}/Cargo.toml", project_dir), cargo_toml);
-    }
-
-    let mut cmd = Command::new("cargo");
-    cmd.arg("run").arg("-q").current_dir(project_dir);
-    run_with_timeout(cmd)
-}
-
-pub fn run_go(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    let file_path = format!("{}/main.go", project_dir);
-    let _ = fs::write(&file_path, payload.code);
-
-    let mut cmd = Command::new("go");
-    cmd.arg("run").arg("main.go").current_dir(project_dir);
-    run_with_timeout(cmd)
-}
-
-pub fn run_dart(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    let file_path = format!("{}/main.dart", project_dir);
-    let _ = fs::write(&file_path, payload.code);
-
-    let mut cmd = Command::new("dart");
-    cmd.arg("run").arg("main.dart").current_dir(project_dir);
-    run_with_timeout(cmd)
-}
-
-pub fn run_c(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    let file_path = format!("{}/main.c", project_dir);
-    let exec_path = format!("{}/main", project_dir);
-    let _ = fs::write(&file_path, payload.code);
-
-    let compile = Command::new("gcc")
-        .arg("main.c")
-        .arg("-o")
-        .arg("main")
-        .current_dir(project_dir)
-        .output();
-
-    match compile {
-        Ok(out) if !out.status.success() => {
-            return Json(CodeResponse {
-                output: "".to_string(),
-                error: String::from_utf8_lossy(&out.stderr).to_string(),
-                pid: None,
-                url: None,
-            });
+        "python" => "python3 main.py".to_string(),
+        "ruby" => "ruby main.rb".to_string(),
+        "dart" => "dart run".to_string(),
+        "java" => "javac *.java && java Main".to_string(),
+        "kotlin" => "kotlinc src -include-runtime -d app.jar && java -jar app.jar".to_string(),
+        "c" => {
+            if Path::new(&format!("{}/main.c", project_dir)).is_file() {
+                "gcc main.c -o main && ./main".to_string()
+            } else {
+                "gcc *.c -o main && ./main".to_string()
+            }
         }
-        Err(e) => {
-            return Json(CodeResponse {
-                output: "".to_string(),
-                error: format!("Compilation failed: {}", e),
-                pid: None,
-                url: None,
-            });
+        "cpp" => {
+            if Path::new(&format!("{}/main.cpp", project_dir)).is_file() {
+                "g++ main.cpp -o main && ./main".to_string()
+            } else {
+                "g++ *.cpp -o main && ./main".to_string()
+            }
         }
-        _ => {}
+        "csharp" => "dotnet run".to_string(),
+        "swift" => "swift run".to_string(),
+        "scala" => "scala run".to_string(),
+        "haskell" => "runhaskell main.hs".to_string(),
+        "javascript" => {
+            if Path::new(&format!("{}/package.json", project_dir)).is_file() {
+                "npm start".to_string()
+            } else if Path::new(&format!("{}/index.js", project_dir)).is_file() {
+                "node index.js".to_string()
+            } else {
+                "node main.js".to_string()
+            }
+        }
+        "typescript" => {
+            if Path::new(&format!("{}/package.json", project_dir)).is_file() {
+                "npm run dev".to_string()
+            } else if Path::new(&format!("{}/index.ts", project_dir)).is_file() {
+                "npx ts-node index.ts".to_string()
+            } else {
+                "npx ts-node main.ts".to_string()
+            }
+        }
+        other => format!("echo 'No run command configured for {}'", other),
     }
-
-    let cmd = Command::new(&exec_path);
-    run_with_timeout(cmd)
 }
 
-pub fn run_cpp(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    let file_path = format!("{}/main.cpp", project_dir);
-    let exec_path = format!("{}/main", project_dir);
-    let _ = fs::write(&file_path, payload.code);
-
-    let compile = Command::new("g++")
-        .arg("main.cpp")
-        .arg("-o")
-        .arg("main")
-        .current_dir(project_dir)
-        .output();
-
-    match compile {
-        Ok(out) if !out.status.success() => {
-            return Json(CodeResponse {
-                output: "".to_string(),
-                error: String::from_utf8_lossy(&out.stderr).to_string(),
-                pid: None,
-                url: None,
-            });
-        }
-        Err(e) => {
-            return Json(CodeResponse {
-                output: "".to_string(),
-                error: format!("Compilation failed: {}", e),
-                pid: None,
-                url: None,
-            });
-        }
-        _ => {}
-    }
-
-    let cmd = Command::new(&exec_path);
-    run_with_timeout(cmd)
-}
-
-pub fn run_csharp(payload: CodeRequest, project_dir: &str) -> Json<CodeResponse> {
-    let file_path = format!("{}/Program.cs", project_dir);
-    let _ = fs::write(&file_path, payload.code);
-
-    let mut cmd = Command::new("dotnet");
-    cmd.arg("run").current_dir(project_dir);
-    run_with_timeout(cmd)
+fn java_class_name(file_path: &str) -> String {
+    file_path
+        .rsplit('/')
+        .next()
+        .unwrap_or("Main")
+        .trim_end_matches(".java")
+        .to_string()
 }

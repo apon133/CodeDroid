@@ -70,14 +70,6 @@ impl Default for Settings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RunResponse {
-    pub output: String,
-    pub error: String,
-    pub pid: Option<u32>,
-    pub url: Option<String>,
-}
-
 pub fn lang_icon(lang: &str) -> &'static str {
     match lang {
         "rust" => "/assets/icons/rust.svg",

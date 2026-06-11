@@ -2,7 +2,11 @@ use std::fs;
 
 fn create_dir_for_path(path_str: &str) -> std::io::Result<()> {
     let path = std::path::Path::new(path_str);
-    let dir_to_create = if path.extension().is_some() || path.file_name().map_or(false, |n| n.to_string_lossy().starts_with('.')) {
+    let dir_to_create = if path.extension().is_some()
+        || path
+            .file_name()
+            .map_or(false, |n| n.to_string_lossy().starts_with('.'))
+    {
         path.parent().unwrap_or(path)
     } else {
         path
@@ -168,6 +172,10 @@ pub fn resolve_lsp_executable(lang: &str, cmd: &str) -> String {
         format!("{}/.npm-global/bin/{}", home, cmd),
         // Go binaries
         format!("{}/go/bin/{}", home, cmd),
+        // Alpine PRoot paths
+        format!("{}/alpine/usr/local/bin/{}", home, cmd),
+        format!("{}/alpine/usr/bin/{}", home, cmd),
+        format!("{}/alpine/bin/{}", home, cmd),
     ];
 
     // Language specific paths
@@ -189,7 +197,7 @@ pub fn resolve_lsp_executable(lang: &str, cmd: &str) -> String {
             // Termux Python packages
             search_paths.push(format!("{}/bin/{}", termux_prefix, cmd));
         }
-        "javascript" | "typescript" | "jsx" | "tsx" | "vue" | "svelte" => {
+        "javascript" | "typescript" | "jsx" | "tsx" | "vue" | "svelte" | "angular" => {
             // npm global (cross-platform)
             search_paths.push(format!("{}/.npm-global/bin/{}", home, cmd));
             search_paths.push(format!("{}/node_modules/.bin/{}", home, cmd));
@@ -197,12 +205,16 @@ pub fn resolve_lsp_executable(lang: &str, cmd: &str) -> String {
             search_paths.push(format!("{}/lib/node_modules/.bin/{}", termux_prefix, cmd));
         }
         "kotlin" => {
+            search_paths.push("/usr/share/kotlin/kotlinc/bin/kotlin-language-server".to_string());
+            search_paths.push("/usr/share/kotlin/bin/kotlin-language-server".to_string());
             search_paths.push(format!("/opt/homebrew/bin/{}", cmd));
             search_paths.push(format!("/usr/local/bin/{}", cmd));
             // Termux
             search_paths.push(format!("{}/bin/{}", termux_prefix, cmd));
         }
         "java" => {
+            search_paths.push("/usr/share/java/jdtls/bin/jdtls".to_string());
+            search_paths.push("/usr/share/jdtls/bin/jdtls".to_string());
             search_paths.push(format!("/opt/homebrew/bin/{}", cmd));
             search_paths.push(format!("/usr/local/bin/{}", cmd));
             // Termux
@@ -216,13 +228,24 @@ pub fn resolve_lsp_executable(lang: &str, cmd: &str) -> String {
         _ => {}
     }
 
-    for path in search_paths {
-        if std::path::Path::new(&path).exists() {
-            return path;
+    let mut resolved_path = None;
+    for path in &search_paths {
+        if std::path::Path::new(path).exists() {
+            resolved_path = Some(path.clone());
+            break;
         }
     }
 
-    cmd.to_string()
+    if let Some(path) = resolved_path {
+        log_message(&format!("🔍 [LSP Resolution] Resolved '{}' for language '{}' to '{}'", cmd, lang, path));
+        path
+    } else {
+        log_message(&format!(
+            "⚠️ [LSP Resolution] Could not find executable '{}' for language '{}' in searched paths: {:?}",
+            cmd, lang, search_paths
+        ));
+        cmd.to_string()
+    }
 }
 
 /// Dynamically resolve the TypeScript SDK `lib` directory.
@@ -260,12 +283,23 @@ pub fn resolve_typescript_sdk() -> String {
 pub fn setup_env_path() {
     let mut paths = Vec::new();
 
-    if let Ok(home) = std::env::var("HOME") {
-        paths.push(format!("{}/.cargo/bin", home));
-        paths.push(format!("{}/.local/bin", home));
-        paths.push(format!("{}/.npm-global/bin", home));
-        paths.push(format!("{}/go/bin", home));
-    }
+    let home =
+        std::env::var("HOME").unwrap_or_else(|_| "/data/data/com.termux/files/home".to_string());
+
+    paths.push(format!("{}/.cargo/bin", home));
+    paths.push(format!("{}/.local/bin", home));
+    paths.push(format!("{}/.npm-global/bin", home));
+    paths.push(format!("{}/go/bin", home));
+
+    // Alpine Linux PRoot paths (tools installed inside the distro are available here
+    // via proot wrappers, or when commands are invoked inside the PRoot shell)
+    let alpine_root = format!("{}/alpine", home);
+    paths.push(format!("{}/usr/local/bin", alpine_root));
+    paths.push(format!("{}/usr/bin", alpine_root));
+    paths.push(format!("{}/bin", alpine_root));
+    paths.push(format!("{}/usr/local/sbin", alpine_root));
+    paths.push(format!("{}/usr/sbin", alpine_root));
+    paths.push(format!("{}/sbin", alpine_root));
 
     paths.push("/opt/homebrew/bin".to_string());
     paths.push("/opt/homebrew/sbin".to_string());
@@ -281,6 +315,9 @@ pub fn setup_env_path() {
     } else {
         paths.push("/data/data/com.termux/files/usr/bin".to_string());
     }
+
+    // Expose Alpine root for other modules
+    std::env::set_var("ALPINE_ROOT", &alpine_root);
 
     let current_path = std::env::var("PATH").unwrap_or_default();
     let split_char = if cfg!(windows) { ';' } else { ':' };
@@ -302,5 +339,34 @@ pub fn setup_env_path() {
 
     let new_path = unique_paths.join(&split_char.to_string());
     std::env::set_var("PATH", new_path);
+
+    // Override temp directory environment variables to prevent host path leaks
+    std::env::set_var("TMPDIR", "/tmp");
+    std::env::set_var("TMP", "/tmp");
+    std::env::set_var("TEMP", "/tmp");
+}
+
+use std::sync::{OnceLock, Mutex};
+
+pub static LOGS_BUFFER: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+
+pub fn log_message(msg: &str) {
+    println!("{}", msg);
+    let buffer = LOGS_BUFFER.get_or_init(|| Mutex::new(Vec::new()));
+    if let Ok(mut lock) = buffer.lock() {
+        lock.push(msg.to_string());
+        if lock.len() > 1000 {
+            lock.remove(0);
+        }
+    }
+}
+
+pub fn get_logs() -> Vec<String> {
+    let buffer = LOGS_BUFFER.get_or_init(|| Mutex::new(Vec::new()));
+    if let Ok(lock) = buffer.lock() {
+        lock.clone()
+    } else {
+        Vec::new()
+    }
 }
 

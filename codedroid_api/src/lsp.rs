@@ -64,12 +64,66 @@ pub struct LspClient {
 
 impl LspClient {
     pub fn new(cmd: &str, args: &[&str], root_uri: Option<&str>) -> std::io::Result<Self> {
-        let mut child = Command::new(cmd)
+        let mut child_cmd = Command::new(cmd);
+        child_cmd
             .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
+            .stderr(Stdio::piped());
+
+        if let Some(uri) = root_uri {
+            if uri.starts_with("file://") {
+                let mut dir = &uri["file://".len()..];
+                while dir.starts_with("//") {
+                    dir = &dir[1..];
+                }
+                let path_exists = std::path::Path::new(dir).exists();
+                let log_msg = format!(
+                    "root_uri: {}, resolved path: {}, exists: {}\n",
+                    uri, dir, path_exists
+                );
+                let _ = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/lsp_spawn.log")
+                    .and_then(|mut f| {
+                        use std::io::Write;
+                        f.write_all(log_msg.as_bytes())
+                    });
+                if path_exists {
+                    child_cmd.current_dir(dir);
+                }
+            }
+        }
+
+        // Set clean environment variables for all LSP servers to ensure stability inside PRoot
+        child_cmd.env("HOME", "/root");
+        child_cmd.env("TMPDIR", "/tmp");
+        child_cmd.env("TMP", "/tmp");
+        child_cmd.env("TEMP", "/tmp");
+        child_cmd.env(
+            "PATH",
+            "/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin",
+        );
+        child_cmd.env("NODE_OPTIONS", "--require /usr/local/lib/node_network_bypass.js");
+        child_cmd.env("_JAVA_OPTIONS", "-Djava.net.preferIPv4Stack=true -Djava.net.preferIPv6Addresses=false");
+        child_cmd.env("JAVA_TOOL_OPTIONS", "-Djava.net.preferIPv4Stack=true -Djava.net.preferIPv6Addresses=false");
+
+        if cmd == "gopls" || cmd.ends_with("/gopls") {
+            child_cmd.env("GOPATH", "/root/go");
+            child_cmd.env("GOCACHE", "/tmp/go-cache");
+            child_cmd.env("GOTMPDIR", "/tmp");
+        }
+
+        let msg = format!("🚀 [LSP Spawn] Spawning server command: '{}' with args: {:?}", cmd, args);
+        crate::utils::log_message(&msg);
+
+        let spawn_res = child_cmd.spawn();
+        if let Err(ref e) = spawn_res {
+            let error_msg = format!("❌ [LSP Spawn Error] Failed to spawn '{}': {}", cmd, e);
+            crate::utils::log_message(&error_msg);
+        }
+        let mut child = spawn_res?;
 
         let stdin = Arc::new(Mutex::new(child.stdin.take().unwrap()));
         let stdout = child.stdout.take().unwrap();
@@ -86,7 +140,7 @@ impl LspClient {
                 if line.is_empty() {
                     break;
                 }
-                println!(" [{} LSP stderr] {}", lang_name, line.trim());
+                crate::utils::log_message(&format!(" [{} LSP stderr] {}", lang_name, line.trim()));
                 line.clear();
             }
         });
@@ -121,6 +175,7 @@ impl LspClient {
                     let mut body = vec![0; content_length];
                     if reader.read_exact(&mut body).is_ok() {
                         if let Ok(val) = serde_json::from_slice::<Value>(&body) {
+                            println!("   [LSP Recv] {}", val);
                             if let Some(id) = val.get("id").and_then(|id| id.as_u64()) {
                                 responses_clone.lock().unwrap().insert(id as usize, val);
                             } else if let Some(method) = val.get("method").and_then(|m| m.as_str())
@@ -194,6 +249,20 @@ impl LspClient {
             diagnostics_version,
         };
 
+        let init_options =
+            if cmd.contains("typescript") || cmd.contains("vtsls") || cmd.contains("volar") {
+                json!({
+                    "typescript": {
+                        "tsdk": crate::utils::resolve_typescript_sdk()
+                    },
+                    "vue": {
+                        "hybridMode": false
+                    }
+                })
+            } else {
+                json!({})
+            };
+
         let init_req = json!({
             "jsonrpc": "2.0",
             "id": client.req_id,
@@ -201,14 +270,7 @@ impl LspClient {
             "params": {
                 "processId": std::process::id(),
                 "rootUri": root_uri,
-                "initializationOptions": {
-                    "typescript": {
-                        "tsdk": crate::utils::resolve_typescript_sdk()
-                    },
-                    "vue": {
-                        "hybridMode": false
-                    }
-                },
+                "initializationOptions": init_options,
                 "capabilities": {
                     "textDocument": {
                         "synchronization": {
@@ -268,6 +330,7 @@ impl LspClient {
 
     fn send_notification(&mut self, notif: &Value) -> std::io::Result<()> {
         let body = notif.to_string();
+        println!("   [LSP Send Notif] {}", body);
         let msg = format!("Content-Length: {}\r\n\r\n{}", body.len(), body);
         let mut stdin = self.stdin.lock().unwrap();
         stdin.write_all(msg.as_bytes())?;
@@ -277,6 +340,7 @@ impl LspClient {
 
     fn send_request(&mut self, req: &Value) -> std::io::Result<()> {
         let body = req.to_string();
+        println!("   [LSP Send Req] {}", body);
         let msg = format!("Content-Length: {}\r\n\r\n{}", body.len(), body);
         let mut stdin = self.stdin.lock().unwrap();
         stdin.write_all(msg.as_bytes())?;
@@ -802,16 +866,26 @@ fn parse_location(val: &Value) -> Option<Location> {
     None
 }
 
-fn parse_symbol_item(val: &Value, list: &mut Vec<DocumentSymbolResponse>, container_name: Option<String>) {
+fn parse_symbol_item(
+    val: &Value,
+    list: &mut Vec<DocumentSymbolResponse>,
+    container_name: Option<String>,
+) {
     if let Some(name) = val["name"].as_str() {
         let kind = val["kind"].as_u64().unwrap_or(0) as u32;
-        
+
         let (line, character) = if let Some(range_val) = val.get("range") {
             let start = &range_val["start"];
-            (start["line"].as_u64().unwrap_or(0) as u32, start["character"].as_u64().unwrap_or(0) as u32)
+            (
+                start["line"].as_u64().unwrap_or(0) as u32,
+                start["character"].as_u64().unwrap_or(0) as u32,
+            )
         } else if let Some(loc_val) = val.get("location") {
             let start = &loc_val["range"]["start"];
-            (start["line"].as_u64().unwrap_or(0) as u32, start["character"].as_u64().unwrap_or(0) as u32)
+            (
+                start["line"].as_u64().unwrap_or(0) as u32,
+                start["character"].as_u64().unwrap_or(0) as u32,
+            )
         } else {
             (0, 0)
         };
@@ -845,13 +919,13 @@ fn parse_symbol_item(val: &Value, list: &mut Vec<DocumentSymbolResponse>, contai
 pub fn fallback_symbols(code: &str, lang: &str) -> Vec<DocumentSymbolResponse> {
     let mut symbols = Vec::new();
     let lang_lower = lang.to_lowercase();
-    
+
     for (i, line) in code.lines().enumerate() {
         let line_trimmed = line.trim();
         if line_trimmed.is_empty() {
             continue;
         }
-        
+
         match lang_lower.as_str() {
             "rust" => {
                 if line_trimmed.starts_with("fn ") || line_trimmed.contains(" fn ") {
@@ -887,7 +961,11 @@ pub fn fallback_symbols(code: &str, lang: &str) -> Vec<DocumentSymbolResponse> {
                 } else if line_trimmed.starts_with("impl") {
                     let parts: Vec<&str> = line_trimmed.split_whitespace().collect();
                     if parts.len() >= 2 {
-                        let impl_name = parts[1..].join(" ").trim_end_matches('{').trim().to_string();
+                        let impl_name = parts[1..]
+                            .join(" ")
+                            .trim_end_matches('{')
+                            .trim()
+                            .to_string();
                         symbols.push(DocumentSymbolResponse {
                             name: format!("impl {}", impl_name),
                             kind: 5, // Class/Implementation
@@ -927,7 +1005,15 @@ pub fn fallback_symbols(code: &str, lang: &str) -> Vec<DocumentSymbolResponse> {
                     }
                 } else if line_trimmed.starts_with("class ") {
                     if let Some(name) = line_trimmed.strip_prefix("class ") {
-                        let name = name.split('(').next().unwrap_or(name).split(':').next().unwrap_or(name).trim().to_string();
+                        let name = name
+                            .split('(')
+                            .next()
+                            .unwrap_or(name)
+                            .split(':')
+                            .next()
+                            .unwrap_or(name)
+                            .trim()
+                            .to_string();
                         symbols.push(DocumentSymbolResponse {
                             name,
                             kind: 5, // Class
@@ -959,7 +1045,10 @@ pub fn fallback_symbols(code: &str, lang: &str) -> Vec<DocumentSymbolResponse> {
                             container_name: None,
                         });
                     }
-                } else if line_trimmed.starts_with("const ") || line_trimmed.starts_with("let ") || line_trimmed.starts_with("var ") {
+                } else if line_trimmed.starts_with("const ")
+                    || line_trimmed.starts_with("let ")
+                    || line_trimmed.starts_with("var ")
+                {
                     if line_trimmed.contains("=>") {
                         let parts: Vec<&str> = line_trimmed.split('=').collect();
                         if !parts.is_empty() {
@@ -983,8 +1072,13 @@ pub fn fallback_symbols(code: &str, lang: &str) -> Vec<DocumentSymbolResponse> {
                     let rest = &line_trimmed[5..];
                     if rest.starts_with('(') {
                         if let Some(close_paren_idx) = rest.find(')') {
-                            let method_part = &rest[close_paren_idx + 1 ..].trim();
-                            let name = method_part.split('(').next().unwrap_or(method_part).trim().to_string();
+                            let method_part = &rest[close_paren_idx + 1..].trim();
+                            let name = method_part
+                                .split('(')
+                                .next()
+                                .unwrap_or(method_part)
+                                .trim()
+                                .to_string();
                             symbols.push(DocumentSymbolResponse {
                                 name,
                                 kind: 6, // Method
@@ -1032,8 +1126,9 @@ pub fn fallback_symbols(code: &str, lang: &str) -> Vec<DocumentSymbolResponse> {
 
 fn extract_rust_name(line: &str, keyword: &str) -> Option<String> {
     if let Some(idx) = line.find(keyword) {
-        let after = &line[idx + keyword.len() ..].trim();
-        let name = after.split(|c: char| c == '<' || c == '(' || c == '{' || c == ':' || c == ';')
+        let after = &line[idx + keyword.len()..].trim();
+        let name = after
+            .split(|c: char| c == '<' || c == '(' || c == '{' || c == ':' || c == ';')
             .next()?
             .trim();
         if !name.is_empty() {
@@ -1045,8 +1140,9 @@ fn extract_rust_name(line: &str, keyword: &str) -> Option<String> {
 
 fn extract_js_name(line: &str, keyword: &str) -> Option<String> {
     if let Some(idx) = line.find(keyword) {
-        let after = &line[idx + keyword.len() ..].trim();
-        let name = after.split(|c: char| c == '(' || c == '{' || c == '<' || c == ' ' || c == ';')
+        let after = &line[idx + keyword.len()..].trim();
+        let name = after
+            .split(|c: char| c == '(' || c == '{' || c == '<' || c == ' ' || c == ';')
             .next()?
             .trim();
         if !name.is_empty() {

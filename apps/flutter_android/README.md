@@ -41,6 +41,11 @@ Ensure the latest build of `codedroid_frontend` is synced into the Flutter proje
 ./apps/sync_assets.sh
 ```
 
+```bash
+./build_api.sh && ./apps/sync_assets.sh
+```
+
+
 ### 2. Run the Application
 Start the app on your connected device/emulator:
 ```bash

@@ -750,9 +750,21 @@ For detailed configurations, see **[NETWORK_ACCESS.md](./docs/NETWORK_ACCESS.md)
 ### Step-by-Step Device Bridging
 1.  **Start Services with Open Bindings**:
     On your hosting PC or Android tablet, boot the API:
-    ```bash
-    cd codedroid_api && cargo run --release
-    ```
+    *   **Using Pre-compiled Binary (Direct Run)**:
+        ```bash
+        ./run.sh
+        # OR run the binary directly:
+        ./codedroid-api
+        ```
+    *   **Building from Source (Requires Rust/Cargo)**:
+        ```bash
+        cd codedroid_api && cargo run --release
+        ```
+    *   **Compiling Binary to Root (For Developers)**:
+        ```bash
+        ./run.sh --build
+        ```
+        *This compiles the API and places it in the root for direct run.*
     In another session, start the Trunk Web IDE specifying bindings:
     ```bash
     cd codedroid_frontend && trunk serve --port 8082 --address 0.0.0.0

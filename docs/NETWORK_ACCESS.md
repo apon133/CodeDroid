@@ -44,12 +44,28 @@ This starts the code execution engine so other devices can send code to it.
 
 #### On PC (macOS or Linux)
 
+**Option A: Pre-compiled Binary (Direct Run)**
+If you have a pre-compiled `codedroid-api` binary in the root directory:
+```bash
+# Start the API server directly
+./run.sh
+# OR run the binary directly:
+./codedroid-api
+```
+
+**Option B: Build from Source (Requires Rust/Cargo)**
 ```bash
 # Navigate to the API folder
 cd codedroid_api
 
 # Start the API server
 cargo run --release
+```
+
+**Option C: Compile & Copy Binary to Root (For Developers)**
+```bash
+# Compile and place binary in the root
+./run.sh --build
 ```
 
 Then in a **new terminal window**, start the frontend:
@@ -64,12 +80,28 @@ trunk serve --port 8082 --address 0.0.0.0
 
 #### On Android (Termux)
 
+**Option A: Pre-compiled Binary (Direct Run)**
+If you have a pre-compiled `codedroid-api` binary in the root directory:
+```bash
+# Start the API server directly
+./run.sh
+# OR run the binary directly:
+./codedroid-api
+```
+
+**Option B: Build from Source (Requires Rust/Cargo)**
 ```bash
 # Navigate to the API folder
 cd ~/codedroid_api
 
 # Start the API server
 cargo run --release
+```
+
+**Option C: Compile & Copy Binary to Root (For Developers)**
+```bash
+# Compile and place binary in the root
+./run.sh --build
 ```
 
 Open a **new Termux session** and run:

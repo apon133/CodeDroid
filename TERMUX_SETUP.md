@@ -63,11 +63,32 @@ To get real-time code completions, you need to install the language servers for 
    ```
 
 2. **Run the API Server**:
+   You can run the API server using one of the two methods below:
+
+   ### Method A: Run Direct Pre-compiled Binary (No Rust/Cargo required)
+   If you have downloaded or placed the pre-compiled `codedroid-api` binary in the root directory of the project, you can start the server using the startup script:
+   ```bash
+   ./run.sh
+   ```
+   Or run the binary directly:
+   ```bash
+   ./codedroid-api
+   ```
+   *This method runs the pre-compiled binary directly and does not require installing Rust.*
+
+   ### Method B: Build & Run from Source (Requires Rust/Cargo)
+   If you want to compile the API from source:
    ```bash
    cd codedroid_api
    cargo run --release
    ```
-   *The API server will start and wait for connections.*
+
+   ### 🛠️ Building/Updating the Binary in Root (For Developers)
+   If you have Rust installed and want to build/rebuild the API binary and place it in the root directory (so that it can be run directly without Rust), run:
+   ```bash
+   ./run.sh --build
+   ```
+   *This compiles the project in release mode, automatically removes any old binary from the root, and copies the newly compiled binary to the root.*
 
 3. **Start Coding**:
    Visit **[codedroid.netlify.app](https://codedroid.netlify.app)** in your mobile browser and connect it to your local server to start coding!

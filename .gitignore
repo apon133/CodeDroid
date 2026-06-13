@@ -1,3 +1,5 @@
-.agents/
-graphify-out/
-apps/tauri_desktop/src/
+/codedroid_api/target/
+/codedroid_frontend/target/
+/codedroid_frontend/dist/
+*.tar.gz
+*.exe

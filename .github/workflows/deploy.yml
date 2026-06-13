@@ -3,11 +3,13 @@ name: Build, Package and Release
 on:
   push:
     tags:
-      - 'v*' # উদাহরণ: v1.0.0, v1.1.0 লিখে ট্যাগ পুশ করলে এই ওয়ার্কফ্লো চালু হবে
+      - 'v*'
 
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # এই পারমিশনটি ৪MD৩ এরর ফিক্স করবে
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -30,6 +32,13 @@ jobs:
         run: |
           cd codedroid_frontend
           zip -r codedroid-frontend-dist.zip dist
+
+      # সরাসরি ডাউনলোড অপশন যোগ করা হলো (Artifact)
+      - name: Upload Artifact (Direct Download)
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build-zip
+          path: codedroid_frontend/codedroid-frontend-dist.zip
 
       - name: Create GitHub Release and Upload Zip
         uses: softprops/action-gh-release@v1

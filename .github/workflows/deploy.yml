@@ -1,12 +1,12 @@
-name: Build and Deploy
+name: Build, Package and Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*' # উদাহরণ: v1.0.0, v1.1.0 লিখে ট্যাগ পুশ করলে এই ওয়ার্কফ্লো চালু হবে
 
 jobs:
-  build-and-deploy:
+  build-and-release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -26,13 +26,14 @@ jobs:
         working-directory: ./codedroid_frontend
         run: trunk build --release
 
-      - name: Deploy to Netlify
-        uses: nwtgck/actions-netlify@v2.0
+      - name: Package dist to Zip
+        run: |
+          cd codedroid_frontend
+          zip -r codedroid-frontend-dist.zip dist
+
+      - name: Create GitHub Release and Upload Zip
+        uses: softprops/action-gh-release@v1
         with:
-          publish-dir: './codedroid_frontend/dist'
-          production-deploy: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          deploy-message: "Deploy from GitHub Actions"
+          files: codedroid_frontend/codedroid-frontend-dist.zip
         env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

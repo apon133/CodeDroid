@@ -162,34 +162,38 @@ CodeDroid Root
 
 ### Flow Diagram: Document Sync & Compilation Lifecycle
 
-```
- ┌──────────────┐         1. Save (Ctrl+S / Save Button)          ┌────────────────┐
- │  Web IDE     │────────────────────────────────────────────────>│  Axum Backend  │
- │  (Client)    │<────────────────────────────────────────────────│  (Server)      │
- └──────────────┘           4. Return JSON diagnostics            └────────────────┘
-        │                                                                  │
-        │ 2. notify_file_changed()                                         │ 3. Sync to disk
-        ▼                                                                  ▼
- ┌──────────────┐                                                 ┌────────────────┐
- │  LSP Client  │────────────────── JSON-RPC ────────────────────>│  Local File Sys│
- │  (Stdio/RPC) │                                                 │  (/sdcard/...) │
- └──────────────┘                                                 └────────────────┘
+```mermaid
+flowchart TD
+    %% Styling
+    classDef client fill:#e3f2fd,stroke:#1565c0,stroke-width:2px;
+    classDef server fill:#efebe9,stroke:#4e342e,stroke-width:2px;
+    classDef system fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
+    
+    A["Web IDE (Client)"]:::client
+    B["Axum Backend (Server)"]:::server
+    C["LSP Client (Stdio/RPC)"]:::client
+    D["Local File System (/sdcard/...)"]:::system
+
+    A -- "1. Save (Ctrl+S)" --> B
+    A -- "2. notify_file_changed()" --> C
+    B -- "3. Sync to disk" --> D
+    C -- "JSON-RPC" --> D
+    B -- "4. Return JSON diagnostics" --> A
 ```
 
 ### Flow Diagram: Diagnostic Polling Loops
 
-```
-  Client (Web IDE)                  Axum Backend                   Target LSP
-         │                               │                              │
-         │─── POST /diagnostics ────────>│                              │
-         │    (Wait for version update)  │                              │
-         │                               │─── didChange / didSave ─────>│
-         │                               │                              │
-         │                               │◄── publishDiagnostics ───────│
-         │                               │    (Async stderr stream)     │
-         │                               │                              │
-          │◄── Return Diagnostics ────────│                              │
-          │    (JSON range & severity)    │                              │
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as Client (Web IDE)
+    participant Backend as Axum Backend
+    participant LSP as Target LSP
+
+    Client->>Backend: POST /diagnostics (Wait for version update)
+    Backend->>LSP: didChange / didSave
+    LSP-->>Backend: publishDiagnostics (Async stderr stream)
+    Backend-->>Client: Return Diagnostics (JSON range & severity)
 ```
 
 ---
@@ -207,6 +211,21 @@ Whenever the Leptos frontend code is modified, it must be compiled and synchroni
 ```
 
 This script builds `codedroid_frontend` in release mode and mirrors the static outputs to both application directories automatically.
+
+### ⚙️ Cross-Compiling Rust API for Android/Linux
+The Android Flutter application bundles pre-compiled static Musl ELF binaries of `codedroid_api` (`aarch64` and `x86_64`) to run the backend server inside the local environment (PRoot/Alpine). 
+
+To cross-compile and deploy the latest backend binary updates from a macOS/Linux machine to the Flutter assets:
+1. Ensure you have the `musl-cross` toolchain (specifically `aarch64-linux-musl-gcc` and `x86_64-linux-musl-gcc`) installed on your host system.
+2. Run the automated compilation, stripping, and deployment script from the repository root:
+   ```bash
+   ./build_android_binaries.sh
+   ```
+3. Rebuild the Flutter Android application:
+   ```bash
+   cd apps/flutter_android
+   flutter build apk --split-per-abi
+   ```
 
 ### 📱 Flutter (Android) Wrapper
 Located in [`apps/flutter_android/`](./apps/flutter_android/). It launches a background `InAppLocalhostServer` on port `8080` to serve the static assets offline.

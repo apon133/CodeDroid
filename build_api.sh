@@ -57,3 +57,10 @@ else
     echo -e "${RED}Error: Compiled binary not found at $COMPILED_PATH${NC}"
     exit 1
 fi
+
+echo "📡 Server will start on: http://0.0.0.0:3000"
+echo "--------------------------------------------------"
+
+# Run the binary
+exec "$BINARY_PATH" "$@"
+

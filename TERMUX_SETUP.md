@@ -15,29 +15,22 @@ CodeDroid is highly optimized and can run directly on your Android device using 
 
 ---
 
-## 🛠️ Step 2: Environment Setup
+## ⚡ Step 2: Quick & Easy Installation (No Git or Compilation)
 
-### 🚀 One-Line Setup & Run
+The fastest way to install or update CodeDroid on Termux is with our single-line installer. It detects your device architecture (ARM64 or x86_64), downloads the precompiled binary, and registers a global `codedroid` command.
+
+Run this command in Termux:
 
 ```bash
-pkg update -y && pkg upgrade -y && pkg install -y git rust && git clone https://github.com/apon133/CodeDroid.git && cd CodeDroid/codedroid_api && cargo run --release
+curl -sL https://raw.githubusercontent.com/apon133/CodeDroid/main/install.sh | bash
 ```
 
-The API server will start and wait for connections.
+Once installed, you can manage CodeDroid with the following commands:
+- **Start the API Server**: `codedroid` or `codedroid start`
+- **Update to Latest Version**: `codedroid update`
+- **Uninstall**: `codedroid uninstall`
 
-### **OR**
-
-Once Termux is installed, run the following commands to set up the base environment:
-
-1. **Update packages**:
-   ```bash
-   pkg update && pkg upgrade
-   ```
-
-2. **Install core dependencies**:
-   ```bash
-   pkg install rust clang build-essential git
-   ```
+*This method runs the pre-compiled binary directly and does not require git or installing Rust.*
 
 ---
 
@@ -54,43 +47,34 @@ To get real-time code completions, you need to install the language servers for 
 
 ---
 
-## 🚀 Step 4: Clone & Run
+## 🛠️ Alternate Step 4: Clone & Run (For Developers)
 
-1. **Clone the repository**:
+If you prefer to clone the repository and compile the API from source:
+
+1. **Install dependencies**:
+   ```bash
+   pkg update && pkg upgrade
+   pkg install rust clang build-essential git
+   ```
+
+2. **Clone the repository**:
    ```bash
    git clone https://github.com/apon133/CodeDroid.git
    cd CodeDroid
    ```
 
-2. **Run the API Server**:
-   You can run the API server using one of the two methods below:
-
-   ### Method A: Run Direct Pre-compiled Binary (No Rust/Cargo required)
-   If you have downloaded or placed the pre-compiled `codedroid-api` binary in the root directory of the project, you can start the server using the startup script:
-   ```bash
-   ./run.sh
-   ```
-   Or run the binary directly:
-   ```bash
-   ./codedroid-api
-   ```
-   *This method runs the pre-compiled binary directly and does not require installing Rust.*
-
-   ### Method B: Build & Run from Source (Requires Rust/Cargo)
-   If you want to compile the API from source:
+3. **Run the API Server from source**:
    ```bash
    cd codedroid_api
    cargo run --release
    ```
 
-   ### 🛠️ Building/Updating the Binary in Root (For Developers)
-   If you have Rust installed and want to build/rebuild the API binary and place it in the root directory (so that it can be run directly without Rust), run:
+   Or to compile and run the local binary:
    ```bash
-   ./run.sh --build
+   ./run.sh
    ```
-   *This compiles the project in release mode, automatically removes any old binary from the root, and copies the newly compiled binary to the root.*
 
-3. **Start Coding**:
+4. **Start Coding**:
    Visit **[codedroid.netlify.app](https://codedroid.netlify.app)** in your mobile browser and connect it to your local server to start coding!
 
 ---

@@ -8,51 +8,52 @@ NC='\033[0m' # No Color
 
 echo "CodeDroid: Starting Rust API compilation and deployment..."
 
-# Ensure cargo-zigbuild is installed
-if ! command -v cargo-zigbuild &> /dev/null; then
-    echo -e "${RED}Error: cargo-zigbuild is not installed.${NC}"
-    echo "Please install it by running: cargo install cargo-zigbuild"
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Detect OS
+OS_NAME="$(uname -s)"
+BINARY_NAME="codedroid_api"
+TARGET_BINARY="codedroid-api"
+
+if [[ "$OS_NAME" == *"NT"* || "$OS_NAME" == *"MINGW"* || "$OS_NAME" == *"MSYS"* || "$OS_NAME" == *"CYGWIN"* ]]; then
+    BINARY_NAME="codedroid_api.exe"
+    TARGET_BINARY="codedroid-api.exe"
+fi
+
+BINARY_PATH="$SCRIPT_DIR/$TARGET_BINARY"
+
+# 1. Remove existing binary in the root
+if [ -f "$BINARY_PATH" ]; then
+    echo "🗑️ Removing existing binary: $BINARY_PATH"
+    rm -f "$BINARY_PATH"
+fi
+
+# 2. Check if Cargo is installed
+if ! command -v cargo &> /dev/null; then
+    echo -e "${RED}Error: cargo is not installed.${NC}"
+    echo "Please install Rust/Cargo: https://rustup.rs/"
     exit 1
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-API_DIR="$SCRIPT_DIR/codedroid_api"
-ASSETS_DIR="$SCRIPT_DIR/apps/flutter_android/assets/linux"
+# 3. Build using cargo build --release
+echo "--------------------------------------------------"
+echo -e "Building ${GREEN}$TARGET_BINARY${NC} in release mode..."
+echo "--------------------------------------------------"
+cargo build --release --manifest-path "$SCRIPT_DIR/codedroid_api/Cargo.toml"
 
-# Build target lists
-TARGETS=("aarch64-unknown-linux-musl" "x86_64-unknown-linux-musl")
-ARCHS=("aarch64" "x86_64")
+COMPILED_PATH="$SCRIPT_DIR/codedroid_api/target/release/$BINARY_NAME"
 
-cd "$API_DIR"
-
-for i in "${!TARGETS[@]}"; do
-    TARGET="${TARGETS[$i]}"
-    ARCH="${ARCHS[$i]}"
+# 4. Move to root directory
+if [ -f "$COMPILED_PATH" ]; then
+    echo "💾 Moving compiled binary to root directory..."
+    mv "$COMPILED_PATH" "$BINARY_PATH"
     
-    echo "--------------------------------------------------"
-    echo -e "Building for target: ${GREEN}${TARGET}${NC} (${ARCH})..."
-    echo "--------------------------------------------------"
-    
-    # Run the zigbuild command
-    cargo zigbuild --target "$TARGET" --release
-    
-    # Destination directory path
-    DEST_DIR="$ASSETS_DIR/$ARCH"
-    mkdir -p "$DEST_DIR"
-    
-    # Copy the compiled binary
-    SRC_BIN="target/$TARGET/release/codedroid_api"
-    DEST_BIN="$DEST_DIR/codedroid_api"
-    
-    if [ -f "$SRC_BIN" ]; then
-        cp "$SRC_BIN" "$DEST_BIN"
-        echo -e "${GREEN}Copied successfully:${NC} $DEST_BIN"
-    else
-        echo -e "${RED}Error: Binary not found at ${SRC_BIN}${NC}"
-        exit 1
+    if [ "$TARGET_BINARY" == "codedroid-api" ]; then
+        chmod +x "$BINARY_PATH"
     fi
-done
-
-echo "--------------------------------------------------"
-echo -e "${GREEN}All targets built and deployed successfully!${NC}"
-echo "--------------------------------------------------"
+    echo -e "${GREEN}Build and deployment successful:${NC} $BINARY_PATH"
+else
+    echo -e "${RED}Error: Compiled binary not found at $COMPILED_PATH${NC}"
+    exit 1
+fi

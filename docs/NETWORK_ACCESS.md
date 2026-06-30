@@ -1,28 +1,27 @@
 # 📱 CodeDroid — iOS & Remote Device Setup Guide
 
-> Use CodeDroid on **any device** — iPhone, iPad, another Android phone, or tablet — by connecting to a backend server running on your PC or Android phone over your local WiFi network.
+> Use CodeDroid on **any device** — iPhone, iPad, another Android phone, or tablet — by connecting to the backend running inside the **CodeDroid Android app** (or Termux) over your local WiFi network.
 
 ---
 
-## 🧠 How It Works (Simple Explanation)
+## 🧠 How It Works
 
-Think of it like a **two-device teamwork setup**:
-
-- **Device A (your PC or Android phone)** runs the actual code execution engine in the background.
-- **Device B (your iPhone, iPad, or any browser device)** opens the CodeDroid app as a webpage and sends code to Device A to run.
-
-They talk to each other over your home WiFi — no internet needed.
+The Android app runs **Alpine Linux** internally via PRoot. Everything — the API, code execution, language runtimes — runs inside this Linux environment.
 
 ```
-┌──────────────────────────┐         ┌────────────────────────────────┐
-│  iPhone / iPad / Browser │──WiFi──▶│  PC or Android (Termux)        │
-│                          │         │                                │
-│  Open in Safari/Chrome:  │         │  codedroid_api  → port 3000    │
-│  http://<YOUR-IP>:8082   │         │  trunk serve    → port 8082    │
-└──────────────────────────┘         └────────────────────────────────┘
+┌──────────────────────────┐         ┌────────────────────────────────────────┐
+│  iPhone / iPad / Browser │──WiFi──▶│  Android Phone (CodeDroid App)         │
+│                          │         │  ┌──────────────────────────────────┐  │
+│  Open in Safari/Chrome:  │         │  │  Alpine Linux (inside app)        │  │
+│  http://<phone-ip>:8082  │         │  │  ├─ codedroid_api → port 3000     │  │
+│                          │         │  │  ├─ trunk serve   → port 8082     │  │
+│  Settings → API URL:     │         │  │  └─ all language runtimes         │  │
+│  http://<phone-ip>:3000  │         │  └──────────────────────────────────┘  │
+└──────────────────────────┘         └────────────────────────────────────────┘
 ```
 
-> 💡 **Both devices must be connected to the same WiFi network** — like your home router.
+> 💡 **Both devices must be on the same WiFi network.**  
+> Termux paths are also supported as an alternative on Android.
 
 ---
 

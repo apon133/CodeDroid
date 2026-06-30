@@ -1,5 +1,5 @@
 use axum::{
-    extract::{State, Query},
+    extract::{Query, State},
     http::{header, HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{get, post},
@@ -44,7 +44,9 @@ struct RouterState {
     reload_rx: std::sync::Arc<std::sync::Mutex<tokio::sync::watch::Receiver<u64>>>,
 }
 
-fn get_latest_modified_time(dir: &std::path::Path) -> Option<(std::time::SystemTime, std::path::PathBuf)> {
+fn get_latest_modified_time(
+    dir: &std::path::Path,
+) -> Option<(std::time::SystemTime, std::path::PathBuf)> {
     let mut latest = None;
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
@@ -60,7 +62,10 @@ fn get_latest_modified_time(dir: &std::path::Path) -> Option<(std::time::SystemT
                     && name != ".gemini"
                 {
                     if let Some((mod_time, mod_path)) = get_latest_modified_time(&path) {
-                        if latest.as_ref().map_or(true, |(l_time, _)| mod_time > *l_time) {
+                        if latest
+                            .as_ref()
+                            .map_or(true, |(l_time, _)| mod_time > *l_time)
+                        {
                             latest = Some((mod_time, mod_path));
                         }
                     }
@@ -68,7 +73,10 @@ fn get_latest_modified_time(dir: &std::path::Path) -> Option<(std::time::SystemT
             } else if path.is_file() {
                 if let Ok(metadata) = std::fs::metadata(&path) {
                     if let Ok(mod_time) = metadata.modified() {
-                        if latest.as_ref().map_or(true, |(l_time, _)| mod_time > *l_time) {
+                        if latest
+                            .as_ref()
+                            .map_or(true, |(l_time, _)| mod_time > *l_time)
+                        {
                             latest = Some((mod_time, path.clone()));
                         }
                     }
@@ -179,7 +187,8 @@ async fn live_server_handler(
             if ext_lower == "html" || ext_lower == "htm" {
                 let mut html_str = String::from_utf8_lossy(&content).to_string();
                 let current_version = *state.reload_rx.lock().unwrap().borrow();
-                let script = format!(r#"
+                let script = format!(
+                    r#"
 <script>
     (function() {{
         console.log("CodeDroid Live Reload active.");
@@ -203,7 +212,9 @@ async fn live_server_handler(
         poll();
     }})();
 </script>
-"#, current_version);
+"#,
+                    current_version
+                );
                 if let Some(pos) = html_str.rfind("</body>") {
                     html_str.insert_str(pos, &script);
                 } else {
@@ -244,22 +255,17 @@ async fn live_reload_poll(
     (
         StatusCode::OK,
         Json(serde_json::json!({ "reload": reload })),
-    ).into_response()
+    )
+        .into_response()
 }
 
-pub async fn start_live_server(Json(payload): Json<StartRequest>) -> impl IntoResponse {
-    println!(
-        "[LIVE SERVER] Received start request for project_path={:?}",
-        payload.project_path
-    );
+pub async fn ensure_live_server(project_path: &str) -> Result<u16, String> {
     let mut server_guard = get_live_server().lock().unwrap();
 
-    // If already running for this project, just return the port
     if let Some(ref current) = *server_guard {
-        if current.project_path == payload.project_path {
-            return (StatusCode::OK, Json(StartResponse { port: current.port })).into_response();
+        if current.project_path == project_path {
+            return Ok(current.port);
         }
-        // Stop current server if project is different
         if let Some(shutdown_tx) = server_guard.as_mut().and_then(|c| c.shutdown_tx.take()) {
             let _ = shutdown_tx.send(());
         }
@@ -272,19 +278,15 @@ pub async fn start_live_server(Json(payload): Json<StartRequest>) -> impl IntoRe
         *server_guard = None;
     }
 
-    let port = match find_free_port(5500) {
-        Some(p) => p,
-        None => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, "No free ports available").into_response()
-        }
-    };
+    let port = find_free_port(5500).ok_or_else(|| "No free ports available".to_string())?;
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     let (watcher_shutdown_tx, mut watcher_shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     let (reload_tx, reload_rx) = tokio::sync::watch::channel(0u64);
 
-    let resolved_path = crate::utils::resolve_project_dir(&payload.project_path);
+    let resolved_path = crate::utils::resolve_project_dir(project_path);
     let project_dir_buf = PathBuf::from(resolved_path);
+    let project_path_owned = project_path.to_string();
 
     let router_state = RouterState {
         project_dir: project_dir_buf.clone(),
@@ -348,16 +350,27 @@ pub async fn start_live_server(Json(payload): Json<StartRequest>) -> impl IntoRe
     });
 
     *server_guard = Some(LiveServerState {
-        project_path: payload.project_path,
+        project_path: project_path_owned,
         port,
         shutdown_tx: Some(shutdown_tx),
         watcher_shutdown_tx: Some(watcher_shutdown_tx),
     });
 
-    (StatusCode::OK, Json(StartResponse { port })).into_response()
+    Ok(port)
 }
 
-pub async fn stop_live_server() -> impl IntoResponse {
+pub async fn start_live_server(Json(payload): Json<StartRequest>) -> impl IntoResponse {
+    println!(
+        "[LIVE SERVER] Received start request for project_path={:?}",
+        payload.project_path
+    );
+    match ensure_live_server(&payload.project_path).await {
+        Ok(port) => (StatusCode::OK, Json(StartResponse { port })).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
+    }
+}
+
+pub fn stop_live_server_internal() {
     let mut server_guard = get_live_server().lock().unwrap();
     if let Some(mut current) = server_guard.take() {
         if let Some(shutdown_tx) = current.shutdown_tx.take() {
@@ -367,6 +380,10 @@ pub async fn stop_live_server() -> impl IntoResponse {
             let _ = watcher_shutdown_tx.send(());
         }
     }
+}
+
+pub async fn stop_live_server() -> impl IntoResponse {
+    stop_live_server_internal();
     (StatusCode::OK, Json(StopResponse { success: true }))
 }
 

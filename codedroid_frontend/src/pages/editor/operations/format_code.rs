@@ -8,7 +8,6 @@ pub fn make_format_code(
     plang: String,
     code: RwSignal<String>,
     dirty: RwSignal<bool>,
-    is_running: RwSignal<bool>,
     active_tab: RwSignal<Option<String>>,
     output: RwSignal<String>,
     is_error: RwSignal<bool>,
@@ -16,9 +15,6 @@ pub fn make_format_code(
     trigger_diagnostics: Callback<String>,
 ) -> Callback<()> {
     Callback::new(move |_: ()| {
-        if is_running.get_untracked() {
-            return;
-        }
         let current_code = code.get_untracked();
         if current_code.trim().is_empty() {
             return;

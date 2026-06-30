@@ -789,6 +789,8 @@ pub fn BottomPanel(
     is_running: RwSignal<bool>,
     terminal_history: RwSignal<Vec<String>>,
     terminal_trigger: RwSignal<Option<String>>,
+    terminal_auto_cmd: RwSignal<Option<String>>,
+    terminal_interrupt: RwSignal<u32>,
     close_terminal: Callback<()>,
 ) -> impl IntoView {
     let expanded_idx = RwSignal::new(Option::<usize>::None);
@@ -908,11 +910,7 @@ pub fn BottomPanel(
                         }
                         
                         if ended {
-                            let current_list = sessions_clone.get_untracked();
-                            let active = active_idx_clone.get_untracked();
-                            if active < current_list.len() && current_list[active].id == session_id_clone {
-                                is_running_clone.set(false);
-                            }
+                            is_running_clone.set(false);
                         }
                     }
                     
@@ -1057,19 +1055,34 @@ pub fn BottomPanel(
             }
             let list = sessions.get_untracked();
             if !list.iter().any(|s| s.id == session_id) {
-                let next_num = list.len() + 1;
-                let name = format!("sh ({})", next_num);
-                let initial_out = output.get_untracked();
-                let new_sess = SessionState {
-                    id: session_id.clone(),
-                    name,
-                    output: initial_out,
-                    path: Some(project_path.get_untracked()),
-                };
-                sessions.update(|s| s.push(new_sess));
-                active_idx.set(sessions.get_untracked().len() - 1);
-                
-                start_polling(session_id);
+                let active = active_idx.get_untracked();
+                if active < list.len() {
+                    sessions.update(|s_list| {
+                        s_list[active].id = session_id.clone();
+                        let mut current_out = output.get_untracked();
+                        if current_out.contains("[Process completed]") {
+                            current_out = current_out.replace("\n[Process completed]\n", "");
+                            current_out = current_out.replace("[Process completed]", "");
+                        }
+                        s_list[active].output = current_out;
+                    });
+                    
+                    start_polling(session_id);
+                } else {
+                    let next_num = list.len() + 1;
+                    let name = format!("sh ({})", next_num);
+                    let initial_out = output.get_untracked();
+                    let new_sess = SessionState {
+                        id: session_id.clone(),
+                        name,
+                        output: initial_out,
+                        path: Some(project_path.get_untracked()),
+                    };
+                    sessions.update(|s| s.push(new_sess));
+                    active_idx.set(sessions.get_untracked().len() - 1);
+                    
+                    start_polling(session_id);
+                }
             }
         }
     });
@@ -1447,6 +1460,31 @@ pub fn BottomPanel(
             }
         });
     };
+
+    let terminal_auto_cmd_clone = terminal_auto_cmd;
+    Effect::new(move |_| {
+        if let Some(cmd) = terminal_auto_cmd_clone.get() {
+            terminal_auto_cmd_clone.set(None);
+            is_running.set(true);
+            submit_cmd_fn(cmd);
+        }
+    });
+
+    let terminal_interrupt_clone = terminal_interrupt;
+    let terminal_session_id_interrupt = terminal_session_id;
+    Effect::new(move |_| {
+        if terminal_interrupt_clone.get() == 0 {
+            return;
+        }
+        if let Some(session_id) = terminal_session_id_interrupt.get_untracked() {
+            if session_id != "initializing" {
+                let sid = session_id.clone();
+                spawn_local(async move {
+                    let _ = crate::api::send_terminal_input_api(&sid, "\x03").await;
+                });
+            }
+        }
+    });
 
     let on_keydown = move |e: web_sys::KeyboardEvent| {
         let key = e.key();

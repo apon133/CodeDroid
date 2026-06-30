@@ -13,46 +13,9 @@ pub fn get_api_url() -> String {
     DEFAULT_API_URL.to_string()
 }
 
-use crate::models::{PackageResponse, RunResponse};
+use crate::models::PackageResponse;
 use gloo_net::http::Request;
 use serde_json::json;
-
-pub async fn run_code(
-    code: &str,
-    language: &str,
-    project_path: &str,
-    cargo_toml: Option<&str>,
-) -> Result<RunResponse, String> {
-    let body = json!({
-        "code": code,
-        "language": language,
-        "project_path": project_path,
-        "cargo_toml": cargo_toml,
-    });
-
-    Request::post(&format!("{}/run", get_api_url()))
-        .json(&body)
-        .map_err(|e| e.to_string())?
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .json::<RunResponse>()
-        .await
-        .map_err(|e| e.to_string())
-}
-
-pub async fn stop_process(pid: u32) -> Result<RunResponse, String> {
-    let body = json!({ "pid": pid });
-    Request::post(&format!("{}/stop", get_api_url()))
-        .json(&body)
-        .map_err(|e| e.to_string())?
-        .send()
-        .await
-        .map_err(|e| e.to_string())?
-        .json::<RunResponse>()
-        .await
-        .map_err(|e| e.to_string())
-}
 
 pub async fn save_file_api(path: &str, content: &str) -> Result<(), String> {
     let body = json!({ "path": path, "content": content });
@@ -349,6 +312,58 @@ pub async fn format_code_api(
         .await
         .map_err(|e| e.to_string())?
         .json::<FormatResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Debug)]
+pub struct RunCodeResponse {
+    pub output: String,
+    pub error: String,
+    pub pid: Option<u32>,
+    pub url: Option<String>,
+    #[serde(default)]
+    pub is_command: Option<bool>,
+}
+
+pub async fn run_code(
+    code: &str,
+    language: &str,
+    project_path: &str,
+    file_path: Option<&str>,
+) -> Result<RunCodeResponse, String> {
+    let body = json!({
+        "code": code,
+        "language": language,
+        "project_path": project_path,
+        "file_path": file_path,
+    });
+    Request::post(&format!("{}/run", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<RunCodeResponse>()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+pub async fn stop_process(
+    pid: Option<u32>,
+    stop_live_server: bool,
+) -> Result<RunCodeResponse, String> {
+    let body = json!({
+        "pid": pid,
+        "stop_live_server": stop_live_server,
+    });
+    Request::post(&format!("{}/stop", get_api_url()))
+        .json(&body)
+        .map_err(|e| e.to_string())?
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json::<RunCodeResponse>()
         .await
         .map_err(|e| e.to_string())
 }

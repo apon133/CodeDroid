@@ -44,6 +44,7 @@ pub async fn get_diagnostics_handler(
             "css" => format!("file://{}/style.css", project_dir),
             "vue" => format!("file://{}/Component.vue", project_dir),
             "svelte" => format!("file://{}/Component.svelte", project_dir),
+            "angular" => format!("file://{}/src/app/app.component.html", project_dir),
             _ => format!("file://{}/main.txt", project_dir),
         }
     };
@@ -66,6 +67,7 @@ pub async fn get_diagnostics_handler(
         "css" => Some(("vscode-css-language-server", vec!["--stdio"])),
         "vue" => Some(("vue-language-server", vec!["--stdio"])),
         "svelte" => Some(("svelteserver", vec!["--stdio"])),
+        "angular" => Some(("ngserver", vec!["--stdio"])),
         _ => None,
     };
     let mut diagnostics = vec![];

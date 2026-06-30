@@ -372,3 +372,11 @@ pub fn get_logs() -> Vec<String> {
     }
 }
 
+pub fn escape_shell_arg(arg: &str) -> String {
+    if arg.is_empty() {
+        return "''".to_string();
+    }
+    format!("'{}'", arg.replace('\'', "'\\''"))
+}
+
+

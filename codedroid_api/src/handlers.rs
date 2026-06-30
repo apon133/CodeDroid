@@ -409,6 +409,7 @@ pub async fn sync_file(Json(payload): Json<SyncRequest>) -> Json<CodeResponse> {
                     error: "Refusing to overwrite non-empty file with empty content".to_string(),
                     pid: None,
                     url: None,
+                    is_command: false,
                 });
             }
         }
@@ -420,12 +421,14 @@ pub async fn sync_file(Json(payload): Json<SyncRequest>) -> Json<CodeResponse> {
             error: "".to_string(),
             pid: None,
             url: None,
+            is_command: false,
         }),
         Err(e) => Json(CodeResponse {
             output: "".to_string(),
             error: format!("Failed to sync file: {}", e),
             pid: None,
             url: None,
+            is_command: false,
         }),
     }
 }
@@ -575,12 +578,14 @@ pub async fn delete_file(Json(payload): Json<DeleteRequest>) -> Json<CodeRespons
             error: "".to_string(),
             pid: None,
             url: None,
+            is_command: false,
         }),
         Err(e) => Json(CodeResponse {
             output: "".to_string(),
             error: format!("Failed to delete: {}", e),
             pid: None,
             url: None,
+            is_command: false,
         }),
     }
 }
@@ -609,12 +614,14 @@ pub async fn copy_file(Json(payload): Json<CopyRequest>) -> Json<CodeResponse> {
             error: "".to_string(),
             pid: None,
             url: None,
+            is_command: false,
         }),
         Err(e) => Json(CodeResponse {
             output: "".to_string(),
             error: format!("Failed to copy: {}", e),
             pid: None,
             url: None,
+            is_command: false,
         }),
     }
 }
@@ -645,12 +652,14 @@ pub async fn create_dir(Json(payload): Json<CreateDirRequest>) -> Json<CodeRespo
             error: "".to_string(),
             pid: None,
             url: None,
+            is_command: false,
         }),
         Err(e) => Json(CodeResponse {
             output: "".to_string(),
             error: format!("Failed to create directory: {}", e),
             pid: None,
             url: None,
+            is_command: false,
         }),
     }
 }
@@ -670,12 +679,14 @@ pub async fn move_file(Json(payload): Json<MoveRequest>) -> Json<CodeResponse> {
             error: "".to_string(),
             pid: None,
             url: None,
+            is_command: false,
         }),
         Err(e) => Json(CodeResponse {
             output: "".to_string(),
             error: format!("Failed to move: {}", e),
             pid: None,
             url: None,
+            is_command: false,
         }),
     }
 }

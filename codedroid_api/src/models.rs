@@ -7,6 +7,7 @@ pub struct CodeResponse {
     pub error: String,
     pub pid: Option<u32>,
     pub url: Option<String>,
+    pub is_command: bool,
 }
 
 #[derive(Deserialize)]

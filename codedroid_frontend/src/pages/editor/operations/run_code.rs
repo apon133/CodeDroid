@@ -81,17 +81,32 @@ pub fn make_run_code(
                         return;
                     }
 
-                    let command = r.output.trim();
+                    if r.is_command != Some(true) {
+                        if !r.output.is_empty() {
+                            let mut current = output.get_untracked();
+                            current.push_str(&r.output);
+                            output.set(current);
+                        }
+                        is_running.set(false);
+                        return;
+                    }
+
+                    let command_raw = r.output.trim();
+                    let command_clean = command_raw
+                        .replace('\r', "")
+                        .chars()
+                        .filter(|&c| !c.is_control() || c == '\n' || c == '\t')
+                        .collect::<String>();
+                    let command = command_clean.trim();
+
                     if command.is_empty() {
                         is_running.set(false);
                         return;
                     }
 
-                    if !r.output.is_empty() {
-                        let mut current = output.get_untracked();
-                        current.push_str(&format!("▶ {}\n", command));
-                        output.set(current);
-                    }
+                    let mut current = output.get_untracked();
+                    current.push_str(&format!("▶ {}\n", command));
+                    output.set(current);
 
                     // Wrap so the interactive shell emits a completion marker when the
                     // foreground command finishes (the shell itself stays alive).

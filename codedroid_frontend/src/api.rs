@@ -322,6 +322,8 @@ pub struct RunCodeResponse {
     pub error: String,
     pub pid: Option<u32>,
     pub url: Option<String>,
+    #[serde(default)]
+    pub is_command: Option<bool>,
 }
 
 pub async fn run_code(

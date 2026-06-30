@@ -32,6 +32,7 @@ pub async fn run_code(Json(payload): Json<RunRequest>) -> Json<CodeResponse> {
         error: String::new(),
         pid: None,
         url: None,
+        is_command: true,
     })
 }
 
@@ -84,6 +85,7 @@ pub async fn stop_process(Json(payload): Json<StopRequest>) -> Json<CodeResponse
         error,
         pid: None,
         url: None,
+        is_command: false,
     })
 }
 
@@ -112,6 +114,7 @@ async fn try_run_web_project(project_dir: &str, project_path: &str) -> Option<Co
                     error: String::new(),
                     pid: None,
                     url: Some(url),
+                    is_command: false,
                 });
             }
             Err(e) => {
@@ -120,6 +123,7 @@ async fn try_run_web_project(project_dir: &str, project_path: &str) -> Option<Co
                     error: e,
                     pid: None,
                     url: None,
+                    is_command: false,
                 });
             }
         }
@@ -151,6 +155,7 @@ fn spawn_dev_server(project_dir: &str) -> CodeResponse {
                 error: format!("Failed to start dev server: {}", e),
                 pid: None,
                 url: None,
+                is_command: false,
             };
         }
     };
@@ -212,6 +217,7 @@ fn spawn_dev_server(project_dir: &str) -> CodeResponse {
         error: String::new(),
         pid: Some(pid),
         url: detected_url,
+        is_command: false,
     }
 }
 
@@ -280,32 +286,37 @@ fn resolve_terminal_command(project_dir: &str, lang: &str, file_path: Option<&st
     }
 
     if let Some(fp) = file_path {
+        let escaped_fp = crate::utils::escape_shell_arg(fp);
         match lang {
-            "python" if fp.ends_with(".py") => return format!("python3 {}", fp),
-            "ruby" if fp.ends_with(".rb") => return format!("ruby {}", fp),
+            "python" if fp.ends_with(".py") => return format!("python3 {}", escaped_fp),
+            "ruby" if fp.ends_with(".rb") => return format!("ruby {}", escaped_fp),
             "c" if fp.ends_with(".c") => {
                 let bin = fp.trim_end_matches(".c");
-                return format!("gcc {} -o {} && ./{}", fp, bin, bin);
+                let escaped_bin = crate::utils::escape_shell_arg(bin);
+                let run_cmd = crate::utils::escape_shell_arg(&format!("./{}", bin));
+                return format!("gcc {} -o {} && {}", escaped_fp, escaped_bin, run_cmd);
             }
             "cpp" if fp.ends_with(".cpp") || fp.ends_with(".cc") => {
                 let bin = fp.split('.').next().unwrap_or("a.out");
-                return format!("g++ {} -o {} && ./{}", fp, bin, bin);
+                let escaped_bin = crate::utils::escape_shell_arg(bin);
+                let run_cmd = crate::utils::escape_shell_arg(&format!("./{}", bin));
+                return format!("g++ {} -o {} && {}", escaped_fp, escaped_bin, run_cmd);
             }
             "java" if fp.ends_with(".java") => {
-                return format!("javac {} && java {}", fp, java_class_name(fp));
+                return format!("javac {} && java {}", escaped_fp, java_class_name(fp));
             }
             "kotlin" if fp.ends_with(".kt") => {
                 return format!(
                     "kotlinc {} -include-runtime -d app.jar && java -jar app.jar",
-                    fp
+                    escaped_fp
                 )
             }
-            "javascript" if fp.ends_with(".js") => return format!("node {}", fp),
-            "typescript" if fp.ends_with(".ts") => return format!("npx ts-node {}", fp),
-            "dart" if fp.ends_with(".dart") => return format!("dart run {}", fp),
-            "scala" if fp.ends_with(".scala") => return format!("scala {}", fp),
-            "haskell" if fp.ends_with(".hs") => return format!("runhaskell {}", fp),
-            "swift" if fp.ends_with(".swift") => return format!("swift {}", fp),
+            "javascript" if fp.ends_with(".js") => return format!("node {}", escaped_fp),
+            "typescript" if fp.ends_with(".ts") => return format!("npx ts-node {}", escaped_fp),
+            "dart" if fp.ends_with(".dart") => return format!("dart run {}", escaped_fp),
+            "scala" if fp.ends_with(".scala") => return format!("scala {}", escaped_fp),
+            "haskell" if fp.ends_with(".hs") => return format!("runhaskell {}", escaped_fp),
+            "swift" if fp.ends_with(".swift") => return format!("swift {}", escaped_fp),
             _ => {}
         }
     }

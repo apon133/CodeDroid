@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'language_setup_sheet.dart';
 import 'linux_manager.dart';
+import 'services/environment_service.dart';
 
 class InteractiveTerminalScreen extends StatefulWidget {
   const InteractiveTerminalScreen({super.key});
@@ -59,44 +60,22 @@ class _InteractiveTerminalScreenState extends State<InteractiveTerminalScreen> {
       final String rootfsPath = LinuxManager.canonicalizePath("$linuxDir/rootfs");
 
       final tmpDir = Directory("$linuxDir/tmp");
-      if (!tmpDir.existsSync()) {
-        tmpDir.createSync(recursive: true);
-      }
+      if (!tmpDir.existsSync()) tmpDir.createSync(recursive: true);
       final String tmpPath = tmpDir.resolveSymbolicLinksSync();
 
       final l2sDir = Directory("$rootfsPath/.l2s");
-      if (!l2sDir.existsSync()) {
-        l2sDir.createSync(recursive: true);
-      }
+      if (!l2sDir.existsSync()) l2sDir.createSync(recursive: true);
       final String l2sPath = l2sDir.resolveSymbolicLinksSync();
 
-      // Mirror directories to .l2s to avoid ENOENT errors during link creation inside PRoot
-      LinuxManager.mirrorRootfsDirectoriesToL2s(rootfsPath);
+      // Prepare environment using new EnvironmentService
+      EnvironmentService.mirrorDirectoriesToL2s(rootfsPath);
+      EnvironmentService.ensureGuestDirectories(rootfsPath);
+      EnvironmentService.clearStaleLock(rootfsPath);
 
-      // Ensure a guest-writable Go temp directory exists inside rootfs
-      final guestRootTmp = Directory("$rootfsPath/root/tmp");
-      if (!guestRootTmp.existsSync()) {
-        guestRootTmp.createSync(recursive: true);
-      }
-
-      // Clear stale apk lock
-      final lockFile = File("$rootfsPath/lib/apk/db/lock");
-      if (lockFile.existsSync()) {
-        try {
-          lockFile.deleteSync();
-          _appendOutput("[System: Cleared stale apk database lock]\n");
-        } catch (_) {}
-      }
-
-      // Merged clean environment
-      final Map<String, String> mergedEnv = LinuxManager.buildCleanEnvironment(
+      final Map<String, String> mergedEnv = EnvironmentService.buildEnvironment(
         tmpPath: tmpPath,
         l2sPath: l2sPath,
         appendHostPath: true,
-        extraEnv: {
-          "GOTMPDIR": "/root/tmp",
-          "CGO_ENABLED": "0",
-        },
       );
 
       _process = await Process.start(
@@ -122,19 +101,15 @@ class _InteractiveTerminalScreenState extends State<InteractiveTerminalScreen> {
 
       _appendOutput("Session started. Welcome to guest Alpine Linux!\n\n");
 
-      // Listen to stdout
-      _process!.stdout.transform(const Utf8Decoder(allowMalformed: true)).listen((data) {
-        _appendOutput(data);
-      }, onError: (e) {
-        _appendOutput("\n[stdout error: $e]\n");
-      });
+      _process!.stdout.transform(const Utf8Decoder(allowMalformed: true)).listen(
+        (data) => _appendOutput(data),
+        onError: (e) => _appendOutput("\n[stdout error: $e]\n"),
+      );
 
-      // Listen to stderr
-      _process!.stderr.transform(const Utf8Decoder(allowMalformed: true)).listen((data) {
-        _appendOutput(data);
-      }, onError: (e) {
-        _appendOutput("\n[stderr error: $e]\n");
-      });
+      _process!.stderr.transform(const Utf8Decoder(allowMalformed: true)).listen(
+        (data) => _appendOutput(data),
+        onError: (e) => _appendOutput("\n[stderr error: $e]\n"),
+      );
 
       _process!.exitCode.then((code) {
         _appendOutput("\n[Process exited with code $code]\n");
@@ -147,27 +122,20 @@ class _InteractiveTerminalScreenState extends State<InteractiveTerminalScreen> {
       });
     } catch (e) {
       _appendOutput("\n[Failed to start process: $e]\n");
-      if (mounted) {
-        setState(() {
-          _isRunning = false;
-        });
-      }
+      if (mounted) setState(() => _isRunning = false);
     }
   }
 
   void _appendOutput(String data) {
     if (!mounted) return;
     setState(() {
-      // Strip ANSI escape sequences to keep display output clean
+      // Strip ANSI escape sequences
       final cleanData = data.replaceAll(RegExp(r'\x1B\[[0-9;]*[a-zA-Z]'), '');
       _output.add(cleanData);
-      
       if (_output.length > 2000) {
         _output.removeRange(0, _output.length - 2000);
       }
     });
-    
-    // Auto-scroll to bottom
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -182,11 +150,7 @@ class _InteractiveTerminalScreenState extends State<InteractiveTerminalScreen> {
   void _sendInput(String input) {
     if (_process == null) return;
     final trimmed = input.trim();
-    if (trimmed == "clear") {
-      setState(() {
-        _output.clear();
-      });
-    }
+    if (trimmed == "clear") setState(() => _output.clear());
     _process!.stdin.write('$input\n');
     if (trimmed.isNotEmpty) {
       _history.add(input);
@@ -197,8 +161,7 @@ class _InteractiveTerminalScreenState extends State<InteractiveTerminalScreen> {
   }
 
   void _sendRawKey(String sequence) {
-    if (_process == null) return;
-    _process!.stdin.write(sequence);
+    _process?.stdin.write(sequence);
     _focusNode.requestFocus();
   }
 
@@ -219,9 +182,8 @@ class _InteractiveTerminalScreenState extends State<InteractiveTerminalScreen> {
     if (_historyIndex > 0) {
       _historyIndex--;
       _inputController.text = _history[_historyIndex];
-      _inputController.selection = TextSelection.fromPosition(
-        TextPosition(offset: _inputController.text.length),
-      );
+      _inputController.selection =
+          TextSelection.fromPosition(TextPosition(offset: _inputController.text.length));
     }
   }
 
@@ -234,9 +196,8 @@ class _InteractiveTerminalScreenState extends State<InteractiveTerminalScreen> {
       _historyIndex = _history.length;
       _inputController.clear();
     }
-    _inputController.selection = TextSelection.fromPosition(
-      TextPosition(offset: _inputController.text.length),
-    );
+    _inputController.selection =
+        TextSelection.fromPosition(TextPosition(offset: _inputController.text.length));
   }
 
   @override
@@ -246,18 +207,17 @@ class _InteractiveTerminalScreenState extends State<InteractiveTerminalScreen> {
       color: Color(0xFFD0D0D0),
       fontSize: 14,
       height: 1.2,
-      fontWeight: FontWeight.w400,
     );
 
     return Scaffold(
-      backgroundColor: const Color(0xFF000000), // Termux style black
+      backgroundColor: const Color(0xFF000000),
       body: SafeArea(
         child: GestureDetector(
           onTap: () => _focusNode.requestFocus(),
           behavior: HitTestBehavior.opaque,
           child: Column(
             children: [
-              // Minimal status line at the top
+              // Status bar
               Container(
                 color: const Color(0xFF121212),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -277,11 +237,7 @@ class _InteractiveTerminalScreenState extends State<InteractiveTerminalScreen> {
                         const SizedBox(width: 6),
                         const Text(
                           "alpine-session",
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 11,
-                            fontFamily: 'monospace',
-                          ),
+                          style: TextStyle(color: Colors.grey, fontSize: 11, fontFamily: 'monospace'),
                         ),
                       ],
                     ),
@@ -318,7 +274,7 @@ class _InteractiveTerminalScreenState extends State<InteractiveTerminalScreen> {
                 ),
               ),
 
-              // Console output & inline input area
+              // Console output
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -329,20 +285,14 @@ class _InteractiveTerminalScreenState extends State<InteractiveTerminalScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Text history
-                          Text(
-                            _output.join(),
-                            style: consoleStyle,
-                          ),
-                          
-                          // Active inline input line
+                          Text(_output.join(), style: consoleStyle),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               const Text(
                                 "\$ ",
                                 style: TextStyle(
-                                  color: Color(0xFF00FF00), // Termux bright green
+                                  color: Color(0xFF00FF00),
                                   fontWeight: FontWeight.bold,
                                   fontSize: 14,
                                   fontFamily: 'monospace',
@@ -354,7 +304,7 @@ class _InteractiveTerminalScreenState extends State<InteractiveTerminalScreen> {
                                   focusNode: _focusNode,
                                   autofocus: true,
                                   style: consoleStyle,
-                                  cursorColor: const Color(0xFF00FF00), // Blinking green block cursor
+                                  cursorColor: const Color(0xFF00FF00),
                                   cursorWidth: 8,
                                   cursorHeight: 16,
                                   decoration: const InputDecoration(
@@ -373,8 +323,8 @@ class _InteractiveTerminalScreenState extends State<InteractiveTerminalScreen> {
                   ),
                 ),
               ),
-              
-              // Termux-style accessory buttons
+
+              // Accessory key bar
               Container(
                 color: const Color(0xFF1C1C1C),
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -382,34 +332,25 @@ class _InteractiveTerminalScreenState extends State<InteractiveTerminalScreen> {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      _buildTermuxKey("ESC", () => _sendRawKey("\x1B")),
-                      _buildTermuxKey("CTRL+C", () => _sendCtrlKey('C')),
-                      _buildTermuxKey("CTRL+D", () => _sendCtrlKey('D')),
-                      _buildTermuxKey("TAB", () => _sendRawKey("\t")),
-                      _buildTermuxKey("─", () => _sendRawKey("-")),
-                      _buildTermuxKey("/", () => _sendRawKey("/")),
-                      _buildTermuxKey("▲", _historyUp),
-                      _buildTermuxKey("▼", _historyDown),
-                      _buildTermuxKey("◀", () => _sendRawKey("\x1b[D")),
-                      _buildTermuxKey("▶", () => _sendRawKey("\x1b[C")),
-                      _buildTermuxKey("apk update", () {
+                      _key("ESC", () => _sendRawKey("\x1B")),
+                      _key("CTRL+C", () => _sendCtrlKey('C')),
+                      _key("CTRL+D", () => _sendCtrlKey('D')),
+                      _key("TAB", () => _sendRawKey("\t")),
+                      _key("─", () => _sendRawKey("-")),
+                      _key("/", () => _sendRawKey("/")),
+                      _key("▲", _historyUp),
+                      _key("▼", _historyDown),
+                      _key("◀", () => _sendRawKey("\x1b[D")),
+                      _key("▶", () => _sendRawKey("\x1b[C")),
+                      _key("apk update", () {
                         _inputController.text = "apk update";
                         _focusNode.requestFocus();
                       }),
-                      _buildTermuxKey("apk add ", () {
+                      _key("apk add ", () {
                         _inputController.text = "apk add ";
                         _focusNode.requestFocus();
                       }),
-                      _buildTermuxKey("Setup Python & Suggestions", () {
-                        _inputController.text = "apk update && apk add python3 py3-pip && pip3 install python-lsp-server black --break-system-packages";
-                        _focusNode.requestFocus();
-                      }),
-
-                      //  _buildTermuxKey("Setup Python & Suggestions", () {
-                      //  _inputController.text = "apk update && apk add python3 py3-pip && pip3 install python-lsp-server black --break-system-packages";
-                      //  _focusNode.requestFocus();
-                    //  }),
-                      _buildTermuxKey("clear", () => _sendInput("clear")),
+                      _key("clear", () => _sendInput("clear")),
                     ],
                   ),
                 ),
@@ -421,7 +362,7 @@ class _InteractiveTerminalScreenState extends State<InteractiveTerminalScreen> {
     );
   }
 
-  Widget _buildTermuxKey(String label, VoidCallback onPressed) {
+  Widget _key(String label, VoidCallback onPressed) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 3),
       child: TextButton(
@@ -431,19 +372,10 @@ class _InteractiveTerminalScreenState extends State<InteractiveTerminalScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           minimumSize: Size.zero,
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(3),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
         ),
         onPressed: onPressed,
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11,
-            fontFamily: 'monospace',
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        child: Text(label, style: const TextStyle(fontSize: 11, fontFamily: 'monospace', fontWeight: FontWeight.bold)),
       ),
     );
   }

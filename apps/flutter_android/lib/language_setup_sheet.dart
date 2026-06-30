@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'linux_manager.dart';
+import 'services/environment_service.dart';
 
 class LanguageSetupSheet extends StatefulWidget {
   const LanguageSetupSheet({super.key});
@@ -236,22 +236,30 @@ class _LanguageSetupSheetState extends State<LanguageSetupSheet> with SingleTick
   Future<void> _checkAllStatuses() async {
     if (!mounted) return;
     setState(() => _isLoadingStatuses = true);
-    final appDir = await getApplicationSupportDirectory();
-    final rootfsPath = "${appDir.path}/linux/rootfs";
+    final rootfsPath = await EnvironmentService.getRootfsPath();
 
     for (var lang in _languages) {
-      final binaryPath = "$rootfsPath/${lang['binary']}";
-      final binaryFile = File(binaryPath);
-      final binaryLink = Link(binaryPath);
-      if (binaryFile.existsSync() || binaryLink.existsSync()) {
-        _statuses[lang['package']] = "Installed";
-      } else {
-        _statuses[lang['package']] = "Not Installed";
-      }
+      _statuses[lang['package']] = _isInstalled(rootfsPath, lang) ? "Installed" : "Not Installed";
     }
 
     if (!mounted) return;
     setState(() => _isLoadingStatuses = false);
+  }
+
+  /// Checks multiple candidate paths so Go (GOROOT), Dart, etc. are detected correctly.
+  bool _isInstalled(String rootfsPath, Map<String, dynamic> lang) {
+    final binaryPath = "$rootfsPath/${lang['binary']}";
+    if (File(binaryPath).existsSync() || Link(binaryPath).existsSync()) return true;
+
+    // Go: may be in /usr/local/go/bin/go (manual install via GOROOT)
+    if (lang['package'] == 'go') {
+      final altPath = "$rootfsPath/usr/local/go/bin/go";
+      if (File(altPath).existsSync() || Link(altPath).existsSync()) return true;
+      // Also check lib path
+      final libPath = "$rootfsPath/usr/lib/go/bin/go";
+      if (File(libPath).existsSync() || Link(libPath).existsSync()) return true;
+    }
+    return false;
   }
 
   Future<void> _installLanguage(String package) async {

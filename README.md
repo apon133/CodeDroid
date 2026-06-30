@@ -164,15 +164,10 @@ CodeDroid Root
 
 ```mermaid
 flowchart TD
-    %% Styling
-    classDef client fill:#e3f2fd,stroke:#1565c0,stroke-width:2px;
-    classDef server fill:#efebe9,stroke:#4e342e,stroke-width:2px;
-    classDef system fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
-    
-    A["Web IDE (Client)"]:::client
-    B["Axum Backend (Server)"]:::server
-    C["LSP Client (Stdio/RPC)"]:::client
-    D["Local File System (/sdcard/...)"]:::system
+    A["Web IDE (Client)"]
+    B["Axum Backend (Server)"]
+    C["LSP Client (Stdio/RPC)"]
+    D["Local File System (/sdcard/...)"]
 
     A -- "1. Save (Ctrl+S)" --> B
     A -- "2. notify_file_changed()" --> C

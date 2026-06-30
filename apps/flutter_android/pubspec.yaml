@@ -1,0 +1,42 @@
+name: flutter_android
+description: "A new Flutter project."
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  flutter_inappwebview: ^6.1.5
+  path_provider: ^2.1.2
+  http: ^1.2.1
+  flutter_svg: ^2.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+
+  uses-material-design: true
+
+  assets:
+    - assets/www/
+    - assets/www/assets/
+    - assets/www/assets/icons/
+    - assets/linux/aarch64/
+    - assets/linux/x86_64/
+
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  image_path: "assets/icon/app_icon.png"
+  min_sdk_android: 21

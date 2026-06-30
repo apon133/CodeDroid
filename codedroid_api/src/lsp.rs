@@ -78,6 +78,7 @@ impl LspClient {
                     dir = &dir[1..];
                 }
                 let path_exists = std::path::Path::new(dir).exists();
+                let tmp_dir = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string());
                 let log_msg = format!(
                     "root_uri: {}, resolved path: {}, exists: {}\n",
                     uri, dir, path_exists
@@ -85,7 +86,7 @@ impl LspClient {
                 let _ = std::fs::OpenOptions::new()
                     .create(true)
                     .append(true)
-                    .open("/tmp/lsp_spawn.log")
+                    .open(format!("{}/lsp_spawn.log", tmp_dir))
                     .and_then(|mut f| {
                         use std::io::Write;
                         f.write_all(log_msg.as_bytes())
@@ -98,14 +99,13 @@ impl LspClient {
 
         // Set clean environment variables for all LSP servers to ensure stability inside PRoot
         let tmp_dir = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string());
-        child_cmd.env("HOME", "/root");
+        let current_home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+        let current_path = std::env::var("PATH").unwrap_or_default();
+        child_cmd.env("HOME", &current_home);
         child_cmd.env("TMPDIR", &tmp_dir);
         child_cmd.env("TMP", &tmp_dir);
         child_cmd.env("TEMP", &tmp_dir);
-        child_cmd.env(
-            "PATH",
-            "/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin",
-        );
+        child_cmd.env("PATH", &current_path);
         child_cmd.env("NODE_OPTIONS", "--require /usr/local/lib/node_network_bypass.js");
         child_cmd.env("_JAVA_OPTIONS", "-Djava.net.preferIPv4Stack=true -Djava.net.preferIPv6Addresses=false");
         child_cmd.env("JAVA_TOOL_OPTIONS", "-Djava.net.preferIPv4Stack=true -Djava.net.preferIPv6Addresses=false");

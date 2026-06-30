@@ -34,7 +34,18 @@ Once installed, you can manage CodeDroid with the following commands:
 
 ---
 
-## 🧠 Step 3: Install Language Servers (IntelliSense)
+## 🚀 Step 3: Start Coding
+
+1. Start the API server by running:
+   ```bash
+   codedroid
+   ```
+2. Visit **[codedroid.netlify.app](https://codedroid.netlify.app)** in your mobile browser.
+3. Connect to your local server (running on `http://localhost:3000`) and start coding!
+
+---
+
+## 🧠 Step 4: Install Language Servers (IntelliSense)
 
 To get real-time code completions, you need to install the language servers for the languages you use:
 
@@ -44,40 +55,6 @@ To get real-time code completions, you need to install the language servers for 
 - **Go**: `pkg install gopls`
 - **JS/TS**: `npm install -g typescript-language-server typescript`
 - **Dart**: Included with the Dart SDK (`pkg install dart`)
-
----
-
-## 🛠️ Alternate Step 4: Clone & Run (For Developers)
-
-If you prefer to clone the repository and compile the API from source:
-
-1. **Install dependencies**:
-   ```bash
-   pkg update && pkg upgrade
-   pkg install rust clang build-essential git
-   ```
-
-2. **Clone the repository**:
-   ```bash
-   git clone https://github.com/apon133/CodeDroid.git
-   cd CodeDroid
-   ```
-
-3. **Run the API Server from source**:
-   ```bash
-   cd codedroid_api
-   cargo run --release
-   ```
-
-   Or to compile and run the local binary:
-   ```bash
-   ./run.sh
-   ```
-
-4. **Start Coding**:
-   Visit **[codedroid.netlify.app](https://codedroid.netlify.app)** in your mobile browser and connect it to your local server to start coding!
-
----
 
 ## 📦 Language Setup & Auto-suggestions Guides
 

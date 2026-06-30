@@ -49,7 +49,11 @@ INSTALL_DIR="$HOME/.codedroid"
 mkdir -p "$INSTALL_DIR"
 
 # 4. Download pre-compiled binary
-BINARY_URL="https://raw.githubusercontent.com/apon133/CodeDroid/main/apps/flutter_android/assets/linux/${BINARY_ARCH}/codedroid_api"
+if [ "$BINARY_ARCH" = "aarch64" ]; then
+    BINARY_URL="https://raw.githubusercontent.com/apon133/CodeDroid/main/codedroid-api"
+else
+    BINARY_URL="https://raw.githubusercontent.com/apon133/CodeDroid/main/apps/flutter_android/assets/linux/${BINARY_ARCH}/codedroid_api"
+fi
 
 echo -e "${BLUE}⬇️ Downloading CodeDroid API Binary (${BINARY_ARCH})...${NC}"
 curl -L --progress-bar -o "$INSTALL_DIR/codedroid-api" "$BINARY_URL"

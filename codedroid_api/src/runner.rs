@@ -261,6 +261,10 @@ fn resolve_terminal_command(project_dir: &str, lang: &str, file_path: Option<&st
         return "go run .".to_string();
     }
     if Path::new(&format!("{}/pubspec.yaml", project_dir)).is_file() {
+        if let Some(fp) = file_path.filter(|p| p.ends_with(".dart")) {
+            let escaped_fp = crate::utils::escape_shell_arg(fp);
+            return format!("dart run {}", escaped_fp);
+        }
         return "dart run".to_string();
     }
     if Path::new(&format!("{}/Package.swift", project_dir)).is_file() {
@@ -288,6 +292,13 @@ fn resolve_terminal_command(project_dir: &str, lang: &str, file_path: Option<&st
     if let Some(fp) = file_path {
         let escaped_fp = crate::utils::escape_shell_arg(fp);
         match lang {
+            "rust" if fp.ends_with(".rs") => {
+                let bin = fp.trim_end_matches(".rs");
+                let escaped_bin = crate::utils::escape_shell_arg(bin);
+                let run_cmd = crate::utils::escape_shell_arg(&format!("./{}", bin));
+                return format!("rustc {} -o {} && {}", escaped_fp, escaped_bin, run_cmd);
+            }
+            "go" if fp.ends_with(".go") => return format!("go run {}", escaped_fp),
             "python" if fp.ends_with(".py") => return format!("python3 {}", escaped_fp),
             "ruby" if fp.ends_with(".rb") => return format!("ruby {}", escaped_fp),
             "c" if fp.ends_with(".c") => {
@@ -317,6 +328,10 @@ fn resolve_terminal_command(project_dir: &str, lang: &str, file_path: Option<&st
             "scala" if fp.ends_with(".scala") => return format!("scala {}", escaped_fp),
             "haskell" if fp.ends_with(".hs") => return format!("runhaskell {}", escaped_fp),
             "swift" if fp.ends_with(".swift") => return format!("swift {}", escaped_fp),
+            "bash" if fp.ends_with(".sh") => return format!("bash {}", escaped_fp),
+            "zig" if fp.ends_with(".zig") => return format!("zig run {}", escaped_fp),
+            "nim" if fp.ends_with(".nim") => return format!("nim c -r {}", escaped_fp),
+            "php" if fp.ends_with(".php") => return format!("php {}", escaped_fp),
             _ => {}
         }
     }

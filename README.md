@@ -22,7 +22,6 @@
   <img src="https://img.shields.io/github/issues/apon133/CodeDroid?style=for-the-badge" alt="GitHub Issues">
   <img src="https://img.shields.io/github/last-commit/apon133/CodeDroid?style=for-the-badge" alt="Last Commit">
   <img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge" alt="PRs Welcome">
-  <img src="https://hits.sefy.io/v1?url=https://github.com/apon133/CodeDroid&label=Views&color=pink&style=for-the-badge" alt="Hits Badge">
 </p>
 
 > **Free, open-source mobile IDE and code execution engine** — write, compile, run, and debug Python, Rust, Go, JavaScript, Java, C++, and 13+ languages directly on your Android or iOS device. No laptop needed, running with bare-metal performance.

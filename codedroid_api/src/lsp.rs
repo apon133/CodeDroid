@@ -97,10 +97,11 @@ impl LspClient {
         }
 
         // Set clean environment variables for all LSP servers to ensure stability inside PRoot
+        let tmp_dir = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string());
         child_cmd.env("HOME", "/root");
-        child_cmd.env("TMPDIR", "/tmp");
-        child_cmd.env("TMP", "/tmp");
-        child_cmd.env("TEMP", "/tmp");
+        child_cmd.env("TMPDIR", &tmp_dir);
+        child_cmd.env("TMP", &tmp_dir);
+        child_cmd.env("TEMP", &tmp_dir);
         child_cmd.env(
             "PATH",
             "/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin",
@@ -111,8 +112,8 @@ impl LspClient {
 
         if cmd == "gopls" || cmd.ends_with("/gopls") {
             child_cmd.env("GOPATH", "/root/go");
-            child_cmd.env("GOCACHE", "/tmp/go-cache");
-            child_cmd.env("GOTMPDIR", "/tmp");
+            child_cmd.env("GOCACHE", format!("{}/go-cache", tmp_dir));
+            child_cmd.env("GOTMPDIR", &tmp_dir);
         }
 
         let msg = format!("🚀 [LSP Spawn] Spawning server command: '{}' with args: {:?}", cmd, args);

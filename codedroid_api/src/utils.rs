@@ -342,10 +342,44 @@ pub fn setup_env_path() {
     let new_path = unique_paths.join(&split_char.to_string());
     std::env::set_var("PATH", new_path);
 
-    // Override temp directory environment variables to prevent host path leaks
-    std::env::set_var("TMPDIR", "/tmp");
-    std::env::set_var("TMP", "/tmp");
-    std::env::set_var("TEMP", "/tmp");
+    // Find a writable temp directory from candidates to prevent permission or presence issues
+    let mut resolved_tmp = "/tmp".to_string();
+    let candidates = vec![
+        std::env::var("TMPDIR").unwrap_or_default(),
+        std::env::var("TEMP").unwrap_or_default(),
+        std::env::var("TMP").unwrap_or_default(),
+        "/tmp".to_string(),
+        "/var/tmp".to_string(),
+        "/data/data/com.termux/files/usr/tmp".to_string(),
+        format!("{}/.tmp", home),
+        format!("{}/tmp", home),
+    ];
+
+    for candidate in candidates {
+        if candidate.is_empty() {
+            continue;
+        }
+        let path = std::path::Path::new(&candidate);
+        
+        // Ensure path directory structure exists
+        if !path.exists() {
+            let _ = std::fs::create_dir_all(path);
+        }
+        
+        if path.exists() {
+            // Test if it is writable
+            let test_file = path.join(".codedroid_tmp_test");
+            if std::fs::write(&test_file, "test").is_ok() {
+                let _ = std::fs::remove_file(test_file);
+                resolved_tmp = candidate;
+                break;
+            }
+        }
+    }
+
+    std::env::set_var("TMPDIR", &resolved_tmp);
+    std::env::set_var("TMP", &resolved_tmp);
+    std::env::set_var("TEMP", &resolved_tmp);
 }
 
 use std::sync::{OnceLock, Mutex};

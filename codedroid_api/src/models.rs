@@ -10,6 +10,7 @@ pub struct CodeResponse {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct RunRequest {
     pub code: String,
     pub language: String,

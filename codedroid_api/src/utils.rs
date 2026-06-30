@@ -79,6 +79,7 @@ pub fn resolve_project_dir(path: &str) -> String {
 
 /// Returns the machine's primary local-network IPv4 address (e.g. 192.168.x.x).
 /// Falls back to "localhost" if it can't be determined.
+#[allow(dead_code)]
 pub fn get_local_ip() -> String {
     // Use a UDP socket trick: connect to a public address (no packet sent)
     // and read what local IP the OS chose for routing.
@@ -95,6 +96,7 @@ pub fn get_local_ip() -> String {
     "localhost".to_string()
 }
 
+#[allow(dead_code)]
 pub fn find_url_in_output(output: &str) -> Option<String> {
     // Look for patterns like http://localhost:5173 or http://127.0.0.1:3000 or http://192.168.1.5:8080
     let re = regex::Regex::new(r"http://([a-zA-Z0-9\.\-]+):(\d+)").unwrap();
